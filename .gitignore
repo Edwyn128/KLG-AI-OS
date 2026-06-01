@@ -2,27 +2,59 @@
 .env
 .env.local
 .env.production
+.envrc
 
 # Python virtual environment
 venv/
 .venv/
 env/
+env.bak/
+venv.bak/
 __pycache__/
-*.pyc
+*.py[codz]
 *.pyo
 *.pyd
+*$py.class
 .Python
 
 # Python packaging artifacts
 dist/
 build/
+develop-eggs/
 *.egg-info/
+*.egg
+MANIFEST
+.installed.cfg
+wheels/
+share/python-wheels/
+
+# Testing / coverage
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+htmlcov/
+nosetests.xml
+coverage.xml
+*.cover
+.hypothesis/
+.pytest_cache/
+
+# Type checkers / linters
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.pyre/
+.pytype/
+.ruff_cache/
 
 # IDE / editor files
 .vscode/
 .idea/
 *.swp
 *.swo
+tempCodeRunnerFile.py
 
 # OS files
 .DS_Store
@@ -34,3 +66,12 @@ Thumbs.db
 # Logs
 *.log
 logs/
+
+# Jupyter
+.ipynb_checkpoints
+
+# pyenv
+.python-version
+
+# Cython
+cython_debug/
