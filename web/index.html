@@ -1,0 +1,547 @@
+<!DOCTYPE html>
+<!--
+  KLG AI OS — Web Interface
+  ═══════════════════════════════════════════════════════════════════════════
+  This is a single-page application (no framework, no build step required).
+
+  Architecture:
+    - Pure HTML + vanilla JavaScript (no React, no Vue, no bundler)
+    - Communicates with the FastAPI backend via fetch() calls
+    - All API endpoints are defined in api/routes/alfred.py
+
+  Why no framework?
+    This is an internal firm tool used by 4-5 people. A React app would
+    require Node.js, a build step, and a separate dev server. Vanilla JS
+    with fetch() is simpler to run, simpler to debug, and has zero dependencies.
+    When the app needs to grow (multi-page, complex state), we can add a
+    framework then — premature abstraction adds cost without benefit.
+
+  API calls this page makes:
+    POST /alfred/chat              → Send message to Alfred, get response
+    GET  /alfred/matters           → Load active matters for the sidebar
+    GET  /alfred/deadlines?days=7  → Load upcoming deadlines for right panel
+    POST /alfred/agents/deadline-watch → Manually trigger deadline-watch agent
+  ═══════════════════════════════════════════════════════════════════════════
+-->
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>KLG AI OS — Alfred & Bloodhound</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+<!-- ════════════════════════════════════════════════════════════════════════
+     HEADER
+════════════════════════════════════════════════════════════════════════ -->
+<header>
+  <div class="header-title">
+    <div class="status-dot" id="status-dot" title="Connected to backend"></div>
+    <div>
+      <h1>KLG AI Operating System</h1>
+      <div class="subtitle">Alfred · Bloodhound · Notion-native</div>
+    </div>
+  </div>
+  <div style="font-size: 12px; color: var(--text-muted);" id="header-user">
+    KLG Internal — Restricted
+  </div>
+</header>
+
+<!-- ════════════════════════════════════════════════════════════════════════
+     MAIN LAYOUT (3-column grid: sidebar | chat | right panel)
+════════════════════════════════════════════════════════════════════════ -->
+<div class="layout">
+
+  <!-- ── LEFT SIDEBAR: Active Matters ───────────────────────────────────── -->
+  <aside class="sidebar">
+    <div class="sidebar-header">
+      <h2>Active Matters</h2>
+      <button onclick="loadMatters()" title="Refresh" style="background:none;border:none;cursor:pointer;color:var(--text-muted);font-size:14px;">↺</button>
+    </div>
+    <div class="matter-list" id="matter-list">
+      <div style="padding:16px;font-size:12px;color:var(--text-muted);">Loading matters...</div>
+    </div>
+  </aside>
+
+  <!-- ── CENTER: Alfred Chat Interface ──────────────────────────────────── -->
+  <main class="chat-panel">
+
+    <!-- Toolbar with agent selector -->
+    <div class="chat-toolbar">
+      <div class="agent-selector">
+        <button class="agent-btn active" data-agent="alfred" onclick="selectAgent('alfred')">
+          Alfred
+        </button>
+        <button class="agent-btn" data-agent="bloodhound" onclick="selectAgent('bloodhound')">
+          Bloodhound
+        </button>
+      </div>
+      <span style="font-size:11px;color:var(--text-muted);margin-left:auto;">
+        Powered by Claude · Notion source of truth
+      </span>
+    </div>
+
+    <!-- Alfred message history -->
+    <div class="chat-messages active" id="alfred-messages">
+      <div class="message">
+        <div class="message-avatar">A</div>
+        <div class="message-bubble">
+          <strong>Good morning.</strong> I'm Alfred, the KLG AI Operating System's executive assistant.<br><br>
+          I have access to all active matters in Notion, the Bloodhound Watch List, and KLG's skill library.
+          The team's institutional memory lives in Notion — I read and write to it on your behalf.<br><br>
+          <em>Try asking:</em><br>
+          • "What's pending on Petersen?"<br>
+          • "What deadlines do we have this week?"<br>
+          • "What has Bloodhound flagged on First Amendment issues?"<br>
+          • "Log that I filed the brief in Smith today."
+        </div>
+      </div>
+    </div>
+
+    <!-- Bloodhound message history -->
+    <div class="chat-messages" id="bloodhound-messages">
+      <div class="message">
+        <div class="message-avatar bloodhound">B</div>
+        <div class="message-bubble">
+          <strong>Bloodhound online.</strong> I track the legal landscape — cases, doctrines, and movement organizations relevant to KLG's practice.<br><br>
+          <em>Try asking:</em><br>
+          • "What's on the Watch List right now?"<br>
+          • "What has been flagged on First Amendment issues?"<br>
+          • "Show me Tier 1 cases."
+        </div>
+      </div>
+    </div>
+
+    <!-- Input area -->
+    <div class="chat-input-area">
+      <div class="chat-input-row">
+        <textarea
+          id="chat-input"
+          placeholder="Ask Alfred... (Enter to send, Shift+Enter for new line)"
+          rows="1"
+          onkeydown="handleInputKeydown(event)"
+          oninput="autoResizeTextarea(this)"
+        ></textarea>
+        <button class="send-btn" id="send-btn" onclick="sendMessage()">Send</button>
+      </div>
+      <div class="input-hint" id="input-hint">
+        Alfred is ready · Notion connected
+      </div>
+    </div>
+
+  </main>
+
+  <!-- ── RIGHT PANEL: Deadlines + Agent Triggers ────────────────────────── -->
+  <aside class="right-panel">
+
+    <!-- Upcoming Deadlines -->
+    <div class="panel-section" style="flex:1;overflow-y:auto;">
+      <h3>Upcoming Deadlines (7 days)</h3>
+      <div id="deadlines-list">
+        <div style="font-size:12px;color:var(--text-muted);">Loading...</div>
+      </div>
+    </div>
+
+    <!-- Agent Triggers (manual runs) -->
+    <div class="panel-section">
+      <h3>Run Agents</h3>
+      <button class="agent-trigger-btn" onclick="triggerDeadlineWatch()">
+        📋 Run Deadline Watch
+      </button>
+      <button class="agent-trigger-btn" onclick="askAlfred('Alfred, what deadlines do we have this week?')">
+        📅 Weekly Agenda (ask Alfred)
+      </button>
+      <button class="agent-trigger-btn" onclick="askAlfred('What is Bloodhound tracking right now? Give me the full Watch List.')">
+        🔍 Bloodhound Status
+      </button>
+    </div>
+
+    <!-- Quick Actions -->
+    <div class="panel-section">
+      <h3>Quick Ask</h3>
+      <button class="agent-trigger-btn" onclick="askAlfred('What are the highest-priority matters right now?')">
+        What needs attention today?
+      </button>
+      <button class="agent-trigger-btn" onclick="askAlfred('What did Bloodhound flag this week?')">
+        Bloodhound this week
+      </button>
+      <button class="agent-trigger-btn" onclick="window.open('/docs', '_blank')">
+        API Docs ↗
+      </button>
+    </div>
+
+  </aside>
+</div>
+
+<!-- ════════════════════════════════════════════════════════════════════════
+     JAVASCRIPT
+════════════════════════════════════════════════════════════════════════ -->
+<script>
+  /*
+   * App state
+   * currentAgent: which agent is selected ("alfred" or "bloodhound")
+   * currentUser:  the team member's name (hardcoded for v1; auth in v2)
+   * isLoading:    whether Alfred is currently processing a message
+   */
+  let currentAgent = 'alfred';
+  let currentUser = 'Team';
+  let isLoading = false;
+
+  // ── Agent Selection ───────────────────────────────────────────────────────
+
+  function selectAgent(agent) {
+    currentAgent = agent;
+    const isBloodhound = agent === 'bloodhound';
+
+    // Toggle button active state
+    document.querySelectorAll('.agent-btn').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.agent === agent);
+    });
+
+    // Switch chat panel theme
+    document.querySelector('.chat-panel').classList.toggle('bloodhound', isBloodhound);
+
+    // Show the correct message history
+    document.getElementById('alfred-messages').style.display = isBloodhound ? 'none' : 'flex';
+    document.getElementById('bloodhound-messages').style.display = isBloodhound ? 'flex' : 'none';
+
+    // Update input placeholder and hint
+    const input = document.getElementById('chat-input');
+    const hint = document.getElementById('input-hint');
+    if (isBloodhound) {
+      input.placeholder = 'Ask Bloodhound about a case, doctrine, or issue...';
+      hint.textContent = 'Bloodhound is ready · Watch List connected';
+    } else {
+      input.placeholder = 'Ask Alfred... (Enter to send, Shift+Enter for new line)';
+      hint.textContent = 'Alfred is ready · Notion connected';
+    }
+  }
+
+  // ── Sending Messages ─────────────────────────────────────────────────────
+
+  function handleInputKeydown(event) {
+    // Enter without Shift = send message; Enter + Shift = new line
+    if (event.key === 'Enter' && !event.shiftKey) {
+      event.preventDefault();
+      sendMessage();
+    }
+  }
+
+  function autoResizeTextarea(el) {
+    // Grow the textarea as the user types, up to the CSS max-height
+    el.style.height = 'auto';
+    el.style.height = Math.min(el.scrollHeight, 120) + 'px';
+  }
+
+  async function sendMessage() {
+    const input = document.getElementById('chat-input');
+    const message = input.value.trim();
+    if (!message || isLoading) return;
+
+    input.value = '';
+    input.style.height = 'auto';
+    appendMessage('user', message, currentUser);
+
+    await callAlfred(message);
+  }
+
+  // Convenience function for the quick-action buttons — inject a message
+  // and send it as if the user typed it.
+  function askAlfred(message) {
+    const input = document.getElementById('chat-input');
+    input.value = message;
+    sendMessage();
+  }
+
+  // ── Alfred API Call ───────────────────────────────────────────────────────
+
+  async function callAlfred(message) {
+    setLoading(true);
+    const typingId = showTypingIndicator();
+
+    try {
+      const response = await fetch('/alfred/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message, user: currentUser }),
+      });
+
+      removeTypingIndicator(typingId);
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({ detail: 'Unknown error' }));
+        appendMessage('alfred', `Error: ${error.detail || response.statusText}`, 'Alfred');
+        return;
+      }
+
+      const data = await response.json();
+      appendMessage('alfred', data.response, 'Alfred', data.tools_used);
+
+    } catch (err) {
+      removeTypingIndicator(typingId);
+      appendMessage('alfred',
+        `Could not reach the KLG AI OS backend. Make sure the server is running (uvicorn main:app --reload). Error: ${err.message}`,
+        'Alfred'
+      );
+      setStatusDot(false);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  // ── Message Rendering ─────────────────────────────────────────────────────
+
+  function appendMessage(role, text, name, toolsUsed = []) {
+    const containerId = currentAgent === 'bloodhound' ? 'bloodhound-messages' : 'alfred-messages';
+    const container = document.getElementById(containerId);
+
+    const isUser = role === 'user';
+    const initials = name ? name[0].toUpperCase() : '?';
+    const isBloodhound = !isUser && currentAgent === 'bloodhound';
+
+    const formattedText = formatMessageText(text);
+
+    const toolsBadges = toolsUsed.length > 0
+      ? `<div class="tools-used">via: ${toolsUsed.map(t =>
+          `<span>${t.replace(/_/g, ' ')}</span>`).join('')}</div>`
+      : '';
+
+    const messageHTML = `
+      <div class="message ${isUser ? 'user' : ''}">
+        <div class="message-avatar ${isBloodhound ? 'bloodhound' : ''}">${initials}</div>
+        <div class="message-bubble">
+          ${formattedText}
+          ${toolsBadges}
+        </div>
+      </div>
+    `;
+
+    container.insertAdjacentHTML('beforeend', messageHTML);
+    container.scrollTop = container.scrollHeight;
+  }
+
+  function formatMessageText(text) {
+    // Escape HTML to prevent XSS — Alfred outputs plain text, but just in case
+    const escaped = text
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+
+    // Convert markdown-style code blocks ```...``` to <pre>
+    const withCodeBlocks = escaped.replace(
+      /```[\w]*\n?([\s\S]*?)```/g,
+      (_, code) => `<pre>${code.trim()}</pre>`
+    );
+
+    // Convert **bold** to <strong>
+    const withBold = withCodeBlocks.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+
+    // Convert newlines to <br>
+    return withBold.replace(/\n/g, '<br>');
+  }
+
+  // ── Typing Indicator ─────────────────────────────────────────────────────
+
+  let typingCounter = 0;
+
+  function showTypingIndicator() {
+    const id = 'typing-' + (++typingCounter);
+    const containerId = currentAgent === 'bloodhound' ? 'bloodhound-messages' : 'alfred-messages';
+    const container = document.getElementById(containerId);
+    const isBloodhound = currentAgent === 'bloodhound';
+    const initial = isBloodhound ? 'B' : 'A';
+    container.insertAdjacentHTML('beforeend', `
+      <div class="message" id="${id}">
+        <div class="message-avatar ${isBloodhound ? 'bloodhound' : ''}">${initial}</div>
+        <div class="message-bubble">
+          <div class="typing-indicator">
+            <div class="typing-dot"></div>
+            <div class="typing-dot"></div>
+            <div class="typing-dot"></div>
+          </div>
+        </div>
+      </div>
+    `);
+    container.scrollTop = container.scrollHeight;
+    return id;
+  }
+
+  function removeTypingIndicator(id) {
+    document.getElementById(id)?.remove();
+  }
+
+  // ── Loading State ─────────────────────────────────────────────────────────
+
+  function setLoading(loading) {
+    isLoading = loading;
+    const btn = document.getElementById('send-btn');
+    const hint = document.getElementById('input-hint');
+    btn.disabled = loading;
+    if (loading) {
+      const label = currentAgent === 'bloodhound' ? 'Bloodhound is scanning...' : 'Alfred is thinking...';
+      hint.textContent = label;
+    } else {
+      selectAgent(currentAgent); // restore correct idle hint
+    }
+  }
+
+  // ── Matters Sidebar ───────────────────────────────────────────────────────
+
+  async function loadMatters() {
+    const list = document.getElementById('matter-list');
+    list.innerHTML = '<div style="padding:16px;font-size:12px;color:var(--text-muted);">Loading...</div>';
+
+    try {
+      const response = await fetch('/alfred/matters');
+      if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
+      const data = await response.json();
+
+      if (!data.matters || data.matters.length === 0) {
+        list.innerHTML = '<div style="padding:16px;font-size:12px;color:var(--text-muted);">No active matters found.<br>Check your Notion database ID in .env</div>';
+        return;
+      }
+
+      list.innerHTML = data.matters.map(matter => {
+        const name = matter['Project name'] || 'Untitled';
+        const status = matter['Status'] || '';
+        const priority = matter['Priority'] || '';
+        const deadline = matter['date:Target Date:start'] || matter['Target Date'] || '';
+        const url = matter['url'] || '#';
+
+        const deadlineDisplay = deadline ? formatDeadline(deadline) : '';
+        const priorityBadge = priority
+          ? `<span class="priority-badge ${priority}">${priority}</span>`
+          : '';
+
+        return `
+          <div class="matter-card" onclick="askAlfred('Alfred, what is the current status and what is pending on ${name.replace(/'/g, "\\'")}?')">
+            <div class="matter-name" title="${name}">${name}</div>
+            <div class="matter-meta">
+              ${priorityBadge}
+              ${status ? `<span>${status}</span>` : ''}
+              ${deadlineDisplay}
+            </div>
+          </div>
+        `;
+      }).join('');
+
+    } catch (err) {
+      list.innerHTML = `<div style="padding:16px;font-size:12px;color:var(--urgent);">Error loading matters: ${err.message}</div>`;
+      setStatusDot(false);
+    }
+  }
+
+  // ── Deadlines Panel ───────────────────────────────────────────────────────
+
+  async function loadDeadlines() {
+    const list = document.getElementById('deadlines-list');
+
+    try {
+      const response = await fetch('/alfred/deadlines?days=7');
+      if (!response.ok) throw new Error(`${response.status}`);
+      const data = await response.json();
+
+      if (!data.matters || data.matters.length === 0) {
+        list.innerHTML = '<div style="font-size:12px;color:var(--text-muted);">No deadlines in the next 7 days.</div>';
+        return;
+      }
+
+      list.innerHTML = data.matters.map(matter => {
+        const name = matter['Project name'] || 'Untitled';
+        const deadline = matter['date:Target Date:start'] || matter['Target Date'] || '';
+        const daysRemaining = daysUntil(deadline);
+        const urgencyClass = daysRemaining <= 2 ? 'urgent' : daysRemaining <= 5 ? 'warning' : 'ok';
+        const urgencyEmoji = daysRemaining <= 2 ? '🔴' : daysRemaining <= 5 ? '🟡' : '🟢';
+        const daysLabel = daysRemaining === 0 ? 'TODAY'
+          : daysRemaining < 0 ? 'OVERDUE'
+          : `${daysRemaining}d`;
+
+        return `
+          <div class="deadline-item">
+            <div class="name">${urgencyEmoji} ${name}</div>
+            <div class="days deadline-badge ${urgencyClass}">
+              ${deadline ? deadline.slice(0, 10) : 'No date'} · ${daysLabel}
+            </div>
+          </div>
+        `;
+      }).join('');
+
+    } catch (err) {
+      list.innerHTML = `<div style="font-size:12px;color:var(--urgent);">Error: ${err.message}</div>`;
+    }
+  }
+
+  // ── Agent Triggers ────────────────────────────────────────────────────────
+
+  async function triggerDeadlineWatch() {
+    appendMessage('alfred',
+      'Running the daily deadline-watch agent...',
+      'Alfred'
+    );
+    try {
+      const response = await fetch('/alfred/agents/deadline-watch', { method: 'POST' });
+      const data = await response.json();
+      if (data.status === 'success') {
+        appendMessage('alfred', `Deadline watch complete:\n\n${data.message}`, 'Alfred');
+      } else {
+        appendMessage('alfred', `Agent error: ${JSON.stringify(data)}`, 'Alfred');
+      }
+    } catch (err) {
+      appendMessage('alfred', `Could not trigger agent: ${err.message}`, 'Alfred');
+    }
+  }
+
+  // ── Utilities ─────────────────────────────────────────────────────────────
+
+  function daysUntil(dateStr) {
+    if (!dateStr) return 999;
+    try {
+      const deadline = new Date(dateStr.slice(0, 10));
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      return Math.round((deadline - today) / (1000 * 60 * 60 * 24));
+    } catch { return 999; }
+  }
+
+  function formatDeadline(dateStr) {
+    const days = daysUntil(dateStr);
+    const cls = days <= 2 ? 'urgent' : days <= 5 ? 'warning' : 'ok';
+    const label = days === 0 ? 'today' : days < 0 ? 'overdue' : `${days}d`;
+    return `<span class="deadline-badge ${cls}">${label}</span>`;
+  }
+
+  function setStatusDot(online) {
+    const dot = document.getElementById('status-dot');
+    dot.classList.toggle('offline', !online);
+    dot.title = online ? 'Connected to backend' : 'Backend unreachable';
+  }
+
+  // ── Health Check ──────────────────────────────────────────────────────────
+
+  async function checkHealth() {
+    try {
+      const r = await fetch('/health');
+      setStatusDot(r.ok);
+    } catch {
+      setStatusDot(false);
+    }
+  }
+
+  // ── Initialization ────────────────────────────────────────────────────────
+  // Run all data loads when the page first opens.
+
+  (async function init() {
+    // Set initial display state explicitly — don't rely on CSS alone
+    document.getElementById('alfred-messages').style.display = 'flex';
+    document.getElementById('bloodhound-messages').style.display = 'none';
+    await checkHealth();
+    await Promise.all([loadMatters(), loadDeadlines()]);
+  })();
+
+  // Refresh sidebar data every 5 minutes so it stays current during long sessions
+  setInterval(() => { loadMatters(); loadDeadlines(); }, 5 * 60 * 1000);
+
+</script>
+</body>
+</html>

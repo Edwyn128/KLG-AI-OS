@@ -1,0 +1,15 @@
+# Never copy secrets or the virtual env into the Docker image.
+# Dependencies are installed fresh from requirements.txt during the build.
+.env
+.env.local
+.env.production
+venv/
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+.git/
+.gitignore
+Dockerfile
+.dockerignore
+.github/

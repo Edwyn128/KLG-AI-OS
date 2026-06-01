@@ -1,0 +1,120 @@
+# .github/workflows/deploy.yml
+#
+# On every push to main, this workflow:
+#   1. Runs a quick syntax check on the Python source
+#   2. Builds the Docker image
+#   3. Pushes it to Azure Container Registry (ACR)
+#   4. Deploys to Azure App Service (which pulls the new image)
+#
+# ── FIRST-TIME SETUP ────────────────────────────────────────────────────────
+#
+# 1. Create an Azure Container Registry in the Azure Portal:
+#      Portal → Create a resource → Container Registry
+#      Name: klgaios  (or similar, must be globally unique)
+#      SKU: Basic
+#
+# 2. Create an Azure App Service in the Portal:
+#      Portal → Create a resource → Web App
+#      Publish: Docker Container
+#      OS: Linux
+#      Plan: B1 ($13/month) or B2 ($27/month)
+#      Container source: Azure Container Registry → klgaios
+#
+# 3. Create a service principal so GitHub can push to ACR:
+#      az ad sp create-for-rbac \
+#        --name "klg-ai-os-deploy" \
+#        --role contributor \
+#        --scopes /subscriptions/YOUR_SUB_ID/resourceGroups/YOUR_RG \
+#        --sdk-auth
+#      Copy the JSON output.
+#
+# 4. Add GitHub repository secrets (Settings → Secrets → Actions):
+#      AZURE_CREDENTIALS        ← the JSON from step 3
+#      AZURE_REGISTRY_NAME      ← e.g. klgaios
+#      AZURE_RESOURCE_GROUP     ← e.g. klg-prod
+#      AZURE_APP_NAME           ← e.g. klg-ai-os
+#
+# 5. Set ALL .env variables as App Service Application Settings:
+#      Portal → App Service → Configuration → Application settings
+#      Add each variable (ANTHROPIC_API_KEY, NOTION_TOKEN, etc.)
+#      These become environment variables inside the container — no .env needed.
+#
+# ── END SETUP ───────────────────────────────────────────────────────────────
+
+name: Build and Deploy to Azure
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:  # Allow manual trigger from GitHub UI
+
+env:
+  IMAGE_NAME: klg-ai-os
+
+jobs:
+  # ── Job 1: Syntax check ────────────────────────────────────────────────────
+  check:
+    name: Syntax check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Check Python syntax
+        run: |
+          python -m py_compile main.py config.py
+          python -m py_compile notion_bridge/client.py notion_bridge/project_pages.py notion_bridge/watch_list.py
+          python -m py_compile alfred/agent.py
+          python -m py_compile api/routes/alfred.py api/routes/slack.py
+          python -m py_compile agents/scheduler.py agents/deadline_watch.py
+          python -m py_compile sharepoint_bridge/client.py
+          python -m py_compile mcp_server.py
+          echo "All syntax checks passed."
+
+  # ── Job 2: Build and deploy ────────────────────────────────────────────────
+  deploy:
+    name: Build image and deploy
+    runs-on: ubuntu-latest
+    needs: check  # Only deploy if syntax check passes
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to Azure
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Log in to Azure Container Registry
+        run: |
+          az acr login --name ${{ secrets.AZURE_REGISTRY_NAME }}
+
+      - name: Build Docker image
+        run: |
+          docker build \
+            -t ${{ secrets.AZURE_REGISTRY_NAME }}.azurecr.io/${{ env.IMAGE_NAME }}:${{ github.sha }} \
+            -t ${{ secrets.AZURE_REGISTRY_NAME }}.azurecr.io/${{ env.IMAGE_NAME }}:latest \
+            .
+
+      - name: Push image to ACR
+        run: |
+          docker push ${{ secrets.AZURE_REGISTRY_NAME }}.azurecr.io/${{ env.IMAGE_NAME }}:${{ github.sha }}
+          docker push ${{ secrets.AZURE_REGISTRY_NAME }}.azurecr.io/${{ env.IMAGE_NAME }}:latest
+
+      - name: Deploy to Azure App Service
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: ${{ secrets.AZURE_APP_NAME }}
+          images: ${{ secrets.AZURE_REGISTRY_NAME }}.azurecr.io/${{ env.IMAGE_NAME }}:${{ github.sha }}
+
+      - name: Verify deployment
+        run: |
+          echo "Deployed image: ${{ secrets.AZURE_REGISTRY_NAME }}.azurecr.io/${{ env.IMAGE_NAME }}:${{ github.sha }}"
+          echo "App Service: https://${{ secrets.AZURE_APP_NAME }}.azurewebsites.net/health"

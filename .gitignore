@@ -1,0 +1,36 @@
+# Environment variables — NEVER commit these, they contain API keys
+.env
+.env.local
+.env.production
+
+# Python virtual environment
+venv/
+.venv/
+env/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Python packaging artifacts
+dist/
+build/
+*.egg-info/
+
+# IDE / editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Claude Code session data
+.claude/
+
+# Logs
+*.log
+logs/

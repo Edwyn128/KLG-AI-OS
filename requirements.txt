@@ -1,0 +1,116 @@
+# =============================================================================
+# KLG AI Operating System — Python Dependencies
+# =============================================================================
+#
+# Install everything with:
+#   pip install -r requirements.txt
+#
+# After any change to this file, re-run the above command so your virtual
+# environment stays in sync. If you add a new package during development,
+# add it here immediately — don't leave it as an undocumented "I also ran
+# pip install X" step that breaks other people's environments.
+#
+# Version pins (>=) give you bug fixes automatically but block breaking changes.
+# If you need an exact pin for a known-breaking library, use ==.
+# =============================================================================
+
+
+# ── Web Framework ─────────────────────────────────────────────────────────────
+# FastAPI is the web server that powers the Alfred/Bloodhound UI and the
+# API endpoints that the frontend calls. It is async-native, which matches
+# how we call the Notion API and Claude API (both async).
+fastapi>=0.115.0
+
+# uvicorn is the ASGI server that actually runs FastAPI. The [standard]
+# extra adds uvloop (faster event loop on Linux/Mac) and websocket support.
+uvicorn[standard]>=0.30.0
+
+# python-multipart enables FastAPI to accept form data (used in the web UI).
+python-multipart>=0.0.9
+
+
+# ── AI / LLM ──────────────────────────────────────────────────────────────────
+# Anthropic SDK — the official Python client for the Claude API.
+# Alfred uses Claude as its reasoning and language engine.
+anthropic>=0.40.0
+
+# OpenAI SDK — used for ChatGPT Deep Research integration.
+# Bloodhound and Alfred can hand off to ChatGPT for long-form legal research.
+openai>=1.50.0
+
+# Pydantic AI — the agent framework that wraps the above SDKs.
+# It gives us type-safe tool definitions, dependency injection, and a clean
+# agent loop without reinventing the wheel. (It's also what Code Puppy uses
+# internally — we're just using it directly without the wrapper.)
+pydantic-ai>=0.0.14
+
+
+# ── Notion ────────────────────────────────────────────────────────────────────
+# The official Notion Python SDK. Handles authentication, rate limiting,
+# and all REST calls to the Notion API. We use the AsyncClient variant
+# so it doesn't block the FastAPI event loop.
+notion-client>=2.2.1
+
+
+# ── Slack ─────────────────────────────────────────────────────────────────────
+# Slack SDK for posting background-agent alerts to #case-management and
+# matter-specific channels. Background agents post to Slack but never
+# modify Notion directly — this is a core architectural constraint.
+slack-sdk>=3.33.0
+
+
+# ── Scheduling (Background Agents) ────────────────────────────────────────────
+# APScheduler runs the Layer 3 background agents on a cron schedule:
+#   - Daily deadline-watch (every morning)
+#   - Monday morning agenda (weekly)
+#   - Project hygiene scan (weekly)
+# We use the AsyncIOScheduler so it runs inside the same FastAPI event loop.
+apscheduler>=3.10.4
+
+
+# ── RSS / Feed Parsing (Bloodhound) ───────────────────────────────────────────
+# feedparser reads RSS and Atom feeds from movement organizations, courts,
+# and legal commentary blogs. This is Bloodhound's primary signal source —
+# org press releases are the highest-signal tier in the surveillance stack.
+feedparser>=6.0.11
+
+# httpx is an async HTTP client. We use it for fetching feeds and calling
+# CourtListener's REST API. Using httpx instead of requests keeps us
+# non-blocking in the async context.
+httpx>=0.27.0
+
+
+# ── Configuration ─────────────────────────────────────────────────────────────
+# python-dotenv reads the .env file from disk and loads it into os.environ.
+# pydantic-settings then picks those values up and validates them against
+# the Settings class in config.py.
+python-dotenv>=1.0.1
+pydantic-settings>=2.5.0
+
+
+# ── Reliability ───────────────────────────────────────────────────────────────
+# tenacity provides retry logic with exponential back-off. We use it
+# around every Notion API call and every AI API call because external APIs
+# occasionally return 429 (rate limit) or 503 (transient server error).
+# Without retries, a single blip kills a background agent run.
+tenacity>=9.0.0
+
+
+# ── SharePoint / Microsoft Graph ─────────────────────────────────────────────
+# msal (Microsoft Authentication Library) handles OAuth2 token acquisition
+# for the Microsoft Graph API. Used by SharePointBridge to authenticate as
+# the KLG Azure app registration.
+msal>=1.31.0
+
+
+# ── MCP (Model Context Protocol) ─────────────────────────────────────────────
+# mcp is Anthropic's open-source Python SDK for the Model Context Protocol.
+# mcp_server.py uses FastMCP to expose Alfred's skills as model-agnostic tools
+# callable by Claude, GPT-4, or any other MCP-compatible AI client.
+mcp>=1.0.0
+
+
+# ── Developer Experience ──────────────────────────────────────────────────────
+# rich formats terminal output (tables, progress bars, colored logs).
+# Useful during development and for reading scheduler output in the console.
+rich>=13.9.0

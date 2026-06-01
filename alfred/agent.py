@@ -1,0 +1,828 @@
+"""
+alfred/agent.py — Alfred: KLG's firm-wide executive assistant AI agent.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+WHAT THIS FILE IS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+This is the core of Alfred — the Pydantic AI agent that powers the inward-
+facing half of the KLG AI OS. It defines:
+
+  1. SYSTEM PROMPT — Alfred's identity, role, firm context, and rules of behavior.
+     This is what tells Claude who it is when it runs as Alfred.
+
+  2. DEPENDENCIES — The runtime objects Alfred needs: the Notion bridge, the
+     Watch List, and optionally a Slack client. Injected at runtime so tests
+     can mock them.
+
+  3. TOOLS — The functions Alfred can call during a conversation. Each tool
+     is a Python function decorated with @alfred.tool. Alfred (Claude) decides
+     which tools to call based on the user's message, automatically, without
+     explicit routing logic.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+HOW PYDANTIC AI AGENTS WORK
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  1. You call `await alfred.run("What's pending on Petersen?", deps=deps)`
+  2. Pydantic AI sends the message + system prompt to Claude via the Anthropic API
+  3. Claude decides which tools to call (e.g., search_notion, get_matter_summary)
+  4. Pydantic AI executes those tools, passing `ctx.deps` so they have access
+     to the Notion bridge
+  5. Tool results are sent back to Claude as additional context
+  6. Claude formulates a final answer and returns it
+  7. The whole exchange is in `result.data` (a string) and `result.all_messages()`
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+USAGE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+    from alfred.agent import AlfredAgent, AlfredDependencies
+    from notion_bridge import NotionBridge
+    from notion_bridge.project_pages import ProjectPages
+    from notion_bridge.watch_list import WatchList
+
+    bridge = NotionBridge()
+    deps = AlfredDependencies(
+        bridge=bridge,
+        project_pages=ProjectPages(bridge),
+        watch_list=WatchList(bridge),
+    )
+
+    result = await AlfredAgent.run(
+        "Alfred, what's pending on Petersen this week?",
+        deps=deps,
+    )
+    print(result.data)  # Alfred's answer as a string
+"""
+
+from __future__ import annotations
+
+import logging
+from dataclasses import dataclass, field
+from typing import Any
+
+from pydantic_ai import Agent, RunContext
+from pydantic_ai.models.anthropic import AnthropicModel
+from pydantic_ai.providers.anthropic import AnthropicProvider
+
+from config import settings
+from notion_bridge.client import NotionBridge
+from notion_bridge.project_pages import ProjectPages
+from notion_bridge.watch_list import WatchList
+from sharepoint_bridge.client import SharePointBridge
+
+logger = logging.getLogger(__name__)
+
+
+# =============================================================================
+# DEPENDENCIES (Dependency Injection Container)
+# =============================================================================
+#
+# AlfredDependencies is a dataclass that holds the runtime objects Alfred's
+# tools need. Pydantic AI passes this object to every tool call via `ctx.deps`.
+#
+# WHY DEPENDENCY INJECTION INSTEAD OF MODULE-LEVEL SINGLETONS?
+#   If Alfred's tools just imported `notion_bridge` directly at module level,
+#   tests would have to patch at the module level — messy and fragile. With
+#   dependency injection, a test passes a mock AlfredDependencies with a mock
+#   bridge, and the tools use that mock automatically. No patching needed.
+#
+@dataclass
+class AlfredDependencies:
+    """
+    Runtime dependencies for Alfred's tools.
+
+    These objects are created once (at FastAPI startup) and passed to every
+    Alfred.run() call. They represent Alfred's "hands" — the interfaces to
+    the systems Alfred can read and write.
+    """
+
+    bridge: NotionBridge
+    """
+    The raw Notion API client. Used by tools that need generic search
+    or operations not covered by ProjectPages/WatchList.
+    """
+
+    project_pages: ProjectPages
+    """
+    High-level interface to KLG's matter project pages (Layer 1).
+    The most frequently used dependency — almost every Alfred query
+    about a matter goes through this.
+    """
+
+    watch_list: WatchList
+    """
+    Interface to Bloodhound's Watch List database. Alfred queries this
+    when Tim asks about what Bloodhound has found on a doctrine or issue.
+    """
+
+    sharepoint: SharePointBridge | None = None
+    """
+    SharePoint document library client. Allows Alfred to search and surface
+    KLG's filed briefs, exhibits, and correspondence stored in SharePoint.
+    Optional — gracefully absent if SharePoint credentials are not configured.
+    """
+
+    conversation_history: list[dict] = field(default_factory=list)
+    """
+    Optional conversation history for multi-turn sessions.
+    Not used by individual tool calls, but available for the API layer
+    to persist and replay conversation context across requests.
+    """
+
+
+# =============================================================================
+# SYSTEM PROMPT
+# =============================================================================
+#
+# The system prompt is Alfred's identity and operating rules. It runs before
+# every conversation and frames how Claude behaves when it's playing Alfred.
+#
+# WRITING GOOD SYSTEM PROMPTS:
+#   - Be specific about the persona and context (who Alfred is, where it operates)
+#   - Define the mental model the AI should use (executive-and-dictaphone)
+#   - Enumerate constraints clearly (what Alfred should and shouldn't do)
+#   - Include firm-specific context that Claude wouldn't otherwise know
+#
+_ALFRED_SYSTEM_PROMPT = """
+You are Alfred, the KLG AI Operating System's inward-facing executive assistant.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+WHO YOU ARE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+You are named for Alfred Pennyworth — brilliant, devoted, unflappable.
+You run the household and the technology. You know where everything is.
+You are the indispensable support to the KLG team.
+
+You serve Tim Kowal (managing attorney), Edwyn (systems partner),
+Brittney (paralegal), and Ted (associate). Anyone on the team can
+talk to you; you serve the firm, not just one person.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+WHAT YOU DO
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+You are the layer through which the KLG team operates. The team tells
+you what they need; you interact with Notion, Slack, and firm databases
+on their behalf. Nobody on the team should be pointing and clicking through
+software — that is your job.
+
+Your primary workspace is Notion. All active matters have a project page
+in Notion. When someone asks about a matter, you find its project page,
+read the current state, and give a direct answer — you do not guess.
+
+Bloodhound (your outward-facing counterpart) tracks legal landscape signals.
+When you are asked about a doctrine or opposing organization, you can query
+the Watch List to surface what Bloodhound has found.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+HOW YOU COMMUNICATE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+- Direct and professional. No corporate fluff, no throat-clearing.
+- Lead with the answer. Context and caveats come after.
+- If you use a tool and find nothing, say so clearly and suggest the
+  next step. Do not fabricate matter state.
+- When a skill runs (an action that modifies Notion), confirm what
+  changed and what comes next. The team wants to know the matter
+  moved forward.
+- You speak as one trusted colleague to another — not as a chatbot
+  announcing its capabilities.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+CONSTRAINTS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+- Never invent matter state. If you can't find a page, say so.
+- Never skip the Notion lookup when asked about a specific matter.
+  "I believe Petersen is..." is not acceptable — search first.
+- Prefer to confirm before making structural changes to a project page.
+  Routine updates (adding a log note, updating status) can proceed;
+  major structural changes (deleting content, restructuring milestones)
+  should be confirmed first.
+- Client information and matter details are confidential. Do not
+  reference matter specifics in any output that leaves the firm's systems.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+FIRM CONTEXT
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+KLG (Kowal Law Group) is a California appellate litigation firm.
+Practice areas: First Amendment, public employee rights, property rights,
+constitutional litigation. The firm considers itself half law firm,
+half think tank — it produces scholarship, podcast content (CALP), and
+has an active amicus practice alongside client matters.
+
+Paired system: Bloodhound handles the outward surveillance layer
+(tracking cases, doctrines, movement organizations). Alfred handles
+the inward operational layer (matter management, skill execution,
+team coordination). They share Notion as the source-of-truth substrate.
+""".strip()
+
+
+# =============================================================================
+# ALFRED AGENT DEFINITION
+# =============================================================================
+
+AlfredAgent: Agent[AlfredDependencies, str] = Agent(
+    model=AnthropicModel(
+        settings.alfred_model,
+        provider=AnthropicProvider(api_key=settings.anthropic_api_key),
+    ),
+    system_prompt=_ALFRED_SYSTEM_PROMPT,
+    deps_type=AlfredDependencies,
+    output_type=str,
+)
+"""
+The Alfred Pydantic AI agent.
+
+This is the object you call to run Alfred:
+    result = await AlfredAgent.run("What's pending on Petersen?", deps=deps)
+    print(result.data)
+
+The model, system prompt, and tools are defined here. The agent is stateless —
+all state lives in the dependencies (ctx.deps) and in Notion.
+"""
+
+
+# =============================================================================
+# ALFRED'S TOOLS
+# =============================================================================
+#
+# Tools are functions decorated with @AlfredAgent.tool. Claude (Alfred) will
+# automatically decide which tools to call based on the user's message.
+# The function signature and docstring are what Claude uses to understand
+# what each tool does — WRITE THEM CAREFULLY.
+#
+# IMPORTANT: Tool docstrings are part of the AI's context. They should
+# explain what the tool does in plain English, what arguments mean, and
+# what the return value looks like. Claude reads these to decide whether
+# to call the tool.
+
+
+@AlfredAgent.tool
+async def find_and_summarize_matter(
+    ctx: RunContext[AlfredDependencies],
+    matter_name: str,
+) -> str:
+    """
+    Find a KLG matter project page by name and return its full current state.
+
+    Use this when the user asks about a specific matter (e.g., "What's the
+    status on Petersen?", "What's pending on the Smith matter?", "Tell me
+    about Sakauye."). This is your primary tool for matter-related questions.
+
+    The summary includes:
+      - Current status (In progress, Review needed, Blocked, etc.)
+      - Priority level
+      - Target date / next court deadline
+      - Summary property
+      - Full page body content (case notes, current theory, open questions)
+
+    Args:
+        matter_name: The name or partial name of the matter to look up.
+                     Example: "Petersen", "Smith v. City", "Sakauye"
+
+    Returns:
+        A formatted text summary of the matter's current state, ready to
+        read aloud or present to the user. Returns a clear "not found"
+        message if no matching matter exists.
+    """
+    matter = await ctx.deps.project_pages.find_matter(matter_name)
+
+    if not matter:
+        return (
+            f"I searched Notion for '{matter_name}' and found no matching matter. "
+            f"The matter may use a different name in Notion, or it may not have "
+            f"a project page yet. Try a different search term, or let me know "
+            f"if you want me to create a new project page."
+        )
+
+    summary = await ctx.deps.project_pages.get_matter_summary(matter["id"])
+    return summary
+
+
+@AlfredAgent.tool
+async def get_upcoming_deadlines(
+    ctx: RunContext[AlfredDependencies],
+    days_ahead: int = 7,
+) -> str:
+    """
+    Get all KLG matters with deadlines in the next N days.
+
+    Use this when the user asks about upcoming deadlines, what's due soon,
+    what needs attention this week, or for a morning briefing on pressing matters.
+
+    Args:
+        days_ahead: How many days ahead to look. Default is 7 (one week).
+                    Use 14 for a two-week horizon, 30 for the full month ahead.
+
+    Returns:
+        A formatted list of matters with upcoming deadlines, sorted soonest first.
+        Each entry shows the matter name, deadline date, status, and priority.
+        Returns "No matters with deadlines in the next N days" if none found.
+    """
+    matters = await ctx.deps.project_pages.get_matters_with_upcoming_deadlines(days_ahead)
+
+    if not matters:
+        return f"No matters with deadlines in the next {days_ahead} days."
+
+    lines = [f"Matters with deadlines in the next {days_ahead} days ({len(matters)} total):\n"]
+    for m in matters:
+        name = m.get("Project name", "Unknown matter")
+        deadline = m.get("date:Target Date:start", m.get("Target Date", "No date"))
+        status = m.get("Status", "Unknown")
+        priority = m.get("Priority", "")
+        url = m.get("url", "")
+        lines.append(
+            f"  • {name}\n"
+            f"    Deadline: {deadline} | Status: {status} | Priority: {priority}\n"
+            f"    Notion: {url}\n"
+        )
+
+    return "\n".join(lines)
+
+
+@AlfredAgent.tool
+async def search_notion(
+    ctx: RunContext[AlfredDependencies],
+    query: str,
+) -> str:
+    """
+    Full-text search across all Notion pages the integration can access.
+
+    Use this for general knowledge questions about the firm's Notion workspace —
+    finding documents, research memos, skills documentation, anything that isn't
+    specifically a matter project page. For matter-specific questions, prefer
+    find_and_summarize_matter() instead (it gives richer matter context).
+
+    Examples of when to use this:
+      - "Find the supersedeas memo"
+      - "Where is the brief postmortem methodology?"
+      - "What did we document about the Diller matter?"
+
+    Args:
+        query: The search term. Can be a case name, document title, concept,
+               or any keyword likely to appear in the relevant Notion page.
+
+    Returns:
+        A list of matching pages with their titles and Notion URLs.
+        Returns "No results found" if nothing matches.
+    """
+    results = await ctx.deps.bridge.search(query)
+
+    if not results:
+        return f"No Notion pages found matching '{query}'."
+
+    lines = [f"Notion search results for '{query}' ({len(results)} found):\n"]
+    for r in results[:10]:  # Cap at 10 to keep response readable
+        title = r.get("Project name") or r.get("title") or "(Untitled)"
+        url = r.get("url", "")
+        edited = r.get("last_edited_time", "")[:10]  # Just the date part
+        lines.append(f"  • {title}\n    {url}\n    Last edited: {edited}")
+
+    if len(results) > 10:
+        lines.append(f"\n  ... and {len(results) - 10} more results.")
+
+    return "\n".join(lines)
+
+
+@AlfredAgent.tool
+async def get_bloodhound_watch_list(
+    ctx: RunContext[AlfredDependencies],
+    tier: str | None = None,
+    issue_keyword: str | None = None,
+) -> str:
+    """
+    Query Bloodhound's Watch List for cases being actively tracked.
+
+    Use this when the user asks what Bloodhound has found on a doctrine,
+    an issue area, or a specific type of case. Also useful for "what is
+    Bloodhound tracking right now?" status questions.
+
+    Examples of when to use this:
+      - "Alfred, what did Bloodhound flag this week?"
+      - "What's Bloodhound tracking on supersedeas issues?"
+      - "Are we watching any PLF cases?"
+
+    Args:
+        tier: Optional tier filter. "1" for highest-priority KLG core issues,
+              "2" for adjacent doctrine, "3" for ambient monitoring.
+              If None, returns all tiers.
+        issue_keyword: Optional keyword to filter by issue area name.
+                       Example: "First Amendment", "supersedeas"
+                       Currently does client-side filtering (Notion's
+                       multi_select filter requires exact matches).
+
+    Returns:
+        A formatted list of Watch List entries with case name, court, tier,
+        status, and KLG nexus note. Returns "Watch List is empty" if nothing
+        is being tracked.
+    """
+    cases = await ctx.deps.watch_list.get_active_cases(tier=tier)
+
+    if not cases:
+        tier_str = f" (Tier {tier})" if tier else ""
+        return f"Bloodhound's Watch List{tier_str} is currently empty."
+
+    # Client-side keyword filter if requested
+    if issue_keyword:
+        keyword_lower = issue_keyword.lower()
+        cases = [
+            c for c in cases
+            if any(
+                keyword_lower in area.lower()
+                for area in (c.get("Issue Area") or [])
+            )
+        ]
+        if not cases:
+            return f"No Watch List cases found matching issue keyword '{issue_keyword}'."
+
+    tier_str = f" (Tier {tier} only)" if tier else ""
+    lines = [f"Bloodhound Watch List{tier_str} — {len(cases)} active cases:\n"]
+
+    for case in cases:
+        name = case.get("Case Name", "Unknown")
+        court = case.get("Court", "N/A")
+        case_tier = case.get("Tier", "?")
+        status = case.get("Status", "Watching")
+        issues = ", ".join(case.get("Issue Area") or []) or "N/A"
+        nexus = case.get("KLG Nexus Note", "")
+        url = case.get("url", "")
+
+        entry = (
+            f"  • {name} ({court}) — Tier {case_tier}, {status}\n"
+            f"    Issues: {issues}\n"
+        )
+        if nexus:
+            entry += f"    KLG Nexus: {nexus}\n"
+        entry += f"    Notion: {url}"
+        lines.append(entry)
+
+    return "\n".join(lines)
+
+
+@AlfredAgent.tool
+async def log_action_to_matter(
+    ctx: RunContext[AlfredDependencies],
+    matter_name: str,
+    skill_name: str,
+    action_description: str,
+) -> str:
+    """
+    Write a timestamped action note to a matter's project page.
+
+    Use this when completing work on a matter — after drafting a document,
+    after a filing, after a Bloodhound triage session tied to a specific matter.
+    This keeps the matter's project page current without the team having to
+    manually update it.
+
+    Args:
+        matter_name:        The name of the matter to log to.
+        skill_name:         The name of the skill or action that was executed.
+                            Use the formal skill name (e.g., "klg-brief-elevation")
+                            or a descriptive label (e.g., "Alfred manual action").
+        action_description: A one-to-two sentence description of what was done.
+                            Be specific: "Drafted respondent's brief cover page
+                            and uploaded to SharePoint folder." not "Worked on brief."
+
+    Returns:
+        Confirmation that the note was logged, with the matter's Notion URL.
+    """
+    matter = await ctx.deps.project_pages.find_matter(matter_name)
+
+    if not matter:
+        return (
+            f"Could not find matter '{matter_name}' in Notion to log the action. "
+            f"Check the matter name and try again."
+        )
+
+    await ctx.deps.project_pages.log_skill_action(
+        page_id=matter["id"],
+        skill_name=skill_name,
+        action_summary=action_description,
+    )
+
+    return (
+        f"Logged to {matter.get('Project name', matter_name)}:\n"
+        f"  {action_description}\n"
+        f"  Notion: {matter.get('url', 'N/A')}"
+    )
+
+
+@AlfredAgent.tool
+async def get_team_workload(
+    ctx: RunContext[AlfredDependencies],
+    person_name: str,
+) -> str:
+    """
+    Get all active matters assigned to a specific team member.
+
+    Use this when someone asks what a colleague has on their plate, who owns
+    a matter, or what's blocking forward progress because of another person's
+    pending work.
+
+    Examples of when to use this:
+      - "Alfred, what's on Brittney's plate?"
+      - "What matters does Ted own right now?"
+      - "What's blocking me that Brittney is handling?"
+
+    Args:
+        person_name: Name or partial name of the team member. Case-insensitive.
+                     Examples: "Brittney", "Tim", "Ted", "Edwyn"
+
+    Returns:
+        A formatted list of active matters assigned to that person — status,
+        priority, and deadline for each. Returns a clear message if none found.
+    """
+    matters = await ctx.deps.project_pages.get_all_active_matters()
+
+    name_lower = person_name.lower()
+    assigned = [
+        m for m in matters
+        if any(
+            name_lower in owner.lower()
+            for owner in (m.get("Owner") or [])
+        )
+    ]
+
+    if not assigned:
+        return (
+            f"No active matters found assigned to '{person_name}'. "
+            f"They may have no active matters, or the Owner field in Notion "
+            f"uses a different name."
+        )
+
+    lines = [f"Active matters assigned to {person_name} ({len(assigned)} total):\n"]
+    for m in assigned:
+        name = m.get("Project name", "Unknown matter")
+        status = m.get("Status", "Unknown")
+        priority = m.get("Priority", "")
+        deadline = m.get("date:Target Date:start", m.get("Target Date", "None set"))
+        url = m.get("url", "")
+        lines.append(
+            f"  • {name}\n"
+            f"    Status: {status} | Priority: {priority} | Deadline: {deadline}\n"
+            f"    Notion: {url}\n"
+        )
+
+    return "\n".join(lines)
+
+
+@AlfredAgent.tool
+async def update_matter_status(
+    ctx: RunContext[AlfredDependencies],
+    matter_name: str,
+    new_status: str,
+) -> str:
+    """
+    Update the status of a KLG matter project page.
+
+    Use this when the team instructs Alfred to move a matter forward or change
+    its stage — e.g., "mark Petersen as done", "move Smith to Paused", "Diller
+    is now In progress".
+
+    Valid status values: "Planning", "In progress", "Paused",
+                         "Backlog", "Done", "Canceled"
+
+    Args:
+        matter_name: The name of the matter to update.
+        new_status:  The new status. Must match one of the valid values exactly.
+
+    Returns:
+        Confirmation of the change, showing old and new status, with Notion URL.
+    """
+    matter = await ctx.deps.project_pages.find_matter(matter_name)
+
+    if not matter:
+        return (
+            f"Could not find matter '{matter_name}' in Notion. "
+            f"Check the name and try again."
+        )
+
+    old_status = matter.get("Status", "Unknown")
+    await ctx.deps.project_pages.update_matter_status(matter["id"], new_status)
+    await ctx.deps.project_pages.log_skill_action(
+        page_id=matter["id"],
+        skill_name="alfred-status-update",
+        action_summary=f"Status changed from '{old_status}' to '{new_status}'.",
+    )
+
+    return (
+        f"{matter.get('Project name', matter_name)}: "
+        f"'{old_status}' → '{new_status}'.\n"
+        f"Notion: {matter.get('url', 'N/A')}"
+    )
+
+
+@AlfredAgent.tool
+async def create_new_matter(
+    ctx: RunContext[AlfredDependencies],
+    matter_name: str,
+    category: str = "Case Project",
+    case_stage: str = "Intake",
+    priority: str = "Medium",
+    target_date: str = "",
+    summary: str = "",
+) -> str:
+    """
+    Open a new matter project page in KLG's Notion Projects database.
+
+    Use this when the team opens a new case or project. This runs the
+    klg-matter-intake skill, creating the Layer 1 project page that all
+    subsequent Alfred skills and tools will operate against.
+
+    Once created, the matter appears in the Projects database and Alfred can
+    immediately start reading and updating it.
+
+    Args:
+        matter_name: Name of the matter (e.g., "Smith v. City of LA").
+        category:    "Case Project" (default), "Case Support", or "Operations".
+        case_stage:  "Intake" (default), "Evaluation", "Consulting and Special
+                     Projects", "Trial Court", "Prepare Record",
+                     "Briefing — AOB", "Briefing — RB", "Briefing — ARB",
+                     "Oral Argument", or "Post-Appeal".
+        priority:    "Low", "Medium" (default), or "High".
+        target_date: Next key date in ISO format (e.g., "2026-06-30"). Optional.
+        summary:     One-paragraph matter description. Optional.
+
+    Returns:
+        Confirmation with the new matter's Notion URL and next steps.
+    """
+    from alfred.skills.klg_matter_intake import KLGMatterIntake
+    from alfred.skills.base import SkillContext
+
+    skill = KLGMatterIntake()
+    skill_ctx = SkillContext(
+        matter_id="",
+        matter_name=matter_name,
+        matter_summary="",
+        matter_props={},
+        user_instruction=summary,
+        extra={
+            "matter_name": matter_name,
+            "category": category,
+            "case_stage": case_stage,
+            "priority": priority,
+            "target_date": target_date,
+            "summary": summary,
+        },
+    )
+
+    result = await skill.run(skill_ctx, ctx.deps.project_pages)
+
+    if not result.success:
+        return f"Intake failed: {result.summary}"
+
+    return f"{result.output}\n\nNext: {result.next_action}"
+
+
+@AlfredAgent.tool
+async def search_sharepoint(
+    ctx: RunContext[AlfredDependencies],
+    query: str,
+    folder_path: str = "",
+) -> str:
+    """
+    Search KLG's SharePoint document library for briefs, exhibits, and files.
+
+    Use this when the user asks about filed documents, correspondence, or
+    anything stored in SharePoint — not in Notion. Examples:
+      - "Find the respondent's brief in Petersen"
+      - "What's in the Sakauye exhibits folder?"
+      - "Find the last brief Tim filed on supersedeas issues"
+
+    Args:
+        query:       Search terms — matter name, document type, keywords.
+                     Examples: "Petersen respondent brief", "Sakauye exhibits 2026"
+        folder_path: Optional subfolder to restrict search, e.g. "/Matters/Petersen".
+                     Leave empty to search all of SharePoint.
+
+    Returns:
+        A list of matching files with names, paths, dates, and direct links.
+        Returns a clear "SharePoint not configured" message if credentials are absent.
+    """
+    if not ctx.deps.sharepoint:
+        return (
+            "SharePoint is not configured. Set SHAREPOINT_TENANT_ID, "
+            "SHAREPOINT_CLIENT_ID, SHAREPOINT_CLIENT_SECRET, and "
+            "SHAREPOINT_SITE_URL in .env to enable document search."
+        )
+
+    if folder_path:
+        items = await ctx.deps.sharepoint.list_folder(folder_path)
+        if not items:
+            return f"No files found in SharePoint folder '{folder_path}'."
+
+        lines = [f"SharePoint folder '{folder_path}' ({len(items)} items):\n"]
+        for item in items:
+            icon = "📁" if item["type"] == "folder" else "📄"
+            modified = item.get("lastModifiedDateTime", "")[:10]
+            lines.append(f"  {icon} {item['name']}  (modified {modified})\n    {item['webUrl']}")
+        return "\n".join(lines)
+
+    results = await ctx.deps.sharepoint.search_files(query)
+    if not results:
+        return f"No SharePoint files found matching '{query}'."
+
+    lines = [f"SharePoint search results for '{query}' ({len(results)} files):\n"]
+    for r in results:
+        name = r.get("name", "Unknown")
+        url = r.get("webUrl", "")
+        modified = r.get("lastModifiedDateTime", "")[:10]
+        parent = r.get("parentPath", "").split("root:")[-1] or "/"
+        lines.append(
+            f"  📄 {name}\n"
+            f"    Path: {parent}\n"
+            f"    Modified: {modified}\n"
+            f"    Link: {url}\n"
+        )
+
+    return "\n".join(lines)
+
+
+@AlfredAgent.tool
+async def deep_research_with_chatgpt(
+    ctx: RunContext[AlfredDependencies],
+    research_question: str,
+    context_summary: str = "",
+) -> str:
+    """
+    Hand off a complex legal research question to ChatGPT for a long-form memo.
+
+    Use this when Tim asks for a deep-dive research memo that would benefit
+    from ChatGPT's extended reasoning or when the question requires synthesizing
+    many sources into a 2,000–4,000 word analysis. Examples:
+      - "Write a memo on current circuit splits on the Pickering balance test"
+      - "Research how other states have applied Garcetti to academic freedom"
+      - "Analyze the trend in SCOTUS cert grants on First Amendment public employee cases"
+
+    Alfred handles day-to-day matter queries; this tool escalates to ChatGPT
+    for research tasks that benefit from its o1/o3 reasoning models.
+
+    Args:
+        research_question: The full research question or memo prompt.
+        context_summary:   Optional KLG case context to include (e.g., the matter
+                           summary from Notion so ChatGPT understands the stakes).
+
+    Returns:
+        ChatGPT's research memo as a string. Note: this output should be reviewed
+        by an attorney before relying on it — citations must be verified independently.
+    """
+    if not settings.openai_api_key:
+        return (
+            "OpenAI integration is not configured. "
+            "Set OPENAI_API_KEY in .env to enable ChatGPT deep research."
+        )
+
+    from openai import AsyncOpenAI
+
+    client = AsyncOpenAI(api_key=settings.openai_api_key)
+
+    system_prompt = (
+        "You are a senior legal research attorney at Kowal Law Group (KLG), "
+        "a California appellate firm specializing in First Amendment, public employee "
+        "rights, property rights, and constitutional litigation. "
+        "Produce thorough, well-organized legal research memos. "
+        "Cite cases accurately — do not invent citations. "
+        "Flag any areas where you are uncertain about current state of the law."
+    )
+
+    user_message = research_question
+    if context_summary:
+        user_message = (
+            f"Case context from our matter files:\n{context_summary}\n\n"
+            f"Research question:\n{research_question}"
+        )
+
+    try:
+        response = await client.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_message},
+            ],
+            max_tokens=4000,
+            temperature=0.2,
+        )
+
+        memo = response.choices[0].message.content or ""
+        logger.info(
+            "ChatGPT deep research completed: %d tokens used",
+            response.usage.total_tokens if response.usage else 0,
+        )
+
+        return (
+            f"ChatGPT Research Memo\n"
+            f"{'='*60}\n"
+            f"Question: {research_question[:200]}\n"
+            f"{'='*60}\n\n"
+            f"{memo}\n\n"
+            f"[Attorney review required — verify all citations before relying on this memo.]"
+        )
+
+    except Exception as e:
+        logger.error("ChatGPT deep research error: %s", e)
+        return f"ChatGPT research failed: {type(e).__name__}: {e}"
