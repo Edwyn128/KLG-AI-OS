@@ -68,6 +68,7 @@ from pydantic_ai.providers.anthropic import AnthropicProvider
 
 from config import settings
 from notion_bridge.client import NotionBridge
+from notion_bridge.comms_log import CommsLog
 from notion_bridge.project_pages import ProjectPages
 from notion_bridge.watch_list import WatchList
 from sharepoint_bridge.client import SharePointBridge
@@ -115,6 +116,14 @@ class AlfredDependencies:
     """
     Interface to Bloodhound's Watch List database. Alfred queries this
     when Tim asks about what Bloodhound has found on a doctrine or issue.
+    """
+
+    comms_log: CommsLog | None = None
+    """
+    Interface to the KLG Comms Log database. Every email sent to
+    CaseFile@KowalLawGroup.com lands here. Alfred reads this to surface
+    unprocessed communications, matter-specific threads, and pinned items.
+    Optional — gracefully absent if NOTION_COMMS_LOG_DB_ID is not configured.
     """
 
     sharepoint: SharePointBridge | None = None
@@ -826,3 +835,151 @@ async def deep_research_with_chatgpt(
     except Exception as e:
         logger.error("ChatGPT deep research error: %s", e)
         return f"ChatGPT research failed: {type(e).__name__}: {e}"
+
+
+@AlfredAgent.tool
+async def get_pending_communications(
+    ctx: RunContext[AlfredDependencies],
+) -> str:
+    """
+    Get all communications in the Comms Log that still need a response.
+
+    Use this when the team asks about unprocessed emails, what needs a reply,
+    or for a morning comms triage. Returns every entry where Actions = 'Respond'.
+
+    Examples of when to use this:
+      - "Alfred, what emails need a response?"
+      - "What's in the comms log that we haven't handled?"
+      - "Run a comms triage."
+
+    Returns:
+        A formatted list of pending communications with sender, subject,
+        date, and summary. Returns a clear message if nothing is pending.
+    """
+    if not ctx.deps.comms_log:
+        return "Comms Log is not configured (NOTION_COMMS_LOG_DB_ID not set)."
+
+    comms = await ctx.deps.comms_log.get_pending()
+
+    if not comms:
+        return "No pending communications — Comms Log is clear."
+
+    lines = [f"Pending communications ({len(comms)} need a response):\n"]
+    for c in comms:
+        name = c.get("Name", "(no subject)")
+        sender = c.get("From", "Unknown sender")
+        date = c.get("Comm Date") or c.get("created_time", "")[:10]
+        summary = c.get("Summary") or c.get("Email Text", "")
+        if summary and len(summary) > 200:
+            summary = summary[:200] + "..."
+        pinned = " 📌" if c.get("Pin") else ""
+        url = c.get("url", "")
+        lines.append(
+            f"  •{pinned} {name}\n"
+            f"    From: {sender} | Date: {date}\n"
+            f"    {summary}\n"
+            f"    Notion: {url}\n"
+        )
+
+    return "\n".join(lines)
+
+
+@AlfredAgent.tool
+async def get_matter_communications(
+    ctx: RunContext[AlfredDependencies],
+    matter_name: str,
+) -> str:
+    """
+    Get all Comms Log entries linked to a specific matter.
+
+    Use this when the team wants to see the email history for a case —
+    what clients or co-counsel have sent, what's been handled, what's pending.
+
+    Examples of when to use this:
+      - "Alfred, show me the comms for Petersen."
+      - "What emails have we received on the Sakauye matter?"
+      - "Pull the communication history for Smith v. City."
+
+    Args:
+        matter_name: The name or partial name of the matter.
+
+    Returns:
+        All communications linked to that matter, newest first, showing
+        sender, subject, date, summary, and triage status.
+    """
+    if not ctx.deps.comms_log:
+        return "Comms Log is not configured (NOTION_COMMS_LOG_DB_ID not set)."
+
+    matter = await ctx.deps.project_pages.find_matter(matter_name)
+    if not matter:
+        return (
+            f"Could not find matter '{matter_name}' in Notion. "
+            f"Check the matter name and try again."
+        )
+
+    comms = await ctx.deps.comms_log.get_for_matter(matter["id"])
+
+    if not comms:
+        return f"No Comms Log entries linked to {matter.get('Project name', matter_name)}."
+
+    lines = [
+        f"Communications for {matter.get('Project name', matter_name)} "
+        f"({len(comms)} entries):\n"
+    ]
+    for c in comms:
+        name = c.get("Name", "(no subject)")
+        sender = c.get("From", "Unknown sender")
+        date = c.get("Comm Date") or c.get("created_time", "")[:10]
+        action = c.get("Actions", "—")
+        summary = c.get("Summary") or ""
+        if summary and len(summary) > 150:
+            summary = summary[:150] + "..."
+        url = c.get("url", "")
+        lines.append(
+            f"  • [{action}] {name}\n"
+            f"    From: {sender} | {date}\n"
+            f"    {summary}\n"
+            f"    Notion: {url}\n"
+        )
+
+    return "\n".join(lines)
+
+
+@AlfredAgent.tool
+async def mark_communication_done(
+    ctx: RunContext[AlfredDependencies],
+    comm_notion_url: str,
+    note: str = "",
+) -> str:
+    """
+    Mark a Comms Log entry as Done and optionally add a note.
+
+    Use this after the team confirms they've handled a communication —
+    replied to an email, acted on a client request, or decided no action needed.
+
+    Args:
+        comm_notion_url: The full Notion URL of the communication entry
+                         (shown in get_pending_communications results).
+        note:            Optional note to record what action was taken.
+                         Example: "Replied 2026-06-04. Client confirmed receipt."
+
+    Returns:
+        Confirmation that the communication was marked Done.
+    """
+    if not ctx.deps.comms_log:
+        return "Comms Log is not configured (NOTION_COMMS_LOG_DB_ID not set)."
+
+    # Extract page ID from URL (last path segment, strip dashes)
+    page_id = comm_notion_url.rstrip("/").split("/")[-1].split("?")[0]
+    # Remove any title prefix (URLs like /Page-Title-abcdef123... → take last 32 hex)
+    if "-" in page_id and len(page_id) > 32:
+        page_id = page_id.split("-")[-1]
+
+    await ctx.deps.comms_log.mark_done(page_id)
+    if note:
+        await ctx.deps.comms_log.add_note(page_id, note)
+
+    return (
+        f"Communication marked as Done."
+        + (f"\nNote recorded: {note}" if note else "")
+    )

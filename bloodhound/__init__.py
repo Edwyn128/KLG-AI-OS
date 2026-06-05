@@ -15,5 +15,6 @@ Modules:
 """
 
 from bloodhound.signals import WatchSignal, SignalTier
+from bloodhound.agent import BloodhoundTriageAgent, TriageDecision
 
-__all__ = ["WatchSignal", "SignalTier"]
+__all__ = ["WatchSignal", "SignalTier", "BloodhoundTriageAgent", "TriageDecision"]

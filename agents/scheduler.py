@@ -62,6 +62,7 @@ PACIFIC_TZ = "America/Los_Angeles"
 def create_scheduler(
     project_pages: Any,  # ProjectPages
     slack_client: Any | None = None,
+    watch_list: Any | None = None,  # WatchList — for Bloodhound daily scan
 ) -> AsyncIOScheduler:
     """
     Create and configure the APScheduler instance with all three agents.
@@ -87,12 +88,35 @@ def create_scheduler(
         but not running yet.
     """
     from agents.deadline_watch import run_deadline_watch
+    from api.routes.bloodhound import run_bloodhound_scan
 
     scheduler = AsyncIOScheduler(
         # Use Pacific timezone as the scheduler's default — individual jobs
         # can override this, but having a sensible default prevents accidents.
         timezone=PACIFIC_TZ,
     )
+
+    # ── Job 0: Daily Bloodhound Scan ─────────────────────────────────────────
+    # Runs every morning at 7:00 AM Pacific — before the deadline watch.
+    # Fetches feeds, triages signals, writes relevant cases to Notion Watch List,
+    # and posts a summary to #case-management if anything was found.
+    # Skipped gracefully if watch_list is not configured.
+    #
+    if watch_list:
+        scheduler.add_job(
+            func=run_bloodhound_scan,
+            trigger=CronTrigger(hour=7, minute=0, timezone=PACIFIC_TZ),
+            kwargs={"watch_list": watch_list, "slack_client": slack_client},
+            id="bloodhound_scan_daily",
+            name="Daily Bloodhound Feed Scan",
+            replace_existing=True,
+            misfire_grace_time=3600,
+        )
+        logger.info("Scheduler: Registered 'bloodhound_scan_daily' at 07:00 Pacific daily.")
+    else:
+        logger.info(
+            "Scheduler: Bloodhound scan not scheduled — NOTION_WATCH_LIST_DB_ID not configured."
+        )
 
     # ── Job 1: Daily Deadline Watch ───────────────────────────────────────────
     # Runs every morning at 8:00 AM Pacific.

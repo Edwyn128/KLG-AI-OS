@@ -120,7 +120,8 @@ class NotionBridge:
         the I/O completes. AsyncClient uses httpx under the hood, which is
         fully async.
         """
-        self._client = AsyncClient(auth=settings.notion_token)
+        # Pin to 2022-06-28: the 2025-09-03 API removed /databases/{id}/query.
+        self._client = AsyncClient(auth=settings.notion_token, notion_version="2022-06-28")
         logger.info("NotionBridge initialized (async client ready)")
 
     # ─────────────────────────────────────────────────────────────────────────
@@ -309,7 +310,11 @@ class NotionBridge:
             if start_cursor:
                 query["start_cursor"] = start_cursor
 
-            response = await self._client.databases.query(database_id=database_id, **query)
+            response = await self._client.request(
+                path=f"databases/{database_id}/query",
+                method="POST",
+                body=query,
+            )
 
             # Convert each raw page object to a flat dict and accumulate
             for raw_page in response.get("results", []):

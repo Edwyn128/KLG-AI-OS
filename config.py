@@ -135,6 +135,16 @@ class Settings(BaseSettings):
     prior guests, co-counsel, and network nodes are tied to the doctrinal map.
     """
 
+    notion_comms_log_db_id: str = ""
+    """
+    Comms Log database ID.
+    Every email sent to CaseFile@KowalLawGroup.com or Events@KowalLawGroup.com
+    lands here as a row. Fields include: From, To, Comm Date, Email Text,
+    Summary, Actions (Respond/Done/N/A), Pin, and relations to Projects and
+    Case Portal. Alfred reads this to surface unprocessed communications,
+    matter-specific email threads, and pinned items needing attention.
+    """
+
     # ── Slack ─────────────────────────────────────────────────────────────────
 
     slack_bot_token: str = ""

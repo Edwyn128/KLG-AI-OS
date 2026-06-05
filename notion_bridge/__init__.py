@@ -45,12 +45,13 @@ MODULES IN THIS PACKAGE
 
   watch_list.py      — Reads and writes Bloodhound's Watch List database.
                        Used by Bloodhound's feed ingestor and triage logic.
+
+  comms_log.py       — Reads and writes the KLG Comms Log database.
+                       Emails sent to CaseFile@KowalLawGroup.com land here.
+                       Alfred reads this for triage and matter-linked comms.
 """
 
-# Re-export the most commonly used class so callers can do:
-#   from notion_bridge import NotionBridge
-# instead of:
-#   from notion_bridge.client import NotionBridge
 from notion_bridge.client import NotionBridge
+from notion_bridge.comms_log import CommsLog
 
-__all__ = ["NotionBridge"]
+__all__ = ["NotionBridge", "CommsLog"]

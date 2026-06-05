@@ -86,13 +86,17 @@ async def lifespan(app: FastAPI):
 
     # 1. Initialize the Notion bridge — the app's connection to Notion.
     from notion_bridge.client import NotionBridge
+    from notion_bridge.comms_log import CommsLog
     from notion_bridge.project_pages import ProjectPages
     from notion_bridge.watch_list import WatchList
 
     bridge = NotionBridge()
     project_pages = ProjectPages(bridge)
     watch_list = WatchList(bridge)
+    comms_log = CommsLog(bridge) if settings.notion_comms_log_db_id else None
     logger.info("Notion bridge initialized.")
+    if comms_log:
+        logger.info("Comms Log initialized (db: %s).", settings.notion_comms_log_db_id[:8])
 
     # 2. Initialize SharePoint bridge (optional — gracefully no-ops if unconfigured).
     from sharepoint_bridge.client import SharePointBridge
@@ -106,6 +110,7 @@ async def lifespan(app: FastAPI):
         bridge=bridge,
         project_pages=project_pages,
         watch_list=watch_list,
+        comms_log=comms_log,
         sharepoint=sharepoint,
     )
     logger.info("Alfred dependencies assembled.")
@@ -129,6 +134,7 @@ async def lifespan(app: FastAPI):
     scheduler = create_scheduler(
         project_pages=project_pages,
         slack_client=app.state.slack_client,
+        watch_list=watch_list,
     )
     scheduler.start()
     app.state.scheduler = scheduler
@@ -201,6 +207,11 @@ app.add_middleware(
 from api.routes.alfred import router as alfred_router
 
 app.include_router(alfred_router)
+
+# Bloodhound routes (feed scans and triage)
+from api.routes.bloodhound import router as bloodhound_router
+
+app.include_router(bloodhound_router)
 
 # Slack events webhook (receive messages from Slack → Alfred)
 from api.routes.slack import router as slack_router
