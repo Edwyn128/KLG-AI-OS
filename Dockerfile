@@ -24,10 +24,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application source
 COPY . .
 
-# Azure App Service injects PORT via environment variable.
-# Default 8000 for local runs.
+# Railway injects PORT automatically. Default 8000 for local runs.
 ENV PORT=8000
 
-# Two workers handles the background APScheduler + inbound requests
-# without needing a separate process. Scale up in Azure if needed.
-CMD ["sh", "-c", "uvicorn main:app --host 0.0.0.0 --port $PORT --workers 2"]
+# Single worker — APScheduler must run in one process only.
+# For a 5-7 person internal tool this is more than sufficient.
+CMD ["sh", "-c", "uvicorn main:app --host 0.0.0.0 --port $PORT"]
