@@ -53,18 +53,20 @@ async def receive_event(request: Request) -> JSONResponse:
       - @mention the bot  (event type: app_mention)
       - Start with "Alfred," in a direct message  (event type: message)
     """
-    body_bytes = await request.body()
-
-    # Verify the request came from Slack before doing anything else
-    if settings.slack_signing_secret:
-        _verify_slack_signature(request, body_bytes)
-
     import json
+    body_bytes = await request.body()
     payload = json.loads(body_bytes)
 
     # ── URL Verification (Slack setup challenge) ──────────────────────────────
+    # Must respond before signature verification — Slack sends this once during
+    # setup to confirm the endpoint is reachable. No auth risk: the response
+    # only echoes back a value Slack itself just sent.
     if payload.get("type") == "url_verification":
         return JSONResponse({"challenge": payload.get("challenge", "")})
+
+    # Verify the request came from Slack before processing real events
+    if settings.slack_signing_secret:
+        _verify_slack_signature(request, body_bytes)
 
     # ── Real Event ────────────────────────────────────────────────────────────
     if payload.get("type") == "event_callback":
