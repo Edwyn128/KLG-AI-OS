@@ -106,11 +106,20 @@ def _load_password_map() -> dict[str, str]:
     raw = settings.app_passwords.strip()
     if not raw:
         return {}
+    # Railway's raw editor can add escape sequences or newlines — clean them.
+    # Remove literal \n whitespace sequences and unescape \" → "
+    cleaned = raw.replace('\\"', '"').replace('\n', '').replace('  ', '')
+    # If the whole string is itself a JSON-encoded string, unwrap it once.
+    if cleaned.startswith('"') and cleaned.endswith('"'):
+        try:
+            cleaned = json.loads(cleaned)
+        except Exception:
+            pass
     try:
-        data = json.loads(raw)
-        return {str(k): str(v) for k, v in data.items()}
-    except Exception:
-        logger.warning("APP_PASSWORDS is not valid JSON — per-user auth disabled")
+        data = json.loads(cleaned)
+        return {str(k).strip(): str(v).strip() for k, v in data.items()}
+    except Exception as e:
+        logger.warning("APP_PASSWORDS could not be parsed (%s) — per-user auth disabled", e)
         return {}
 
 
