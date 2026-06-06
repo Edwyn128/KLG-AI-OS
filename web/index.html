@@ -504,12 +504,29 @@ async function apiFetch(url, opts) {
 function pickUser(name) {
   localStorage.setItem('klg_user', name);
   updateHeaderUser(name);
-  // If password not yet stored, reveal the password step instead of closing
+
+  // Highlight the selected name card — name grid stays fully clickable
+  // so the user can switch their selection at any time before confirming.
+  document.querySelectorAll('.name-btn').forEach(b => {
+    b.style.borderColor = '';
+    b.style.background  = '';
+  });
+  document.querySelectorAll('.name-btn').forEach(b => {
+    if (b.querySelector('.name-btn-label')?.textContent === name) {
+      b.style.borderColor = 'var(--accent)';
+      b.style.background  = 'var(--accent-dim)';
+    }
+  });
+
   if (!getPassword()) {
-    document.getElementById('name-grid').style.opacity = '0.4';
-    document.getElementById('name-grid').style.pointerEvents = 'none';
-    document.getElementById('password-step').style.display = 'block';
-    setTimeout(() => document.getElementById('password-input').focus(), 50);
+    // Show password step — clear any previous attempt when switching names
+    const step = document.getElementById('password-step');
+    const inp  = document.getElementById('password-input');
+    const err  = document.getElementById('password-error');
+    step.style.display = 'block';
+    if (inp) { inp.value = ''; }
+    if (err) { err.style.display = 'none'; }
+    setTimeout(() => inp && inp.focus(), 50);
   } else {
     hideUserModal();
   }
@@ -520,8 +537,6 @@ async function confirmPassword() {
   const pwd   = input.value.trim();
   if (!pwd) return;
 
-  // Validate against /auth/check — a protected endpoint that returns 401
-  // for any wrong username:password pair and 200 only when correct.
   const user = getUser();
   const credential = (user && user !== 'Team') ? (user + ':' + pwd) : ('klg:' + pwd);
   const testHeaders = {'Authorization': 'Basic ' + btoa(credential)};
@@ -529,13 +544,15 @@ async function confirmPassword() {
     const r = await fetch('/auth/check', {headers: testHeaders});
     if (r.status === 200) {
       localStorage.setItem('klg_password', pwd);
-      document.getElementById('password-error').style.display = 'none';
-      document.getElementById('name-grid').style.opacity = '';
-      document.getElementById('name-grid').style.pointerEvents = '';
+      // Reset name card highlights and hide password step
+      document.querySelectorAll('.name-btn').forEach(b => {
+        b.style.borderColor = '';
+        b.style.background  = '';
+      });
       document.getElementById('password-step').style.display = 'none';
+      document.getElementById('password-error').style.display = 'none';
       input.value = '';
       document.getElementById('user-modal').classList.remove('visible');
-      // Now that credentials are stored, load the sidebar data.
       loadMatters();
       loadDeadlines();
     } else {
@@ -579,18 +596,26 @@ function switchUser() {
 }
 
 function showUserModal() {
-  // If user name is already known but password is missing, jump straight to password step
-  if (localStorage.getItem('klg_user') && !getPassword()) {
-    document.getElementById('name-grid').style.opacity = '0.4';
-    document.getElementById('name-grid').style.pointerEvents = 'none';
+  // Name grid is always fully interactive — no disabling.
+  // Reset highlights and password field.
+  document.querySelectorAll('.name-btn').forEach(b => {
+    b.style.borderColor = '';
+    b.style.background  = '';
+  });
+  const savedUser = localStorage.getItem('klg_user');
+  if (savedUser && !getPassword()) {
+    // Re-highlight the previously selected name and show password step
+    document.querySelectorAll('.name-btn').forEach(b => {
+      if (b.querySelector('.name-btn-label')?.textContent === savedUser) {
+        b.style.borderColor = 'var(--accent)';
+        b.style.background  = 'var(--accent-dim)';
+      }
+    });
     document.getElementById('password-step').style.display = 'block';
-    setTimeout(() => {
-      const inp = document.getElementById('password-input');
-      if (inp) inp.focus();
-    }, 100);
+    document.getElementById('password-error').style.display = 'none';
+    const inp = document.getElementById('password-input');
+    if (inp) { inp.value = ''; setTimeout(() => inp.focus(), 100); }
   } else {
-    document.getElementById('name-grid').style.opacity = '';
-    document.getElementById('name-grid').style.pointerEvents = '';
     document.getElementById('password-step').style.display = 'none';
   }
   document.getElementById('user-modal').classList.add('visible');
