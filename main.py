@@ -71,11 +71,14 @@ logger = logging.getLogger(__name__)
 # =============================================================================
 #
 # Auth-exempt paths — no password required for these regardless of config.
-# /health    — Railway health-check probe
-# /static/*  — CSS/JS, no sensitive data
+# /           — HTML shell; protection lives at the API level so the browser
+#               never sees a 401 on a navigation request (which triggers the
+#               browser's own native username/password dialog instead of ours)
+# /health     — Railway health-check probe
+# /static/*   — CSS/JS, no sensitive data
 # /slack/events — Slack verifies itself via HMAC signing secret
 #
-_AUTH_EXEMPT = {"/health", "/slack/events"}
+_AUTH_EXEMPT = {"/", "/health", "/slack/events"}
 _AUTH_EXEMPT_PREFIXES = ("/static/",)
 
 # Simple in-memory rate limiter (per IP, per minute).
@@ -167,10 +170,13 @@ class _BasicAuthMiddleware(BaseHTTPMiddleware):
             except Exception:
                 pass
 
+        # Return 401 WITHOUT the WWW-Authenticate header.
+        # That header is what causes browsers to show their own native
+        # username/password dialog — omitting it lets our JS modal handle it.
         return Response(
-            content="KLG AI OS — Enter your name and firm password.",
+            content='{"detail":"Unauthorized"}',
             status_code=401,
-            headers={"WWW-Authenticate": 'Basic realm="KLG AI OS"'},
+            media_type="application/json",
         )
 
 
