@@ -52,7 +52,7 @@
 
   <div class="header-right">
     <div class="header-meta" id="header-clock">KLG Internal — Restricted</div>
-    <div class="header-user" id="header-user" onclick="showUserModal()" title="Switch user">
+    <div class="header-user" id="header-user" title="">
       <span class="header-user-avatar" id="header-user-avatar">?</span>
       <span class="header-user-name" id="header-user-name">Select user</span>
     </div>
@@ -149,8 +149,16 @@
   <!-- ── Left Sidebar: Active Matters ───────────────────────────────────── -->
   <aside class="sidebar">
     <div class="sidebar-header">
-      <h2>Active Matters <span style="font-weight:400;color:var(--text-dim);font-size:8px;letter-spacing:0.08em;text-transform:uppercase;" id="sidebar-count"></span></h2>
-      <button class="sidebar-refresh-btn" onclick="loadMatters()" title="Refresh matters" id="refresh-matters-btn">↺</button>
+      <h2>Matters <span style="font-weight:400;color:var(--text-dim);font-size:8px;letter-spacing:0.08em;text-transform:uppercase;" id="sidebar-count"></span></h2>
+      <button class="sidebar-refresh-btn" onclick="loadMatters(activeMatterCategory)" title="Refresh" id="refresh-matters-btn">↺</button>
+    </div>
+    <!-- Category filter strip — horizontally scrollable if buttons overflow -->
+    <div class="sidebar-filter-strip" id="sidebar-filter-strip">
+      <button class="sidebar-filter-btn active" data-cat="Case Project" onclick="setMatterCategory('Case Project')">Cases</button>
+      <button class="sidebar-filter-btn" data-cat="Case Support"  onclick="setMatterCategory('Case Support')">Support</button>
+      <button class="sidebar-filter-btn" data-cat="Operations"    onclick="setMatterCategory('Operations')">Ops</button>
+      <button class="sidebar-filter-btn" data-cat="Think Tank"    onclick="setMatterCategory('Think Tank')">Think Tank</button>
+      <button class="sidebar-filter-btn" data-cat="all"           onclick="setMatterCategory('all')">All</button>
     </div>
     <div class="matter-list" id="matter-list">
       <div class="loading-pulse" style="width:85%;margin:12px 8px 0;"></div>
@@ -428,23 +436,29 @@
 // APP STATE
 // ═══════════════════════════════════════════════════════════════════════════
 
-let currentAgent    = 'alfred';
-let isLoading       = false;
-let activeWorkspace = 'chat';
+let currentAgent        = 'alfred';
+let isLoading           = false;
+let activeWorkspace     = 'chat';
+let activeMatterCategory = 'Case Project';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // USER IDENTITY — localStorage-backed, zero friction
 // ═══════════════════════════════════════════════════════════════════════════
 
 const KLG_USERS = [
-  { name: 'Tim',     role: 'Managing Attorney' },
-  { name: 'Edwyn',   role: 'Systems Partner'   },
-  { name: 'William', role: 'Research'          },
-  { name: 'Brittney',role: 'Paralegal'         },
-  { name: 'Ted',     role: 'Associate'         },
-  { name: 'Stu',     role: 'Admin'             },
-  { name: 'Richard', role: 'Of Counsel'        },
+  { name: 'Tim',     role: 'Managing Attorney', admin: true  },
+  { name: 'Edwyn',   role: 'Systems Partner',   admin: true  },
+  { name: 'William', role: 'Research',          admin: false },
+  { name: 'Brittney',role: 'Paralegal',         admin: false },
+  { name: 'Ted',     role: 'Associate',         admin: false },
+  { name: 'Stu',     role: 'Admin',             admin: true  },
+  { name: 'Richard', role: 'Of Counsel',        admin: false },
 ];
+
+function isAdmin() {
+  const u = KLG_USERS.find(u => u.name === getUser());
+  return u ? u.admin : false;
+}
 
 function getUser() {
   return localStorage.getItem('klg_user') || 'Team';
@@ -497,38 +511,59 @@ async function confirmPassword() {
   const pwd   = input.value.trim();
   if (!pwd) return;
 
-  // Validate against backend — try a lightweight call
-  const testHeaders = {'Content-Type': 'application/json',
-                       'Authorization': 'Basic ' + btoa('klg:' + pwd)};
+  // Validate against /auth/check — a protected endpoint that returns 401
+  // for any wrong password and 200 only when the header is correct.
+  const testHeaders = {'Authorization': 'Basic ' + btoa('klg:' + pwd)};
   try {
-    const r = await fetch('/health', {headers: testHeaders});
-    if (r.ok || r.status !== 401) {
-      // Accept — /health is exempt from auth so any response here means
-      // the server is up; the real auth check is on the next API call.
-      // Store and close.
+    const r = await fetch('/auth/check', {headers: testHeaders});
+    if (r.status === 200) {
       localStorage.setItem('klg_password', pwd);
       document.getElementById('password-error').style.display = 'none';
       document.getElementById('name-grid').style.opacity = '';
       document.getElementById('name-grid').style.pointerEvents = '';
       document.getElementById('password-step').style.display = 'none';
       input.value = '';
-      hideUserModal();
+      // Call the real hideUserModal logic directly — bypass the guard since
+      // we just confirmed credentials.
+      document.getElementById('user-modal').classList.remove('visible');
     } else {
       document.getElementById('password-error').style.display = 'block';
       input.select();
     }
   } catch(e) {
-    // Network error — store anyway (offline scenario)
-    localStorage.setItem('klg_password', pwd);
-    hideUserModal();
+    document.getElementById('password-error').style.display = 'block';
   }
 }
 
 function updateHeaderUser(name) {
   const avatar = document.getElementById('header-user-avatar');
   const label  = document.getElementById('header-user-name');
+  const chip   = document.getElementById('header-user');
   if (avatar) avatar.textContent = name ? name[0].toUpperCase() : '?';
   if (label)  label.textContent  = name || 'Select user';
+
+  // Only admins can switch users — lock the chip for everyone else.
+  if (chip) {
+    const admin = KLG_USERS.find(u => u.name === name)?.admin ?? false;
+    if (admin) {
+      chip.style.cursor = 'pointer';
+      chip.title = 'Switch user (admin)';
+      chip.onclick = switchUser;
+    } else {
+      chip.style.cursor = 'default';
+      chip.title = name + ' — contact an admin to switch users';
+      chip.onclick = null;
+    }
+  }
+}
+
+function switchUser() {
+  // Force re-authentication on every user switch — clear password so the
+  // modal's password step always appears, even if the user is already known.
+  localStorage.removeItem('klg_password');
+  // Also clear the stored user so the name grid is fully interactive.
+  localStorage.removeItem('klg_user');
+  showUserModal();
 }
 
 function showUserModal() {
@@ -1032,7 +1067,17 @@ function setLoading(loading) {
 // MATTERS SIDEBAR
 // ═══════════════════════════════════════════════════════════════════════════
 
-async function loadMatters() {
+function setMatterCategory(cat) {
+  activeMatterCategory = cat;
+  // Highlight the active filter button
+  document.querySelectorAll('.sidebar-filter-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.cat === cat);
+  });
+  loadMatters(cat);
+}
+
+async function loadMatters(category) {
+  category = category || activeMatterCategory || 'Case Project';
   const list    = document.getElementById('matter-list');
   const counter = document.getElementById('sidebar-count');
   list.innerHTML = `
@@ -1042,10 +1087,8 @@ async function loadMatters() {
   `;
 
   try {
-    // Default to Case Projects only — the actual client legal matters.
-    // The full database also contains Case Support, Operations, and Think Tank
-    // entries which are not displayed here to avoid confusion.
-    const response = await apiFetch('/alfred/matters?category=Case+Project');
+    const catParam = category === 'all' ? 'all' : encodeURIComponent(category);
+    const response = await apiFetch(`/alfred/matters?category=${catParam}`);
     if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
     const data = await response.json();
 
@@ -1680,14 +1723,23 @@ document.addEventListener('keydown', e => {
   if (e.key === 'Escape') closeLightbox();
 });
 
-// Load case list when switching to Case File workspace
-// Override switchWorkspace to trigger case list load on first visit
+// Override switchWorkspace:
+// - Load case list on first visit to Case Files
+// - Reset case detail to blank placeholder every time Case Files is entered
 (function() {
   const _orig = window.switchWorkspace || switchWorkspace;
   window.switchWorkspace = function(name) {
     _orig(name);
-    if (name === 'casefile' && caseMatters.length === 0) {
-      loadCaseList();
+    if (name === 'casefile') {
+      // Always reset to blank state so no stale case lingers between visits
+      activeCaseId   = null;
+      activeCaseName = '';
+      document.querySelectorAll('.cf-matter-card').forEach(c => c.classList.remove('selected'));
+      document.getElementById('casefile-placeholder').style.display = 'flex';
+      document.getElementById('casefile-content').style.display     = 'none';
+      document.getElementById('casefile-loading').style.display     = 'none';
+      // Load the matter list on first visit only
+      if (caseMatters.length === 0) loadCaseList();
     }
   };
 })();

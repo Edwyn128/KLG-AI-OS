@@ -315,16 +315,18 @@ from api.routes.cases import router as cases_router
 
 app.include_router(cases_router)
 
-# Health check endpoint — used by deployment platforms to verify the app is running
+# Health check endpoint — auth-exempt, used by Railway to verify the container is alive
 @app.get("/health", tags=["System"])
 async def health_check():
-    """
-    Simple health check endpoint.
-
-    Returns 200 OK if the app is running. Deployment platforms (Railway, Vercel,
-    AWS) hit this endpoint to know whether to route traffic to this instance.
-    """
     return {"status": "ok", "app": "KLG AI OS", "version": "1.0.0"}
+
+
+# Auth check endpoint — protected by BasicAuthMiddleware.
+# Frontend calls this to validate a password before storing it.
+# Returns 200 if the Authorization header is correct, 401 if not.
+@app.get("/auth/check", tags=["System"])
+async def auth_check():
+    return {"authenticated": True}
 
 
 # =============================================================================

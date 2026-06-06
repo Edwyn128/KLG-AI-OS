@@ -282,6 +282,45 @@ header::after {
 }
 .sidebar-refresh-btn:hover { color: var(--text-primary); background: var(--bg-hover); }
 
+/* Category filter strip — scrolls horizontally when buttons overflow */
+.sidebar-filter-strip {
+  display: flex;
+  gap: 4px;
+  padding: 6px 8px;
+  overflow-x: auto;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  scrollbar-width: none; /* Firefox */
+}
+.sidebar-filter-strip::-webkit-scrollbar { display: none; } /* Chrome/Safari */
+
+.sidebar-filter-btn {
+  padding: 3px 10px;
+  border-radius: 20px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-dim);
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: all 0.15s var(--ease);
+}
+.sidebar-filter-btn.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: white;
+}
+.sidebar-filter-btn:not(.active):hover {
+  border-color: var(--accent);
+  color: var(--accent-bright);
+  background: var(--accent-dim);
+}
+
 .matter-list {
   flex: 1;
   overflow-y: auto;
