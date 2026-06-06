@@ -488,10 +488,13 @@ async function apiFetch(url, opts) {
   opts.headers = Object.assign(getAuthHeaders(), opts.headers || {});
   const r = await fetch(url, opts);
   if (r.status === 401) {
-    // Password wrong or expired — clear it and prompt again
-    localStorage.removeItem('klg_password');
-    showUserModal();
-    throw new Error('Session expired — please re-enter your password.');
+    // Only re-prompt if a password WAS stored (real session expiry).
+    // If no password stored yet, the user is mid-login — don't interrupt.
+    if (getPassword()) {
+      localStorage.removeItem('klg_password');
+      showUserModal();
+    }
+    throw new Error('Authentication required.');
   }
   return r;
 }
@@ -531,9 +534,10 @@ async function confirmPassword() {
       document.getElementById('name-grid').style.pointerEvents = '';
       document.getElementById('password-step').style.display = 'none';
       input.value = '';
-      // Call the real hideUserModal logic directly — bypass the guard since
-      // we just confirmed credentials.
       document.getElementById('user-modal').classList.remove('visible');
+      // Now that credentials are stored, load the sidebar data.
+      loadMatters();
+      loadDeadlines();
     } else {
       document.getElementById('password-error').style.display = 'block';
       input.select();
@@ -1454,21 +1458,26 @@ function updateClock() {
   const savedUser = localStorage.getItem('klg_user');
   if (savedUser) {
     updateHeaderUser(savedUser);
-    // If user is known but password missing (first time after auth was added), ask for it
-    if (!getPassword()) {
-      showUserModal();
-    }
   } else {
     showUserModal();
   }
 
-  // Load data
   await checkHealth();
-  await Promise.all([loadMatters(), loadDeadlines()]);
+
+  // Only load sidebar data if already authenticated.
+  // If not authenticated, confirmPassword() will trigger loadMatters/loadDeadlines
+  // after the user successfully enters their password.
+  if (getUser() !== 'Team' && getPassword()) {
+    await Promise.all([loadMatters(), loadDeadlines()]);
+  } else if (!getPassword()) {
+    showUserModal();
+  }
 })();
 
-// Refresh sidebar data every 5 minutes
-setInterval(() => { loadMatters(); loadDeadlines(); }, 5 * 60 * 1000);
+// Refresh sidebar data every 5 minutes (only when authenticated)
+setInterval(() => {
+  if (getPassword()) { loadMatters(); loadDeadlines(); }
+}, 5 * 60 * 1000);
 
 // ═══════════════════════════════════════════════════════════════════════════
 // CASE FILE WORKSPACE
