@@ -70,32 +70,25 @@ logger = logging.getLogger(__name__)
 # SECURITY — HTTP Basic Auth Middleware
 # =============================================================================
 #
-# All routes except /health and /static/* require a correct APP_PASSWORD.
-# /health is exempt so Railway's health-check probe works without credentials.
-# /static/* is exempt because CSS/JS contains no client data.
-# /slack/events is exempt because Slack sends its own HMAC signature instead.
+# Auth-exempt paths — no password required for these regardless of config.
+# /health    — Railway health-check probe
+# /static/*  — CSS/JS, no sensitive data
+# /slack/events — Slack verifies itself via HMAC signing secret
 #
-# When APP_PASSWORD is empty (local dev), auth is bypassed entirely.
-# In production on Railway, set APP_PASSWORD to a strong shared passphrase.
-#
-
 _AUTH_EXEMPT = {"/health", "/slack/events"}
 _AUTH_EXEMPT_PREFIXES = ("/static/",)
 
-# Simple in-memory rate limiter: track request counts per IP per minute.
-# Applied in the middleware so it works without touching route signatures.
+# Simple in-memory rate limiter (per IP, per minute).
 _rate_counts: dict[str, list[float]] = {}
-_RATE_LIMIT_POST = 20   # max POST requests per IP per minute (chat + scan)
-_RATE_LIMIT_WINDOW = 60  # seconds
+_RATE_LIMIT_POST = 20
+_RATE_LIMIT_WINDOW = 60
 
 
 def _check_rate_limit(ip: str) -> bool:
-    """Return True if the request should be allowed, False if rate-limited."""
     import time
     now = time.monotonic()
     window_start = now - _RATE_LIMIT_WINDOW
-    hits = _rate_counts.get(ip, [])
-    hits = [t for t in hits if t > window_start]
+    hits = [t for t in _rate_counts.get(ip, []) if t > window_start]
     if len(hits) >= _RATE_LIMIT_POST:
         _rate_counts[ip] = hits
         return False
@@ -104,11 +97,48 @@ def _check_rate_limit(ip: str) -> bool:
     return True
 
 
+def _load_password_map() -> dict[str, str]:
+    """Parse APP_PASSWORDS JSON into {username: password}. Returns {} on error."""
+    import json
+    raw = settings.app_passwords.strip()
+    if not raw:
+        return {}
+    try:
+        data = json.loads(raw)
+        return {str(k): str(v) for k, v in data.items()}
+    except Exception:
+        logger.warning("APP_PASSWORDS is not valid JSON — per-user auth disabled")
+        return {}
+
+
+def _verify_credentials(username: str, password: str) -> bool:
+    """
+    Return True if username:password is valid.
+
+    Checks in order:
+      1. Master password (APP_PASSWORD) — works for any username, admin override
+      2. Per-user password map (APP_PASSWORDS) — username must match exactly
+    """
+    # Master password override (any username accepted)
+    if settings.app_password and secrets.compare_digest(
+        password.encode(), settings.app_password.encode()
+    ):
+        return True
+
+    # Per-user password
+    pw_map = _load_password_map()
+    expected = pw_map.get(username, "")
+    if expected and secrets.compare_digest(password.encode(), expected.encode()):
+        return True
+
+    return False
+
+
 class _BasicAuthMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         path = request.url.path
 
-        # Rate limit POST requests to API routes (not static files or health)
+        # Rate-limit POST requests before checking auth
         if request.method == "POST" and not any(path.startswith(p) for p in _AUTH_EXEMPT_PREFIXES):
             ip = request.client.host if request.client else "unknown"
             if not _check_rate_limit(ip):
@@ -118,27 +148,27 @@ class _BasicAuthMiddleware(BaseHTTPMiddleware):
                     media_type="application/json",
                 )
 
-        if not settings.app_password:
+        # Skip auth if nothing is configured (local dev without .env)
+        if not settings.app_password and not settings.app_passwords:
             return await call_next(request)
 
+        # Exempt paths never require auth
         if path in _AUTH_EXEMPT or any(path.startswith(p) for p in _AUTH_EXEMPT_PREFIXES):
             return await call_next(request)
 
+        # Validate Basic Auth credentials
         auth_header = request.headers.get("Authorization", "")
         if auth_header.startswith("Basic "):
             try:
                 decoded = base64.b64decode(auth_header[6:]).decode("utf-8")
-                _, password = decoded.split(":", 1)
-                if secrets.compare_digest(
-                    password.encode("utf-8"),
-                    settings.app_password.encode("utf-8"),
-                ):
+                username, password = decoded.split(":", 1)
+                if _verify_credentials(username, password):
                     return await call_next(request)
             except Exception:
                 pass
 
         return Response(
-            content="KLG AI OS — Internal access only. Enter firm password.",
+            content="KLG AI OS — Enter your name and firm password.",
             status_code=401,
             headers={"WWW-Authenticate": 'Basic realm="KLG AI OS"'},
         )

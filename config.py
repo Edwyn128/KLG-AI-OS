@@ -215,11 +215,22 @@ class Settings(BaseSettings):
 
     app_password: str = ""
     """
-    OPTIONAL in dev, REQUIRED in production.
-    Shared password for HTTP Basic Auth — all 7 team members use the same one.
-    The browser prompts once and caches it for the session.
-    Set a strong value in Railway environment variables.
-    When empty, auth is disabled (dev mode only — never deploy with this empty).
+    Master/admin override password. Accepts any username when used.
+    Useful for Edwyn to log in as any user for support purposes.
+    When empty AND app_passwords is empty, auth is fully disabled (dev only).
+    """
+
+    app_passwords: str = ""
+    """
+    Per-user passwords as a JSON object. Each team member authenticates
+    with their own password tied to their identity.
+    Example value for Railway:
+      {"Tim":"KLG-TIM-ACCESS128","Edwyn":"KLG-EDWYN-ACCESS128",
+       "William":"KLG-WILLIAM-ACCESS128","Brittney":"KLG-BRITTNEY-ACCESS128",
+       "Ted":"KLG-TED-ACCESS128","Stu":"KLG-STU-ACCESS128",
+       "Richard":"KLG-RICHARD-ACCESS128"}
+    When set, users authenticate as username:password.
+    app_password (master) is always checked as a fallback.
     """
 
     # ── Application ───────────────────────────────────────────────────────────

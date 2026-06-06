@@ -68,7 +68,7 @@
     <div class="modal-header">
       <div class="modal-logo">KLG · SKILLS OS</div>
       <h2 class="modal-title" id="modal-title">Who are you?</h2>
-      <p class="modal-subtitle">Select your name so Alfred can attribute your queries and log activity correctly.</p>
+      <p class="modal-subtitle">Select your name, then enter your personal KLG password.</p>
     </div>
     <div class="modal-body">
       <div class="name-grid" id="name-grid">
@@ -472,8 +472,14 @@ function getPassword() {
 
 function getAuthHeaders(extra) {
   const h = Object.assign({'Content-Type': 'application/json'}, extra || {});
-  const pwd = getPassword();
-  if (pwd) h['Authorization'] = 'Basic ' + btoa('klg:' + pwd);
+  const pwd  = getPassword();
+  const user = getUser();
+  // Send username:password — backend validates the pair, giving true per-user auth.
+  if (pwd && user && user !== 'Team') {
+    h['Authorization'] = 'Basic ' + btoa(user + ':' + pwd);
+  } else if (pwd) {
+    h['Authorization'] = 'Basic ' + btoa('klg:' + pwd);
+  }
   return h;
 }
 
@@ -512,8 +518,10 @@ async function confirmPassword() {
   if (!pwd) return;
 
   // Validate against /auth/check — a protected endpoint that returns 401
-  // for any wrong password and 200 only when the header is correct.
-  const testHeaders = {'Authorization': 'Basic ' + btoa('klg:' + pwd)};
+  // for any wrong username:password pair and 200 only when correct.
+  const user = getUser();
+  const credential = (user && user !== 'Team') ? (user + ':' + pwd) : ('klg:' + pwd);
+  const testHeaders = {'Authorization': 'Basic ' + btoa(credential)};
   try {
     const r = await fetch('/auth/check', {headers: testHeaders});
     if (r.status === 200) {
