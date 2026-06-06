@@ -69,6 +69,10 @@ class ChatRequest(BaseModel):
         description="The name of the team member sending the message. Used for logging.",
         examples=["Tim", "Edwyn", "Brittney", "Ted"],
     )
+    model: str = Field(
+        default="",
+        description="Claude model override for this request.",
+    )
 
 
 class ChatResponse(BaseModel):
@@ -157,11 +161,28 @@ async def chat_with_alfred(
         # Extract which tools Alfred called from the message history
         tools_used = _extract_tools_used(result)
 
-        return ChatResponse(
+        chat_response = ChatResponse(
             response=result.output,
             user=request.user,
             tools_used=tools_used,
         )
+
+        # Log interaction to Comms Log (non-blocking — failure never affects response)
+        if alfred_deps.comms_log:
+            try:
+                from config import settings as _settings
+                await alfred_deps.comms_log.log_interaction(
+                    user=request.user,
+                    agent="alfred",
+                    message=request.message,
+                    response=result.output,
+                    tools_used=tools_used,
+                    model=request.model or _settings.alfred_model,
+                )
+            except Exception:
+                pass
+
+        return chat_response
 
     except Exception as e:
         logger.error("Alfred chat error for user '%s': %s", request.user, e, exc_info=True)
@@ -175,36 +196,29 @@ async def chat_with_alfred(
         )
 
 
-@router.get("/matters", summary="List all active matters")
+@router.get("/matters", summary="List active matters by category")
 async def list_active_matters(
+    category: str = "Case Project",
     alfred_deps=Depends(get_alfred_deps),
 ) -> dict[str, Any]:
     """
-    Return all active matters from the Notion Projects database.
+    Return active matters from the Notion Projects database.
 
-    Used by the web UI dashboard to populate the matter list panel.
-    Returns matters sorted by priority (High → Medium → other) and
-    then by nearest deadline.
+    Query parameters:
+      category: Filter by project category. Default "Case Project" (actual
+                client matters). Other valid values: "Case Support",
+                "Operations", "Think Tank". Pass "all" to return everything.
 
-    Response format:
-        {
-            "count": 12,
-            "matters": [
-                {
-                    "id": "3580fc06-...",
-                    "Project name": "Petersen",
-                    "Status": "In progress",
-                    "Priority": "High",
-                    "Target Date": "2026-05-15",
-                    "url": "https://www.notion.so/..."
-                },
-                ...
-            ]
-        }
+    The KLG Projects database contains four distinct categories:
+      - Case Project  — active client legal matters
+      - Case Support  — research, briefs, support tasks for cases
+      - Operations    — firm admin, potential clients, networking, biz dev
+      - Think Tank    — CALP podcast, amicus practice, scholarship
     """
     try:
-        matters = await alfred_deps.project_pages.get_all_active_matters()
-        return {"count": len(matters), "matters": matters}
+        cat = None if category.lower() == "all" else category
+        matters = await alfred_deps.project_pages.get_all_active_matters(category=cat)
+        return {"count": len(matters), "category": category, "matters": matters}
     except Exception as e:
         logger.error("list_active_matters error: %s", e, exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
@@ -213,6 +227,7 @@ async def list_active_matters(
 @router.get("/deadlines", summary="Get matters with upcoming deadlines")
 async def get_upcoming_deadlines(
     days: int = 7,
+    category: str = "Case Project",
     alfred_deps=Depends(get_alfred_deps),
 ) -> dict[str, Any]:
     """
@@ -223,10 +238,13 @@ async def get_upcoming_deadlines(
 
     Used by the web UI's "Upcoming Deadlines" panel.
     """
-    days = min(days, 90)  # Cap at 90 days to prevent abuse
+    days = min(days, 90)
     try:
-        matters = await alfred_deps.project_pages.get_matters_with_upcoming_deadlines(days)
-        return {"days_ahead": days, "count": len(matters), "matters": matters}
+        cat = None if category.lower() == "all" else category
+        matters = await alfred_deps.project_pages.get_matters_with_upcoming_deadlines(
+            days=days, category=cat
+        )
+        return {"days_ahead": days, "category": category, "count": len(matters), "matters": matters}
     except Exception as e:
         logger.error("get_upcoming_deadlines error: %s", e, exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))

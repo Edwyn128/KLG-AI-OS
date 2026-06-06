@@ -120,7 +120,8 @@ class NotionBridge:
         the I/O completes. AsyncClient uses httpx under the hood, which is
         fully async.
         """
-        self._client = AsyncClient(auth=settings.notion_token)
+        # Pin to 2022-06-28: the 2025-09-03 API removed /databases/{id}/query.
+        self._client = AsyncClient(auth=settings.notion_token, notion_version="2022-06-28")
         logger.info("NotionBridge initialized (async client ready)")
 
     # ─────────────────────────────────────────────────────────────────────────
@@ -309,7 +310,11 @@ class NotionBridge:
             if start_cursor:
                 query["start_cursor"] = start_cursor
 
-            response = await self._client.databases.query(database_id=database_id, **query)
+            response = await self._client.request(
+                path=f"databases/{database_id}/query",
+                method="POST",
+                body=query,
+            )
 
             # Convert each raw page object to a flat dict and accumulate
             for raw_page in response.get("results", []):
@@ -528,11 +533,15 @@ def extract_property(prop: dict[str, Any]) -> Any:
         return [r["id"] for r in prop.get("relation", [])]
 
     elif prop_type == "rollup":
-        # Rollups aggregate relation data; simplified to the array values
         rollup = prop.get("rollup", {})
-        if rollup.get("type") == "array":
+        rollup_type = rollup.get("type")
+        if rollup_type == "array":
             return [extract_property(item) for item in rollup.get("array", [])]
-        return str(rollup)
+        if rollup_type == "number":
+            return rollup.get("number")  # None if no related rows, float 0–100 for percent
+        if rollup_type == "date":
+            return extract_property({"type": "date", "date": rollup.get("date")})
+        return None  # unknown rollup type — return None rather than a garbled repr
 
     elif prop_type == "people":
         return [

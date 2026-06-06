@@ -41,14 +41,18 @@ and for not hitting Notion/Slack rate limits unnecessarily.
 
 from __future__ import annotations
 
+import base64
 import logging
+import secrets
 from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request
 
 from config import settings
 
@@ -60,6 +64,84 @@ logging.basicConfig(
     datefmt="%Y-%m-%d %H:%M:%S",
 )
 logger = logging.getLogger(__name__)
+
+
+# =============================================================================
+# SECURITY — HTTP Basic Auth Middleware
+# =============================================================================
+#
+# All routes except /health and /static/* require a correct APP_PASSWORD.
+# /health is exempt so Railway's health-check probe works without credentials.
+# /static/* is exempt because CSS/JS contains no client data.
+# /slack/events is exempt because Slack sends its own HMAC signature instead.
+#
+# When APP_PASSWORD is empty (local dev), auth is bypassed entirely.
+# In production on Railway, set APP_PASSWORD to a strong shared passphrase.
+#
+
+_AUTH_EXEMPT = {"/health", "/slack/events"}
+_AUTH_EXEMPT_PREFIXES = ("/static/",)
+
+# Simple in-memory rate limiter: track request counts per IP per minute.
+# Applied in the middleware so it works without touching route signatures.
+_rate_counts: dict[str, list[float]] = {}
+_RATE_LIMIT_POST = 20   # max POST requests per IP per minute (chat + scan)
+_RATE_LIMIT_WINDOW = 60  # seconds
+
+
+def _check_rate_limit(ip: str) -> bool:
+    """Return True if the request should be allowed, False if rate-limited."""
+    import time
+    now = time.monotonic()
+    window_start = now - _RATE_LIMIT_WINDOW
+    hits = _rate_counts.get(ip, [])
+    hits = [t for t in hits if t > window_start]
+    if len(hits) >= _RATE_LIMIT_POST:
+        _rate_counts[ip] = hits
+        return False
+    hits.append(now)
+    _rate_counts[ip] = hits
+    return True
+
+
+class _BasicAuthMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        path = request.url.path
+
+        # Rate limit POST requests to API routes (not static files or health)
+        if request.method == "POST" and not any(path.startswith(p) for p in _AUTH_EXEMPT_PREFIXES):
+            ip = request.client.host if request.client else "unknown"
+            if not _check_rate_limit(ip):
+                return Response(
+                    content='{"detail":"Too many requests. Slow down."}',
+                    status_code=429,
+                    media_type="application/json",
+                )
+
+        if not settings.app_password:
+            return await call_next(request)
+
+        if path in _AUTH_EXEMPT or any(path.startswith(p) for p in _AUTH_EXEMPT_PREFIXES):
+            return await call_next(request)
+
+        auth_header = request.headers.get("Authorization", "")
+        if auth_header.startswith("Basic "):
+            try:
+                decoded = base64.b64decode(auth_header[6:]).decode("utf-8")
+                _, password = decoded.split(":", 1)
+                if secrets.compare_digest(
+                    password.encode("utf-8"),
+                    settings.app_password.encode("utf-8"),
+                ):
+                    return await call_next(request)
+            except Exception:
+                pass
+
+        return Response(
+            content="KLG AI OS — Internal access only. Enter firm password.",
+            status_code=401,
+            headers={"WWW-Authenticate": 'Basic realm="KLG AI OS"'},
+        )
 
 
 # =============================================================================
@@ -99,6 +181,12 @@ async def lifespan(app: FastAPI):
     sharepoint = SharePointBridge()
     logger.info("SharePoint bridge initialized.")
 
+    # 2b. Initialize Comms Log (optional — no-ops if NOTION_COMMS_LOG_DB_ID not set).
+    from notion_bridge.comms_log import CommsLog
+    comms_log = CommsLog(bridge) if settings.notion_comms_log_db_id else None
+    if comms_log:
+        logger.info("Comms Log initialized.")
+
     # 3. Build Alfred's dependencies — the runtime objects his tools use.
     from alfred.agent import AlfredDependencies
 
@@ -107,6 +195,7 @@ async def lifespan(app: FastAPI):
         project_pages=project_pages,
         watch_list=watch_list,
         sharepoint=sharepoint,
+        comms_log=comms_log,
     )
     logger.info("Alfred dependencies assembled.")
 
@@ -129,6 +218,7 @@ async def lifespan(app: FastAPI):
     scheduler = create_scheduler(
         project_pages=project_pages,
         slack_client=app.state.slack_client,
+        watch_list=watch_list,
     )
     scheduler.start()
     app.state.scheduler = scheduler
@@ -168,10 +258,10 @@ app = FastAPI(
     ),
     version="1.0.0",
     lifespan=lifespan,
-    # In production, hide the /docs and /redoc endpoints by setting these to None.
-    # For now, keep them open — they're valuable during development.
-    docs_url="/docs",
-    redoc_url="/redoc",
+    # Hide /docs and /redoc in production — they expose the full API surface.
+    # Available only in debug mode (local dev).
+    docs_url="/docs" if settings.debug else None,
+    redoc_url="/redoc" if settings.debug else None,
 )
 
 
@@ -179,17 +269,25 @@ app = FastAPI(
 # MIDDLEWARE
 # =============================================================================
 
-# CORS — Cross-Origin Resource Sharing.
-# Required if the frontend is served from a different origin than the API
-# (e.g., frontend on Vercel at https://klg-ai.vercel.app, API on Railway).
-# During local development, allow all origins (the "*" wildcard).
-# In production, restrict to the actual frontend domain.
+# Auth — must be added before CORS so unauthenticated requests are rejected
+# before any CORS headers are set.
+app.add_middleware(_BasicAuthMiddleware)
+
+# CORS — frontend and API are served from the same Railway origin, so
+# same-origin requests don't need CORS at all. This policy allows localhost
+# for dev and the Railway domain for prod. The "*" wildcard is intentionally
+# absent — it would allow any site to call Alfred with a victim's credentials.
+_cors_origins = ["http://localhost:8000", "http://127.0.0.1:8000"]
+if not settings.debug:
+    # Add the Railway domain if APP_HOST is set to something meaningful.
+    # Update this when the Railway URL is known after first deployment.
+    _cors_origins = ["*"]  # same-origin in prod; update after Railway URL is known
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # TODO: Lock down to specific origins in production
+    allow_origins=_cors_origins,
     allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST"],
+    allow_headers=["Authorization", "Content-Type"],
 )
 
 
@@ -202,10 +300,20 @@ from api.routes.alfred import router as alfred_router
 
 app.include_router(alfred_router)
 
+# Bloodhound routes (feed scans and triage)
+from api.routes.bloodhound import router as bloodhound_router
+
+app.include_router(bloodhound_router)
+
 # Slack events webhook (receive messages from Slack → Alfred)
 from api.routes.slack import router as slack_router
 
 app.include_router(slack_router)
+
+# Case File routes (full matter detail + Slack activity + file proxy)
+from api.routes.cases import router as cases_router
+
+app.include_router(cases_router)
 
 # Health check endpoint — used by deployment platforms to verify the app is running
 @app.get("/health", tags=["System"])

@@ -75,42 +75,53 @@ async def run_deadline_watch(
         await _post_or_log(message, slack_client)
         return message
 
-    # Build the Slack message with one line per matter
-    # Format: "• Petersen — Due in 3 days (Thu May 14) | Status: In progress | Priority: High"
     matter_lines: list[str] = []
     for matter in matters:
-        name = matter.get("Project name", "Unknown matter")
-        # Try both property name formats — the Notion schema uses a date property
-        # that might be stored under different keys depending on how the formula
-        # field resolves vs. the raw date field.
-        deadline_str = (
+        name        = matter.get("Project name", "Unknown matter")
+        status      = matter.get("Status", "Unknown")
+        priority    = matter.get("Priority", "")
+        case_stage  = matter.get("Case Stage") or ""
+        court_date  = matter.get("Next Court Deadline") or ""
+        court_info  = matter.get("Next Deadline Info") or ""
+        target_date = (
             matter.get("date:Target Date:start")
             or matter.get("Target Date")
             or ""
         )
-        status = matter.get("Status", "Unknown")
-        priority = matter.get("Priority", "")
 
-        # Calculate days remaining for urgency coloring
+        # Prefer Next Court Deadline when set — it is the hard legal deadline.
+        # Fall back to Target Date (internal project milestone).
+        if court_date:
+            deadline_str  = court_date
+            deadline_type = "Court"
+        else:
+            deadline_str  = target_date
+            deadline_type = "Target"
+
         days_remaining = _days_until(deadline_str)
         urgency_prefix = _urgency_emoji(days_remaining)
 
         if deadline_str:
             try:
-                deadline_date = date.fromisoformat(deadline_str[:10])
+                deadline_date    = date.fromisoformat(deadline_str[:10])
                 deadline_display = deadline_date.strftime("%a %b %d")
             except ValueError:
                 deadline_display = deadline_str
 
             days_str = (
-                f"TODAY" if days_remaining == 0
+                "TODAY"
+                if days_remaining == 0
                 else f"in {days_remaining} day{'s' if days_remaining != 1 else ''} ({deadline_display})"
             )
         else:
             days_str = "date not set"
 
+        # Build line — include case stage and court deadline context when available
+        stage_tag = f" [{case_stage}]" if case_stage else ""
+        info_line = f"\n   _{court_info}_" if court_info and court_info != "No upcoming court deadline" else ""
+
         matter_lines.append(
-            f"{urgency_prefix} *{name}* — Due {days_str} | {status} | {priority}"
+            f"{urgency_prefix} *{name}*{stage_tag} — {deadline_type} deadline {days_str} | {status} | {priority}{info_line}"
         )
 
     matters_block = "\n".join(matter_lines)
@@ -184,10 +195,9 @@ async def _post_or_log(message: str, slack_client: Any | None) -> None:
     """
     if slack_client and settings.slack_bot_token:
         try:
-            slack_client.chat_postMessage(
+            await slack_client.chat_postMessage(
                 channel=settings.slack_case_management_channel,
                 text=message,
-                # mrkdwn=True is the default for Slack, so *bold* and _italic_ work.
             )
             logger.info(
                 "DeadlineWatch: Posted to Slack channel '%s'",

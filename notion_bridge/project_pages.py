@@ -143,23 +143,61 @@ class ProjectPages:
             self._bridge.get_page_content(page_id),
         )
 
-        # Build a human + AI readable summary
+        name        = props_dict.get("Project name", "Unknown")
+        status      = props_dict.get("Status", "N/A")
+        priority    = props_dict.get("Priority", "N/A")
+        category    = props_dict.get("Category", "N/A")
+        case_stage  = props_dict.get("Case Stage") or "N/A"
+        assignees   = props_dict.get("Assignee") or []
+        target_date = props_dict.get("date:Target Date:start") or props_dict.get("Target Date") or "N/A"
+        court_date  = props_dict.get("Next Court Deadline") or None
+        court_info  = props_dict.get("Next Deadline Info") or ""
+        completion  = props_dict.get("Completion")
+        blocking    = props_dict.get("Is Blocking") or []
+        blocked_by  = props_dict.get("Blocked By") or []
+
+        # Days-remaining helper for court deadline
+        def _days_label(d: str) -> str:
+            try:
+                delta = (date.fromisoformat(d[:10]) - date.today()).days
+                if delta < 0:    return f"{d[:10]} (OVERDUE by {abs(delta)} days)"
+                if delta == 0:   return f"{d[:10]} (TODAY)"
+                if delta == 1:   return f"{d[:10]} (TOMORROW)"
+                return f"{d[:10]} ({delta} days away)"
+            except ValueError:
+                return d
+
         lines = [
-            f"=== MATTER: {props_dict.get('Project name', 'Unknown')} ===",
-            f"Status:      {props_dict.get('Status', 'N/A')}",
-            f"Priority:    {props_dict.get('Priority', 'N/A')}",
-            f"Category:    {props_dict.get('Category', 'N/A')}",
-            f"Target Date: {props_dict.get('date:Target Date:start', props_dict.get('Target Date', 'N/A'))}",
-            f"Notion URL:  {props_dict.get('url', 'N/A')}",
-            f"Last Edited: {props_dict.get('last_edited_time', 'N/A')}",
+            f"=== MATTER: {name} ===",
+            f"Status:               {status}",
+            f"Priority:             {priority}",
+            f"Case Stage:           {case_stage}",
+            f"Category:             {category}",
+            f"Assignee:             {', '.join(assignees) if assignees else 'Unassigned'}",
+            f"Target Date:          {target_date}",
+            f"Next Court Deadline:  {_days_label(court_date) if court_date else 'None set'}",
         ]
 
-        # Include summary property if present
+        if court_info and court_info != "No upcoming court deadline":
+            lines.append(f"Deadline Info:        {court_info}")
+
+        if completion is not None:
+            lines.append(f"Completion:           {int(completion)}%" if isinstance(completion, (int, float)) else f"Completion:           N/A")
+
+        if blocking:
+            lines.append(f"Is Blocking:          {len(blocking)} related matter(s)")
+        if blocked_by:
+            lines.append(f"Blocked By:           {len(blocked_by)} matter(s)")
+
+        lines += [
+            f"Notion URL:           {props_dict.get('url', 'N/A')}",
+            f"Last Edited:          {props_dict.get('last_edited_time', 'N/A')}",
+        ]
+
         summary_prop = props_dict.get("Summary")
         if summary_prop:
             lines.append(f"\nSummary:\n{summary_prop}")
 
-        # Include body content if the page has any
         if body_text.strip():
             lines.append(f"\nPage Content:\n{body_text}")
         else:
@@ -167,8 +205,24 @@ class ProjectPages:
 
         return "\n".join(lines)
 
+    # ── KLG Project Categories ────────────────────────────────────────────────
+    # The Projects database mixes four types of work. Callers should pass the
+    # relevant category (or None to get everything).
+    #
+    #   "Case Project"  — active client legal matters (court deadlines matter)
+    #   "Case Support"  — research, briefs, support tasks tied to case projects
+    #   "Operations"    — firm admin, potential clients, networking, business dev
+    #   "Think Tank"    — CALP podcast episodes, amicus briefs, scholarship
+    #
+    CATEGORY_CASE_PROJECT = "Case Project"
+    CATEGORY_CASE_SUPPORT = "Case Support"
+    CATEGORY_OPERATIONS   = "Operations"
+    CATEGORY_THINK_TANK   = "Think Tank"
+
     async def get_matters_with_upcoming_deadlines(
-        self, days: int = 7
+        self,
+        days: int = 7,
+        category: str | None = "Case Project",
     ) -> list[dict[str, Any]]:
         """
         Query the Projects database for matters with deadlines in the next N days.
@@ -177,78 +231,111 @@ class ProjectPages:
         agent. It returns all matters where Target Date falls between today
         and today + N days, sorted by deadline (soonest first).
 
-        NOTE ON NOTION DATE FILTERING:
-            Notion's filter API for dates is somewhat limited — it can filter
-            on "on or after" and "on or before" but not both in a single filter
-            (you need an "and" compound filter). We build that compound filter
-            here so callers don't have to know this quirk.
-
         Args:
-            days: Number of days ahead to look. Default 7 (one week).
-                  The daily agent uses 7; a Monday agenda might use 14.
+            days:     Number of days ahead to look. Default 7 (one week).
+            category: Filter by project category. Defaults to "Case Project"
+                      (actual client matters). Pass None to include all types.
 
         Returns:
             List of matter dicts sorted by Target Date ascending (soonest first).
-            Empty list if nothing is due in the window.
         """
-        today = date.today().isoformat()           # e.g., "2026-05-11"
+        today = date.today().isoformat()
         cutoff = (date.today() + timedelta(days=days)).isoformat()
 
-        # Notion requires a compound "and" filter to express "between two dates"
-        deadline_filter = {
-            "and": [
-                {
-                    "property": "Target Date",
-                    "date": {"on_or_after": today},
-                },
-                {
-                    "property": "Target Date",
-                    "date": {"on_or_before": cutoff},
-                },
-                {
-                    # Only active matters — skip "Done" and "Archived"
-                    "property": "Status",
-                    "status": {"does_not_equal": "Done"},
-                },
-            ]
-        }
+        # Run two queries and merge — one for Target Date, one for Next Court
+        # Deadline. The pinned Notion API version (2022-06-28) doesn't support
+        # deep compound filter nesting, so we keep each query simple.
+        import asyncio
 
-        matters = await self._bridge.query_database(
-            database_id=settings.notion_projects_db_id,
-            filter=deadline_filter,
-            sorts=[{"property": "Target Date", "direction": "ascending"}],
-        )
-
-        logger.info(
-            "get_matters_with_upcoming_deadlines(days=%d): found %d matters",
-            days,
-            len(matters),
-        )
-        return matters
-
-    async def get_all_active_matters(self) -> list[dict[str, Any]]:
-        """
-        Return all matters currently in an active status.
-
-        Used by the project hygiene scan agent to look for stale matters
-        (no activity in 14+ days, missing Target Date, owner unset, etc.).
-
-        Active statuses are: "In progress", "Blocked", "Review needed".
-        Done/Archived matters are excluded.
-
-        Returns:
-            List of all active matter dicts.
-        """
-        active_filter = {
+        not_done = {
             "or": [
                 {"property": "Status", "status": {"equals": "In progress"}},
                 {"property": "Status", "status": {"equals": "Planning"}},
                 {"property": "Status", "status": {"equals": "Paused"}},
             ]
         }
+        category_clause = (
+            [{"property": "Category", "select": {"equals": category}}]
+            if category else []
+        )
+
+        def _build(date_prop: str) -> dict:
+            return {"and": [
+                {"property": date_prop, "date": {"on_or_after": today}},
+                {"property": date_prop, "date": {"on_or_before": cutoff}},
+                not_done,
+                *category_clause,
+            ]}
+
+        results_by_target, results_by_court = await asyncio.gather(
+            self._bridge.query_database(
+                database_id=settings.notion_projects_db_id,
+                filter=_build("Target Date"),
+                sorts=[{"property": "Target Date", "direction": "ascending"}],
+            ),
+            self._bridge.query_database(
+                database_id=settings.notion_projects_db_id,
+                filter=_build("Next Court Deadline"),
+                sorts=[{"property": "Next Court Deadline", "direction": "ascending"}],
+            ),
+        )
+
+        # Deduplicate by page ID, preserve earliest-deadline order
+        seen: set[str] = set()
+        combined: list[dict] = []
+        for m in results_by_target + results_by_court:
+            if m["id"] not in seen:
+                seen.add(m["id"])
+                combined.append(m)
+
+        # Sort by the earliest of the two deadline fields
+        def _earliest(m: dict) -> str:
+            td = m.get("Target Date") or "9999-12-31"
+            cd = m.get("Next Court Deadline") or "9999-12-31"
+            return min(str(td)[:10], str(cd)[:10])
+
+        combined.sort(key=_earliest)
+
+        logger.info(
+            "get_matters_with_upcoming_deadlines(days=%d, category=%s): found %d (target=%d, court=%d)",
+            days, category, len(combined), len(results_by_target), len(results_by_court),
+        )
+        return combined
+
+    async def get_all_active_matters(
+        self,
+        category: str | None = "Case Project",
+    ) -> list[dict[str, Any]]:
+        """
+        Return all matters currently in an active status.
+
+        Args:
+            category: Filter by project category. Defaults to "Case Project"
+                      (actual client legal matters). Pass None for all types.
+                      Use the CATEGORY_* class constants for valid values.
+
+        Returns:
+            List of active matter dicts sorted by Priority descending.
+        """
+        conditions: list[dict] = [
+            {
+                "or": [
+                    {"property": "Status", "status": {"equals": "In progress"}},
+                    {"property": "Status", "status": {"equals": "Planning"}},
+                    {"property": "Status", "status": {"equals": "Paused"}},
+                ]
+            }
+        ]
+        if category:
+            conditions.append(
+                {"property": "Category", "select": {"equals": category}}
+            )
+
+        db_filter = {"and": conditions} if len(conditions) > 1 else conditions[0]
+
         return await self._bridge.query_database(
             database_id=settings.notion_projects_db_id,
-            filter=active_filter,
+            filter=db_filter,
             sorts=[{"property": "Priority", "direction": "descending"}],
         )
 

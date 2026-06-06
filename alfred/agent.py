@@ -68,6 +68,7 @@ from pydantic_ai.providers.anthropic import AnthropicProvider
 
 from config import settings
 from notion_bridge.client import NotionBridge
+from notion_bridge.comms_log import CommsLog
 from notion_bridge.project_pages import ProjectPages
 from notion_bridge.watch_list import WatchList
 from sharepoint_bridge.client import SharePointBridge
@@ -122,6 +123,13 @@ class AlfredDependencies:
     SharePoint document library client. Allows Alfred to search and surface
     KLG's filed briefs, exhibits, and correspondence stored in SharePoint.
     Optional — gracefully absent if SharePoint credentials are not configured.
+    """
+
+    comms_log: CommsLog | None = None
+    """
+    Interface to the KLG Comms Log database. Alfred logs every chat
+    interaction here so Tim can see what the team has been asking.
+    Optional — gracefully absent if NOTION_COMMS_LOG_DB_ID is not set.
     """
 
     conversation_history: list[dict] = field(default_factory=list)
@@ -214,6 +222,31 @@ Practice areas: First Amendment, public employee rights, property rights,
 constitutional litigation. The firm considers itself half law firm,
 half think tank — it produces scholarship, podcast content (CALP), and
 has an active amicus practice alongside client matters.
+
+NOTION PROJECT CATEGORIES — the Projects database contains four distinct types.
+Always apply the correct mental model when answering:
+
+  "Case Project"  — Active client legal matters with court deadlines. These
+                    are the firm's primary work. When someone asks "what are
+                    our matters?" or "what cases do we have?", this is what
+                    they mean. Examples: Petersen appeal, Sakauye briefing.
+
+  "Case Support"  — Research memos, brief drafts, and support tasks that are
+                    tied to a specific Case Project but tracked separately.
+                    These often have their own deadlines tied to the parent case.
+
+  "Operations"    — Firm administration, business development, potential client
+                    intake, networking, and internal process work. When someone
+                    asks about "potential clients" or "pipeline", look here.
+                    These are NOT active legal matters.
+
+  "Think Tank"    — CALP podcast episodes, amicus briefs in preparation,
+                    and academic scholarship. Separate from client work.
+
+When a user asks about "matters" or "cases" → filter to Case Project.
+When a user asks about "potential clients" or "intake" → filter to Operations.
+When a user asks about "everything" or "all projects" → include all categories
+but group and label them clearly so the distinction is visible.
 
 Paired system: Bloodhound handles the outward surveillance layer
 (tracking cases, doctrines, movement organizations). Alfred handles

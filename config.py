@@ -135,6 +135,16 @@ class Settings(BaseSettings):
     prior guests, co-counsel, and network nodes are tied to the doctrinal map.
     """
 
+    notion_comms_log_db_id: str = ""
+    """
+    Comms Log database ID.
+    Every email sent to CaseFile@KowalLawGroup.com or Events@KowalLawGroup.com
+    lands here as a row. Fields include: From, To, Comm Date, Email Text,
+    Summary, Actions (Respond/Done/N/A), Pin, and relations to Projects and
+    Case Portal. Alfred reads this to surface unprocessed communications,
+    matter-specific email threads, and pinned items needing attention.
+    """
+
     # ── Slack ─────────────────────────────────────────────────────────────────
 
     slack_bot_token: str = ""
@@ -199,6 +209,17 @@ class Settings(BaseSettings):
     The Slack channel Alfred listens in for direct queries. The bot must be
     invited to this channel. Messages that @mention the bot or start with
     'Alfred,' are routed to the Alfred agent.
+    """
+
+    # ── Security ──────────────────────────────────────────────────────────────
+
+    app_password: str = ""
+    """
+    OPTIONAL in dev, REQUIRED in production.
+    Shared password for HTTP Basic Auth — all 7 team members use the same one.
+    The browser prompts once and caches it for the session.
+    Set a strong value in Railway environment variables.
+    When empty, auth is disabled (dev mode only — never deploy with this empty).
     """
 
     # ── Application ───────────────────────────────────────────────────────────

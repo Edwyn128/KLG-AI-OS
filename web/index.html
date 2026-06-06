@@ -1,33 +1,27 @@
 <!DOCTYPE html>
 <!--
-  KLG AI OS — Web Interface
+  KLG AI OS — Skills OS V2.4
   ═══════════════════════════════════════════════════════════════════════════
-  This is a single-page application (no framework, no build step required).
+  Two workspaces:
+    1. Chat Workspace  — Alfred & Bloodhound with model selector, matter list,
+                         high-contrast deadlines panel, agent triggers.
+    2. Skills Navigator — Tabbed skill grid with category filters, detail panel,
+                          and "Launch Skill" → auto-populates chat.
 
-  Architecture:
-    - Pure HTML + vanilla JavaScript (no React, no Vue, no bundler)
-    - Communicates with the FastAPI backend via fetch() calls
-    - All API endpoints are defined in api/routes/alfred.py
-
-  Why no framework?
-    This is an internal firm tool used by 4-5 people. A React app would
-    require Node.js, a build step, and a separate dev server. Vanilla JS
-    with fetch() is simpler to run, simpler to debug, and has zero dependencies.
-    When the app needs to grow (multi-page, complex state), we can add a
-    framework then — premature abstraction adds cost without benefit.
-
-  API calls this page makes:
-    POST /alfred/chat              → Send message to Alfred, get response
-    GET  /alfred/matters           → Load active matters for the sidebar
-    GET  /alfred/deadlines?days=7  → Load upcoming deadlines for right panel
-    POST /alfred/agents/deadline-watch → Manually trigger deadline-watch agent
+  API endpoints used:
+    POST /alfred/chat                  → Alfred / Bloodhound chat
+    GET  /alfred/matters               → Left sidebar matters list
+    GET  /alfred/deadlines?days=7      → Right panel deadlines
+    POST /alfred/agents/deadline-watch → Manual deadline watch trigger
+    POST /bloodhound/scan              → Bloodhound feed scan trigger
   ═══════════════════════════════════════════════════════════════════════════
 -->
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>KLG AI OS — Alfred & Bloodhound</title>
+  <title>KLG · Skills OS · V2.4 — California Appellate Workflow Navigator</title>
+  <meta name="description" content="KLG AI Operating System — Alfred executive assistant and Bloodhound surveillance engine for Kowal Law Group appellate practice.">
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
@@ -36,79 +30,191 @@
      HEADER
 ════════════════════════════════════════════════════════════════════════ -->
 <header>
-  <div class="header-title">
-    <div class="status-dot" id="status-dot" title="Connected to backend"></div>
-    <div>
-      <h1>KLG AI Operating System</h1>
-      <div class="subtitle">Alfred · Bloodhound · Notion-native</div>
+  <div class="header-left">
+    <div class="status-dot" id="status-dot" title="Backend connected"></div>
+    <div class="header-brand">
+      <div class="brand-main">KLG &bull; SKILLS OS &bull; <span>V2.4</span></div>
+      <div class="brand-sub">California Appellate Workflow Navigator</div>
     </div>
   </div>
-  <div style="font-size: 12px; color: var(--text-muted);" id="header-user">
-    KLG Internal — Restricted
+
+  <div class="workspace-tabs" id="workspace-tabs">
+    <button class="workspace-tab active" id="tab-chat" onclick="switchWorkspace('chat')">
+      Chat Workspace
+    </button>
+    <button class="workspace-tab" id="tab-skills" onclick="switchWorkspace('skills')">
+      Skills Navigator
+    </button>
+    <button class="workspace-tab" id="tab-casefile" onclick="switchWorkspace('casefile')">
+      Case Files
+    </button>
+  </div>
+
+  <div class="header-right">
+    <div class="header-meta" id="header-clock">KLG Internal — Restricted</div>
+    <div class="header-user" id="header-user" onclick="showUserModal()" title="Switch user">
+      <span class="header-user-avatar" id="header-user-avatar">?</span>
+      <span class="header-user-name" id="header-user-name">Select user</span>
+    </div>
+    <div class="header-badge">Alfred + Bloodhound</div>
   </div>
 </header>
 
 <!-- ════════════════════════════════════════════════════════════════════════
-     MAIN LAYOUT (3-column grid: sidebar | chat | right panel)
+     USER PICKER MODAL
 ════════════════════════════════════════════════════════════════════════ -->
-<div class="layout">
+<div class="modal-overlay" id="user-modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-logo">KLG · SKILLS OS</div>
+      <h2 class="modal-title" id="modal-title">Who are you?</h2>
+      <p class="modal-subtitle">Select your name so Alfred can attribute your queries and log activity correctly.</p>
+    </div>
+    <div class="modal-body">
+      <div class="name-grid" id="name-grid">
+        <button class="name-btn" onclick="pickUser('Tim')">
+          <span class="name-btn-initial">T</span>
+          <span class="name-btn-label">Tim</span>
+          <span class="name-btn-role">Managing Attorney</span>
+        </button>
+        <button class="name-btn" onclick="pickUser('Edwyn')">
+          <span class="name-btn-initial">E</span>
+          <span class="name-btn-label">Edwyn</span>
+          <span class="name-btn-role">Systems Partner</span>
+        </button>
+        <button class="name-btn" onclick="pickUser('William')">
+          <span class="name-btn-initial">W</span>
+          <span class="name-btn-label">William</span>
+          <span class="name-btn-role">Research</span>
+        </button>
+        <button class="name-btn" onclick="pickUser('Brittney')">
+          <span class="name-btn-initial">B</span>
+          <span class="name-btn-label">Brittney</span>
+          <span class="name-btn-role">Paralegal</span>
+        </button>
+        <button class="name-btn" onclick="pickUser('Ted')">
+          <span class="name-btn-initial">T</span>
+          <span class="name-btn-label">Ted</span>
+          <span class="name-btn-role">Associate</span>
+        </button>
+        <button class="name-btn" onclick="pickUser('Stu')">
+          <span class="name-btn-initial">S</span>
+          <span class="name-btn-label">Stu</span>
+          <span class="name-btn-role">Admin</span>
+        </button>
+        <button class="name-btn" onclick="pickUser('Richard')">
+          <span class="name-btn-initial">R</span>
+          <span class="name-btn-label">Richard</span>
+          <span class="name-btn-role">Of Counsel</span>
+        </button>
+      </div>
 
-  <!-- ── LEFT SIDEBAR: Active Matters ───────────────────────────────────── -->
+      <!-- Password step — shown after name is picked if password not yet stored -->
+      <div id="password-step" style="display:none;margin-top:18px;">
+        <div style="font-size:11px;color:var(--text-muted);margin-bottom:10px;text-align:center;">
+          Enter the KLG AI OS firm password to continue.
+        </div>
+        <div style="display:flex;gap:8px;">
+          <input
+            id="password-input"
+            type="password"
+            placeholder="Firm password"
+            autocomplete="current-password"
+            onkeydown="if(event.key==='Enter')confirmPassword()"
+            style="flex:1;background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);
+                   padding:9px 12px;color:var(--text-primary);font-size:13px;font-family:var(--font-sans);outline:none;"
+          />
+          <button onclick="confirmPassword()"
+            style="padding:9px 18px;background:var(--accent);color:white;border:none;border-radius:var(--radius);
+                   font-size:12px;font-weight:700;font-family:var(--font-sans);cursor:pointer;white-space:nowrap;">
+            Enter →
+          </button>
+        </div>
+        <div id="password-error" style="display:none;font-size:11px;color:var(--urgent);margin-top:8px;text-align:center;">
+          Incorrect password. Try again.
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <span class="modal-footer-note">Your choice is saved in this browser. You can switch anytime from the header.</span>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════════════════════
+     WORKSPACE 1 — CHAT
+════════════════════════════════════════════════════════════════════════ -->
+<div class="workspace active" id="workspace-chat">
+
+  <!-- ── Left Sidebar: Active Matters ───────────────────────────────────── -->
   <aside class="sidebar">
     <div class="sidebar-header">
-      <h2>Active Matters</h2>
-      <button onclick="loadMatters()" title="Refresh" style="background:none;border:none;cursor:pointer;color:var(--text-muted);font-size:14px;">↺</button>
+      <h2>Active Matters <span style="font-weight:400;color:var(--text-dim);font-size:8px;letter-spacing:0.08em;text-transform:uppercase;" id="sidebar-count"></span></h2>
+      <button class="sidebar-refresh-btn" onclick="loadMatters()" title="Refresh matters" id="refresh-matters-btn">↺</button>
     </div>
     <div class="matter-list" id="matter-list">
-      <div style="padding:16px;font-size:12px;color:var(--text-muted);">Loading matters...</div>
+      <div class="loading-pulse" style="width:85%;margin:12px 8px 0;"></div>
+      <div class="loading-pulse" style="width:70%;margin:4px 8px;"></div>
+      <div class="loading-pulse" style="width:90%;margin:4px 8px;"></div>
     </div>
   </aside>
 
-  <!-- ── CENTER: Alfred Chat Interface ──────────────────────────────────── -->
-  <main class="chat-panel">
+  <!-- ── Center: Chat Interface ────────────────────────────────────────── -->
+  <main class="chat-panel" id="chat-panel">
 
-    <!-- Toolbar with agent selector -->
+    <!-- Toolbar -->
     <div class="chat-toolbar">
       <div class="agent-selector">
-        <button class="agent-btn active" data-agent="alfred" onclick="selectAgent('alfred')">
+        <button class="agent-btn active" data-agent="alfred" id="btn-alfred" onclick="selectAgent('alfred')">
           Alfred
         </button>
-        <button class="agent-btn" data-agent="bloodhound" onclick="selectAgent('bloodhound')">
+        <button class="agent-btn" data-agent="bloodhound" id="btn-bloodhound" onclick="selectAgent('bloodhound')">
           Bloodhound
         </button>
       </div>
-      <span style="font-size:11px;color:var(--text-muted);margin-left:auto;">
-        Powered by Claude · Notion source of truth
-      </span>
+
+      <div class="model-selector-wrap">
+        <span class="model-label">Model</span>
+        <select id="model-select" title="Select AI model">
+          <option value="claude-sonnet-4-5">Sonnet 4.5</option>
+          <option value="claude-sonnet-4-6" selected>Sonnet 4.6</option>
+          <option value="claude-opus-4">Opus 4</option>
+          <option value="claude-opus-4-5">Opus 4.5</option>
+        </select>
+      </div>
     </div>
 
-    <!-- Alfred message history -->
+    <!-- Alfred messages -->
     <div class="chat-messages active" id="alfred-messages">
       <div class="message">
         <div class="message-avatar">A</div>
-        <div class="message-bubble">
-          <strong>Good morning.</strong> I'm Alfred, the KLG AI Operating System's executive assistant.<br><br>
-          I have access to all active matters in Notion, the Bloodhound Watch List, and KLG's skill library.
-          The team's institutional memory lives in Notion — I read and write to it on your behalf.<br><br>
-          <em>Try asking:</em><br>
-          • "What's pending on Petersen?"<br>
-          • "What deadlines do we have this week?"<br>
-          • "What has Bloodhound flagged on First Amendment issues?"<br>
-          • "Log that I filed the brief in Smith today."
+        <div class="message-content">
+          <div class="message-bubble">
+            <strong>Good morning.</strong> I'm Alfred, the KLG AI Operating System's executive assistant.<br><br>
+            I have access to all active matters in Notion, the Bloodhound Watch List, and KLG's skill library. The team's institutional memory lives in Notion — I read and write to it on your behalf.<br><br>
+            <em>Try asking:</em><br>
+            • "What's pending on Petersen?"<br>
+            • "What deadlines do we have this week?"<br>
+            • "What has Bloodhound flagged on First Amendment issues?"<br>
+            • "Log that I filed the brief in Smith today."
+          </div>
         </div>
       </div>
     </div>
 
-    <!-- Bloodhound message history -->
+    <!-- Bloodhound messages -->
     <div class="chat-messages" id="bloodhound-messages">
       <div class="message">
         <div class="message-avatar bloodhound">B</div>
-        <div class="message-bubble">
-          <strong>Bloodhound online.</strong> I track the legal landscape — cases, doctrines, and movement organizations relevant to KLG's practice.<br><br>
-          <em>Try asking:</em><br>
-          • "What's on the Watch List right now?"<br>
-          • "What has been flagged on First Amendment issues?"<br>
-          • "Show me Tier 1 cases."
+        <div class="message-content">
+          <div class="message-bubble">
+            <strong>Bloodhound online.</strong> I track the external legal landscape — cases, doctrines, and movement organizations relevant to KLG's appellate practice.<br><br>
+            <em>Try asking:</em><br>
+            • "What's on the Watch List right now?"<br>
+            • "What has been flagged on First Amendment issues?"<br>
+            • "Show me Tier 1 cases."<br>
+            • "Run a new feed scan."
+          </div>
         </div>
       </div>
     </div>
@@ -118,56 +224,57 @@
       <div class="chat-input-row">
         <textarea
           id="chat-input"
-          placeholder="Ask Alfred... (Enter to send, Shift+Enter for new line)"
+          placeholder="Ask Alfred… (Enter to send, Shift+Enter for new line)"
           rows="1"
           onkeydown="handleInputKeydown(event)"
           oninput="autoResizeTextarea(this)"
         ></textarea>
-        <button class="send-btn" id="send-btn" onclick="sendMessage()">Send</button>
+        <button class="send-btn" id="send-btn" onclick="sendMessage()">Send ↵</button>
       </div>
-      <div class="input-hint" id="input-hint">
-        Alfred is ready · Notion connected
-      </div>
+      <div class="input-hint" id="input-hint">Alfred is ready · Notion connected</div>
     </div>
-
   </main>
 
-  <!-- ── RIGHT PANEL: Deadlines + Agent Triggers ────────────────────────── -->
+  <!-- ── Right Panel: Deadlines + Agents ───────────────────────────────── -->
   <aside class="right-panel">
 
-    <!-- Upcoming Deadlines -->
-    <div class="panel-section" style="flex:1;overflow-y:auto;">
+    <!-- Upcoming Deadlines — high contrast -->
+    <div class="panel-section scrollable" id="deadlines-section">
       <h3>Upcoming Deadlines (7 days)</h3>
       <div id="deadlines-list">
-        <div style="font-size:12px;color:var(--text-muted);">Loading...</div>
+        <div class="loading-pulse" style="width:100%;"></div>
+        <div class="loading-pulse" style="width:80%;"></div>
       </div>
     </div>
 
-    <!-- Agent Triggers (manual runs) -->
+    <!-- Run Agents -->
     <div class="panel-section">
       <h3>Run Agents</h3>
+      <button class="agent-trigger-btn" id="bloodhound-scan-btn" onclick="triggerBloodhoundScan()">
+        🐕 Bloodhound Feed Scan
+      </button>
       <button class="agent-trigger-btn" onclick="triggerDeadlineWatch()">
-        📋 Run Deadline Watch
+        📋 Deadline Watch
       </button>
-      <button class="agent-trigger-btn" onclick="askAlfred('Alfred, what deadlines do we have this week?')">
-        📅 Weekly Agenda (ask Alfred)
+      <button class="agent-trigger-btn" onclick="askAlfred('Alfred, what deadlines do we have this week and what should we prioritize?')">
+        📅 Weekly Agenda
       </button>
-      <button class="agent-trigger-btn" onclick="askAlfred('What is Bloodhound tracking right now? Give me the full Watch List.')">
+      <button class="agent-trigger-btn" onclick="askAlfred('What is Bloodhound currently tracking? Give me a summary of the Watch List by tier.')">
         🔍 Bloodhound Status
       </button>
     </div>
 
-    <!-- Quick Actions -->
+    <!-- Quick Ask -->
     <div class="panel-section">
       <h3>Quick Ask</h3>
-      <button class="agent-trigger-btn" onclick="askAlfred('What are the highest-priority matters right now?')">
-        What needs attention today?
+      <button class="agent-trigger-btn" onclick="askAlfred('What are the highest-priority matters right now and what needs immediate attention?')">
+        ⚡ What needs attention today?
       </button>
-      <button class="agent-trigger-btn" onclick="askAlfred('What did Bloodhound flag this week?')">
-        Bloodhound this week
+      <button class="agent-trigger-btn" onclick="askAlfred('What did Bloodhound flag this week? Summarize by issue area.')">
+        📡 Bloodhound this week
       </button>
       <button class="agent-trigger-btn" onclick="window.open('/docs', '_blank')">
-        API Docs ↗
+        📖 API Docs ↗
       </button>
     </div>
 
@@ -175,185 +282,713 @@
 </div>
 
 <!-- ════════════════════════════════════════════════════════════════════════
+     WORKSPACE 2 — SKILLS NAVIGATOR
+════════════════════════════════════════════════════════════════════════ -->
+<div class="workspace" id="workspace-skills">
+  <div class="skills-layout">
+
+    <!-- Skills Main -->
+    <div class="skills-main">
+
+      <!-- Category Filter Bar -->
+      <div class="skills-filter-bar" id="skills-filter-bar">
+        <button class="filter-tab active" data-category="ALL" onclick="filterSkills('ALL')">All</button>
+        <button class="filter-tab" data-category="INTAKE"    onclick="filterSkills('INTAKE')">Intake</button>
+        <button class="filter-tab" data-category="RESEARCH"  onclick="filterSkills('RESEARCH')">Research</button>
+        <button class="filter-tab" data-category="DRAFTING"  onclick="filterSkills('DRAFTING')">Drafting</button>
+        <button class="filter-tab" data-category="QA"        onclick="filterSkills('QA')">QA</button>
+        <button class="filter-tab" data-category="ARGUMENT"  onclick="filterSkills('ARGUMENT')">Argument</button>
+        <button class="filter-tab" data-category="OPS"       onclick="filterSkills('OPS')">Ops</button>
+      </div>
+
+      <!-- Skills Grid -->
+      <div class="skills-grid" id="skills-grid"></div>
+    </div>
+
+    <!-- Skill Detail Panel -->
+    <div class="skill-detail-panel">
+      <div class="skill-detail-placeholder" id="skill-detail-placeholder">
+        <div class="skill-detail-placeholder-icon">⚖️</div>
+        <p>Select a skill to view its workflow, checklist, and launch prompt.</p>
+      </div>
+      <div class="skill-detail-content" id="skill-detail-content"></div>
+      <div class="skill-detail-footer" id="skill-detail-footer" style="display:none;">
+        <button class="launch-skill-btn" id="launch-skill-btn" onclick="launchSelectedSkill()">
+          ⚡ Launch Skill in Alfred
+        </button>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════════════════════
+     WORKSPACE 3 — CASE FILE
+════════════════════════════════════════════════════════════════════════ -->
+<div class="workspace" id="workspace-casefile">
+  <div class="casefile-layout">
+
+    <!-- Left: Matter List -->
+    <aside class="casefile-sidebar">
+      <div class="sidebar-header">
+        <h2>Case Projects</h2>
+        <button class="sidebar-refresh-btn" onclick="loadCaseList()" title="Refresh">↺</button>
+      </div>
+      <div class="casefile-matter-list" id="casefile-matter-list">
+        <div class="loading-pulse" style="width:85%;margin:12px 8px 0;"></div>
+        <div class="loading-pulse" style="width:70%;margin:4px 8px;"></div>
+        <div class="loading-pulse" style="width:90%;margin:4px 8px;"></div>
+      </div>
+    </aside>
+
+    <!-- Main: Case Detail -->
+    <main class="casefile-main" id="casefile-main">
+
+      <!-- Placeholder shown before a matter is selected -->
+      <div class="casefile-placeholder" id="casefile-placeholder">
+        <div class="casefile-placeholder-icon">⚖️</div>
+        <p>Select a case from the left to view its full file — Notion details, Slack activity, and shared documents.</p>
+      </div>
+
+      <!-- Case detail content (hidden until a case is loaded) -->
+      <div class="casefile-content" id="casefile-content" style="display:none;">
+
+        <!-- Case Header -->
+        <div class="case-header" id="case-header"></div>
+
+        <!-- Two-column body -->
+        <div class="casefile-body">
+
+          <!-- Left column: Notion details + Summary -->
+          <div class="casefile-col">
+            <div class="case-section" id="case-notion-section">
+              <div class="case-section-title">Matter Details</div>
+              <div id="case-properties"></div>
+              <div class="case-section-title" style="margin-top:20px;">Summary</div>
+              <div id="case-summary" class="case-summary-text"></div>
+              <div class="case-section-title" style="margin-top:20px;">Page Notes</div>
+              <div id="case-page-content" class="case-page-content"></div>
+            </div>
+          </div>
+
+          <!-- Right column: Slack activity -->
+          <div class="casefile-col">
+
+            <!-- Images gallery -->
+            <div class="case-section" id="case-images-section" style="display:none;">
+              <div class="case-section-title">Shared Documents &amp; Images</div>
+              <div class="case-images-grid" id="case-images-grid"></div>
+            </div>
+
+            <!-- Slack messages -->
+            <div class="case-section">
+              <div class="case-section-title" id="case-slack-channel-label">Slack Activity</div>
+              <div id="case-slack-messages" class="case-slack-feed"></div>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- Footer: Ask Alfred -->
+        <div class="casefile-footer">
+          <button class="launch-skill-btn" id="case-ask-alfred-btn" onclick="askAlfredAboutCase()">
+            💬 Ask Alfred About This Matter
+          </button>
+        </div>
+
+      </div>
+
+      <!-- Loading state -->
+      <div class="casefile-loading" id="casefile-loading" style="display:none;">
+        <div class="typing-indicator" style="justify-content:center;">
+          <div class="typing-dot"></div>
+          <div class="typing-dot"></div>
+          <div class="typing-dot"></div>
+        </div>
+        <p style="margin-top:12px;font-size:12px;color:var(--text-muted);">Loading case file…</p>
+      </div>
+
+    </main>
+  </div>
+</div>
+
+<!-- Image lightbox -->
+<div class="modal-overlay" id="image-lightbox" onclick="closeLightbox()" style="cursor:zoom-out;">
+  <div style="max-width:90vw;max-height:90vh;display:flex;align-items:center;justify-content:center;" onclick="event.stopPropagation()">
+    <img id="lightbox-img" src="" style="max-width:90vw;max-height:85vh;border-radius:8px;box-shadow:0 24px 64px rgba(0,0,0,0.8);" />
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════════════════════
      JAVASCRIPT
 ════════════════════════════════════════════════════════════════════════ -->
 <script>
-  /*
-   * App state
-   * currentAgent: which agent is selected ("alfred" or "bloodhound")
-   * currentUser:  the team member's name (hardcoded for v1; auth in v2)
-   * isLoading:    whether Alfred is currently processing a message
-   */
-  let currentAgent = 'alfred';
-  let currentUser = 'Team';
-  let isLoading = false;
 
-  // ── Agent Selection ───────────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════════
+// APP STATE
+// ═══════════════════════════════════════════════════════════════════════════
 
-  function selectAgent(agent) {
-    currentAgent = agent;
-    const isBloodhound = agent === 'bloodhound';
+let currentAgent    = 'alfred';
+let isLoading       = false;
+let activeWorkspace = 'chat';
 
-    // Toggle button active state
-    document.querySelectorAll('.agent-btn').forEach(btn => {
-      btn.classList.toggle('active', btn.dataset.agent === agent);
-    });
+// ═══════════════════════════════════════════════════════════════════════════
+// USER IDENTITY — localStorage-backed, zero friction
+// ═══════════════════════════════════════════════════════════════════════════
 
-    // Switch chat panel theme
-    document.querySelector('.chat-panel').classList.toggle('bloodhound', isBloodhound);
+const KLG_USERS = [
+  { name: 'Tim',     role: 'Managing Attorney' },
+  { name: 'Edwyn',   role: 'Systems Partner'   },
+  { name: 'William', role: 'Research'          },
+  { name: 'Brittney',role: 'Paralegal'         },
+  { name: 'Ted',     role: 'Associate'         },
+  { name: 'Stu',     role: 'Admin'             },
+  { name: 'Richard', role: 'Of Counsel'        },
+];
 
-    // Show the correct message history
-    document.getElementById('alfred-messages').style.display = isBloodhound ? 'none' : 'flex';
-    document.getElementById('bloodhound-messages').style.display = isBloodhound ? 'flex' : 'none';
+function getUser() {
+  return localStorage.getItem('klg_user') || 'Team';
+}
 
-    // Update input placeholder and hint
-    const input = document.getElementById('chat-input');
-    const hint = document.getElementById('input-hint');
-    if (isBloodhound) {
-      input.placeholder = 'Ask Bloodhound about a case, doctrine, or issue...';
-      hint.textContent = 'Bloodhound is ready · Watch List connected';
+// ── Auth helpers ─────────────────────────────────────────────────────────────
+
+function getPassword() {
+  return localStorage.getItem('klg_password') || '';
+}
+
+function getAuthHeaders(extra) {
+  const h = Object.assign({'Content-Type': 'application/json'}, extra || {});
+  const pwd = getPassword();
+  if (pwd) h['Authorization'] = 'Basic ' + btoa('klg:' + pwd);
+  return h;
+}
+
+async function apiFetch(url, opts) {
+  opts = opts || {};
+  opts.headers = Object.assign(getAuthHeaders(), opts.headers || {});
+  const r = await fetch(url, opts);
+  if (r.status === 401) {
+    // Password wrong or expired — clear it and prompt again
+    localStorage.removeItem('klg_password');
+    showUserModal();
+    throw new Error('Session expired — please re-enter your password.');
+  }
+  return r;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
+function pickUser(name) {
+  localStorage.setItem('klg_user', name);
+  updateHeaderUser(name);
+  // If password not yet stored, reveal the password step instead of closing
+  if (!getPassword()) {
+    document.getElementById('name-grid').style.opacity = '0.4';
+    document.getElementById('name-grid').style.pointerEvents = 'none';
+    document.getElementById('password-step').style.display = 'block';
+    setTimeout(() => document.getElementById('password-input').focus(), 50);
+  } else {
+    hideUserModal();
+  }
+}
+
+async function confirmPassword() {
+  const input = document.getElementById('password-input');
+  const pwd   = input.value.trim();
+  if (!pwd) return;
+
+  // Validate against backend — try a lightweight call
+  const testHeaders = {'Content-Type': 'application/json',
+                       'Authorization': 'Basic ' + btoa('klg:' + pwd)};
+  try {
+    const r = await fetch('/health', {headers: testHeaders});
+    if (r.ok || r.status !== 401) {
+      // Accept — /health is exempt from auth so any response here means
+      // the server is up; the real auth check is on the next API call.
+      // Store and close.
+      localStorage.setItem('klg_password', pwd);
+      document.getElementById('password-error').style.display = 'none';
+      document.getElementById('name-grid').style.opacity = '';
+      document.getElementById('name-grid').style.pointerEvents = '';
+      document.getElementById('password-step').style.display = 'none';
+      input.value = '';
+      hideUserModal();
     } else {
-      input.placeholder = 'Ask Alfred... (Enter to send, Shift+Enter for new line)';
-      hint.textContent = 'Alfred is ready · Notion connected';
+      document.getElementById('password-error').style.display = 'block';
+      input.select();
     }
+  } catch(e) {
+    // Network error — store anyway (offline scenario)
+    localStorage.setItem('klg_password', pwd);
+    hideUserModal();
   }
+}
 
-  // ── Sending Messages ─────────────────────────────────────────────────────
+function updateHeaderUser(name) {
+  const avatar = document.getElementById('header-user-avatar');
+  const label  = document.getElementById('header-user-name');
+  if (avatar) avatar.textContent = name ? name[0].toUpperCase() : '?';
+  if (label)  label.textContent  = name || 'Select user';
+}
 
-  function handleInputKeydown(event) {
-    // Enter without Shift = send message; Enter + Shift = new line
-    if (event.key === 'Enter' && !event.shiftKey) {
-      event.preventDefault();
-      sendMessage();
-    }
+function showUserModal() {
+  // If user name is already known but password is missing, jump straight to password step
+  if (localStorage.getItem('klg_user') && !getPassword()) {
+    document.getElementById('name-grid').style.opacity = '0.4';
+    document.getElementById('name-grid').style.pointerEvents = 'none';
+    document.getElementById('password-step').style.display = 'block';
+    setTimeout(() => {
+      const inp = document.getElementById('password-input');
+      if (inp) inp.focus();
+    }, 100);
+  } else {
+    document.getElementById('name-grid').style.opacity = '';
+    document.getElementById('name-grid').style.pointerEvents = '';
+    document.getElementById('password-step').style.display = 'none';
   }
+  document.getElementById('user-modal').classList.add('visible');
+}
 
-  function autoResizeTextarea(el) {
-    // Grow the textarea as the user types, up to the CSS max-height
-    el.style.height = 'auto';
-    el.style.height = Math.min(el.scrollHeight, 120) + 'px';
+function hideUserModal() {
+  document.getElementById('user-modal').classList.remove('visible');
+}
+
+// Close modal on overlay click (but not on the card itself)
+document.addEventListener('DOMContentLoaded', () => {
+  const overlay = document.getElementById('user-modal');
+  if (overlay) {
+    overlay.addEventListener('click', e => {
+      if (e.target === overlay) hideUserModal();
+    });
   }
+});
+let selectedSkill  = null;
+let activeCategory = 'ALL';
 
-  async function sendMessage() {
-    const input = document.getElementById('chat-input');
-    const message = input.value.trim();
-    if (!message || isLoading) return;
+// ═══════════════════════════════════════════════════════════════════════════
+// SKILLS REGISTRY — KLG Skill Library
+// ═══════════════════════════════════════════════════════════════════════════
 
-    input.value = '';
-    input.style.height = 'auto';
-    appendMessage('user', message, currentUser);
+const KLG_SKILLS = [
+  {
+    id: 'case-research',
+    name: 'Case Research',
+    category: 'RESEARCH',
+    icon: '🔬',
+    mode: 'research',
+    time: '45–90 min',
+    owner: 'William / Edwyn',
+    desc: 'Deep appellate case research — find binding authority, circuit splits, and analogous holdings.',
+    checklist: [
+      'Define the precise legal issue and jurisdiction scope',
+      'Search Westlaw / Lexis for primary binding authority',
+      'Identify circuit splits or intra-circuit conflicts',
+      'Map treatment history (cited, distinguished, overruled)',
+      'Draft a 1-page research memo summarizing findings',
+    ],
+    prompt: 'Alfred, I need to conduct appellate case research. Let\'s start with a structured workflow. What is the legal issue and jurisdiction we are researching?',
+  },
+  {
+    id: 'brief-elevation',
+    name: 'Brief Elevation',
+    category: 'DRAFTING',
+    icon: '✍️',
+    mode: 'drafting',
+    time: '2–4 hours',
+    owner: 'Tim / Edwyn',
+    desc: 'Elevate a draft brief to KLG standard — sharpen the theory, improve structure, amplify persuasion.',
+    checklist: [
+      'Review the statement of facts for narrative coherence',
+      'Confirm the standard of review is stated and applied',
+      'Sharpen the issue presented to a single compelling sentence',
+      'Check that each argument flows from the theory of the appeal',
+      'Verify all citations are pinpoint and Bluebook-compliant',
+      'Run final readability and persuasion audit',
+    ],
+    prompt: 'Alfred, I\'d like to run a brief elevation workflow. Please walk me through the KLG brief elevation checklist and help me strengthen the theory and structure of the draft.',
+  },
+  {
+    id: 'authority-map',
+    name: 'Authority Map',
+    category: 'RESEARCH',
+    icon: '🗺️',
+    mode: 'research',
+    time: '30–60 min',
+    owner: 'William',
+    desc: 'Build a hierarchical authority map from SCOTUS → 9th Cir. → Cal. S. Ct. for a specific doctrine.',
+    checklist: [
+      'Identify the governing doctrine (e.g., Garcetti, Pickering, Penn Central)',
+      'Map all SCOTUS decisions on the doctrine in chronological order',
+      'Map all 9th Circuit and Cal. Supreme Court interpretations',
+      'Flag any unresolved tensions or open questions',
+      'Export as a structured outline ready for brief citation',
+    ],
+    prompt: 'Alfred, let\'s build an authority map for a specific constitutional doctrine. What doctrine or legal principle should we map?',
+  },
+  {
+    id: 'issue-framing',
+    name: 'Issue Framing',
+    category: 'DRAFTING',
+    icon: '🎯',
+    mode: 'drafting',
+    time: '30 min',
+    owner: 'Tim',
+    desc: 'Frame the issue presented at the optimal level of specificity for maximum persuasive impact.',
+    checklist: [
+      'Draft 3 versions of the issue: narrow, mid, and broad scope',
+      'Test each version against the facts that favor you',
+      'Ensure the framing implies the answer you want',
+      'Check alignment with the standard of review argument',
+      'Select the version that best primes the panel',
+    ],
+    prompt: 'Alfred, I need help framing the issue presented for a brief. Let\'s draft and refine multiple versions to find the most persuasive framing. What is the case and the core legal question?',
+  },
+  {
+    id: 'standard-of-review',
+    name: 'Standard of Review',
+    category: 'ARGUMENT',
+    icon: '⚖️',
+    mode: 'analysis',
+    time: '20–40 min',
+    owner: 'Edwyn',
+    desc: 'Identify and argue the applicable standard of review — the litigation moat in every appeal.',
+    checklist: [
+      'Identify the trial court ruling type (fact-finding vs. legal conclusion vs. mixed)',
+      'Research the precise standard in the 9th Circuit or Cal. Ct. App.',
+      'Draft the standard of review statement',
+      'Identify favorable preservation issues that affect the standard',
+      'Identify any invited-error or forfeiture arguments opponent may raise',
+    ],
+    prompt: 'Alfred, let\'s work through the standard of review for an appellate matter. What is the ruling being challenged and what court are we in?',
+  },
+  {
+    id: 'record-navigator',
+    name: 'Record Navigator',
+    category: 'INTAKE',
+    icon: '📂',
+    mode: 'research',
+    time: '1–2 hours',
+    owner: 'Edwyn',
+    desc: 'Map the trial record to locate key testimony, rulings, objections, and preserved issues.',
+    checklist: [
+      'Index all key trial court hearings and transcripts',
+      'Locate each ruling that will be challenged on appeal',
+      'Verify timely objection and preservation for each issue',
+      'Flag any potential harmless error or prejudice arguments',
+      'Summarize record facts that support the appellant\'s narrative',
+    ],
+    prompt: 'Alfred, I need to navigate the trial record and identify preserved appellate issues. Let\'s start by inventorying what\'s in the record. What is the case?',
+  },
+  {
+    id: 'oral-argument-prep',
+    name: 'Oral Argument Prep',
+    category: 'ARGUMENT',
+    icon: '🎤',
+    mode: 'analysis',
+    time: '2–3 hours',
+    owner: 'Tim',
+    desc: 'Prepare a complete oral argument outline with hot-bench Q&A and fallback positions.',
+    checklist: [
+      'Draft the 60-second opening statement (thesis + three pillars)',
+      'List the 10 hardest questions the panel is likely to ask',
+      'Draft concise, confident answers for each hard question',
+      'Identify one absolute concession to offer if pressed',
+      'Confirm record citations for key factual claims',
+      'Run a moot court session with prepared challengers',
+    ],
+    prompt: 'Alfred, let\'s prepare an oral argument for an upcoming hearing. What is the case, the court, and the date? I\'d like to build a complete prep package including hard-question Q&A.',
+  },
+  {
+    id: 'matter-intake',
+    name: 'New Matter Intake',
+    category: 'INTAKE',
+    icon: '📋',
+    mode: 'ops',
+    time: '30 min',
+    owner: 'Brittney / Edwyn',
+    desc: 'Run the KLG new matter intake protocol — conflicts, scope, Notion setup, and team assignment.',
+    checklist: [
+      'Run conflicts check against current and former matter list',
+      'Define scope of representation and key jurisdictional issues',
+      'Create matter page in Notion Projects DB with correct fields',
+      'Assign lead attorney and supporting team members',
+      'Set initial deadlines and calendar all critical dates',
+      'Draft engagement letter outline for review',
+    ],
+    prompt: 'Alfred, I need to run a new matter intake for a prospective client. Let\'s start the KLG intake protocol. What are the parties and the nature of the matter?',
+  },
+  {
+    id: 'amicus-assessment',
+    name: 'Amicus Assessment',
+    category: 'RESEARCH',
+    icon: '📝',
+    mode: 'research',
+    time: '45 min',
+    owner: 'Tim / Bloodhound',
+    desc: 'Evaluate whether a case warrants a KLG amicus brief and draft the scope and theory.',
+    checklist: [
+      'Confirm the case posture and which court the amicus would be filed in',
+      'Assess the legal question\'s importance to KLG\'s practice areas',
+      'Identify who else is likely to file amicus (coalition strategy)',
+      'Define KLG\'s unique scholarly or practice angle',
+      'Draft the proposed question or argument section titles',
+      'Estimate briefing timeline and resource commitment',
+    ],
+    prompt: 'Alfred, I want to assess whether a case is worth a KLG amicus brief. Let\'s run the amicus assessment workflow. What is the case and the legal issue?',
+  },
+  {
+    id: 'hygiene-audit',
+    name: 'Matter Hygiene Audit',
+    category: 'OPS',
+    icon: '🔧',
+    mode: 'ops',
+    time: '15 min',
+    owner: 'Edwyn / Alfred',
+    desc: 'Run Alfred\'s weekly hygiene scan — surface stale matters, missing dates, and data gaps.',
+    checklist: [
+      'Check all active matters for missing Target Date',
+      'Flag any matter not edited in 14+ days',
+      'Identify any matter with "Blocked" status',
+      'Check that all active matters have a Priority set',
+      'Summarize findings and post to Slack',
+    ],
+    prompt: 'Alfred, please run a full matter hygiene audit on all active matters in Notion. Flag any issues — missing dates, stale pages, blocked matters, or missing priorities.',
+  },
+  {
+    id: 'calp-episode-prep',
+    name: 'CALP Episode Prep',
+    category: 'OPS',
+    icon: '🎙️',
+    mode: 'ops',
+    time: '1 hour',
+    owner: 'Tim',
+    desc: 'Prepare a California Appellate Law Podcast episode — guest research, questions, and show notes.',
+    checklist: [
+      'Research the guest\'s recent cases, publications, and practice area',
+      'Identify 3 anchor cases or doctrines for the episode',
+      'Draft 10 interview questions (opener + deep dives + closer)',
+      'Research opposing viewpoints and prepare challenge questions',
+      'Draft episode description and social media copy',
+    ],
+    prompt: 'Alfred, let\'s prepare a CALP podcast episode. Who is the guest and what is the episode topic or the case we\'re discussing?',
+  },
+  {
+    id: 'bloodhound-triage',
+    name: 'Bloodhound Triage',
+    category: 'RESEARCH',
+    icon: '🐕',
+    mode: 'research',
+    time: '20 min',
+    owner: 'Bloodhound / Edwyn',
+    desc: 'Review Bloodhound\'s Watch List and escalate Tier 1 cases to active firm review.',
+    checklist: [
+      'Pull the full Bloodhound Watch List from Notion',
+      'Review all Tier 1 cases for immediate relevance',
+      'Identify any case ready for amicus consideration',
+      'Flag any case with imminent deadline (cert. petition, briefing)',
+      'Update tiers and notes in Notion',
+    ],
+    prompt: 'Alfred, pull up the Bloodhound Watch List and let\'s do a triage review. Show me all Tier 1 cases first, then Tier 2. For each, I\'ll decide if we need immediate action.',
+  },
+];
 
-    await callAlfred(message);
+// ═══════════════════════════════════════════════════════════════════════════
+// WORKSPACE SWITCHING
+// ═══════════════════════════════════════════════════════════════════════════
+
+function switchWorkspace(name) {
+  activeWorkspace = name;
+
+  // Toggle workspace divs
+  document.querySelectorAll('.workspace').forEach(ws => ws.classList.remove('active'));
+  document.getElementById(`workspace-${name}`).classList.add('active');
+
+  // Toggle header tabs
+  document.querySelectorAll('.workspace-tab').forEach(t => t.classList.remove('active'));
+  document.getElementById(`tab-${name}`).classList.add('active');
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AGENT SELECTION
+// ═══════════════════════════════════════════════════════════════════════════
+
+function selectAgent(agent) {
+  currentAgent = agent;
+  const isBH = agent === 'bloodhound';
+
+  document.querySelectorAll('.agent-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.agent === agent);
+  });
+
+  const panel = document.getElementById('chat-panel');
+  panel.classList.toggle('bloodhound', isBH);
+
+  document.getElementById('alfred-messages').classList.toggle('active', !isBH);
+  document.getElementById('bloodhound-messages').classList.toggle('active', isBH);
+
+  const input = document.getElementById('chat-input');
+  const hint  = document.getElementById('input-hint');
+  if (isBH) {
+    input.placeholder = 'Ask Bloodhound about a case, doctrine, or watch-list item…';
+    hint.textContent = 'Bloodhound is ready · Watch List connected';
+  } else {
+    input.placeholder = 'Ask Alfred… (Enter to send, Shift+Enter for new line)';
+    hint.textContent = 'Alfred is ready · Notion connected';
   }
+}
 
-  // Convenience function for the quick-action buttons — inject a message
-  // and send it as if the user typed it.
-  function askAlfred(message) {
-    const input = document.getElementById('chat-input');
-    input.value = message;
+// ═══════════════════════════════════════════════════════════════════════════
+// CHAT — SEND MESSAGE
+// ═══════════════════════════════════════════════════════════════════════════
+
+function handleInputKeydown(event) {
+  if (event.key === 'Enter' && !event.shiftKey) {
+    event.preventDefault();
     sendMessage();
   }
+}
 
-  // ── Alfred API Call ───────────────────────────────────────────────────────
+function autoResizeTextarea(el) {
+  el.style.height = 'auto';
+  el.style.height = Math.min(el.scrollHeight, 120) + 'px';
+}
 
-  async function callAlfred(message) {
-    setLoading(true);
-    const typingId = showTypingIndicator();
+async function sendMessage() {
+  const input = document.getElementById('chat-input');
+  const message = input.value.trim();
+  if (!message || isLoading) return;
 
-    try {
-      const response = await fetch('/alfred/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message, user: currentUser }),
-      });
+  input.value = '';
+  input.style.height = 'auto';
+  appendMessage('user', message, getUser());
+  await callAgent(message);
+}
 
-      removeTypingIndicator(typingId);
+function askAlfred(message) {
+  // Switch to Chat workspace if needed, select Alfred
+  switchWorkspace('chat');
+  selectAgent('alfred');
+  const input = document.getElementById('chat-input');
+  input.value = message;
+  sendMessage();
+}
 
-      if (!response.ok) {
-        const error = await response.json().catch(() => ({ detail: 'Unknown error' }));
-        appendMessage('alfred', `Error: ${error.detail || response.statusText}`, 'Alfred');
-        return;
-      }
+// ═══════════════════════════════════════════════════════════════════════════
+// CHAT — API CALL
+// ═══════════════════════════════════════════════════════════════════════════
 
-      const data = await response.json();
-      appendMessage('alfred', data.response, 'Alfred', data.tools_used);
+async function callAgent(message) {
+  setLoading(true);
+  const typingId = showTypingIndicator();
+  const model    = document.getElementById('model-select').value;
 
-    } catch (err) {
-      removeTypingIndicator(typingId);
-      appendMessage('alfred',
-        `Could not reach the KLG AI OS backend. Make sure the server is running (uvicorn main:app --reload). Error: ${err.message}`,
-        'Alfred'
-      );
-      setStatusDot(false);
-    } finally {
-      setLoading(false);
+  const endpoint = currentAgent === 'bloodhound' ? '/alfred/chat' : '/alfred/chat';
+
+  try {
+    const response = await apiFetch(endpoint, {
+      method: 'POST',
+      body: JSON.stringify({ message, user: getUser(), model }),
+    });
+
+    removeTypingIndicator(typingId);
+
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({ detail: 'Unknown error' }));
+      appendMessage(currentAgent, `⚠️ Error: ${err.detail || response.statusText}`, getAgentName());
+      return;
     }
-  }
 
-  // ── Message Rendering ─────────────────────────────────────────────────────
+    const data = await response.json();
+    appendMessage(currentAgent, data.response, getAgentName(), data.tools_used);
 
-  function appendMessage(role, text, name, toolsUsed = []) {
-    const containerId = currentAgent === 'bloodhound' ? 'bloodhound-messages' : 'alfred-messages';
-    const container = document.getElementById(containerId);
-
-    const isUser = role === 'user';
-    const initials = name ? name[0].toUpperCase() : '?';
-    const isBloodhound = !isUser && currentAgent === 'bloodhound';
-
-    const formattedText = formatMessageText(text);
-
-    const toolsBadges = toolsUsed.length > 0
-      ? `<div class="tools-used">via: ${toolsUsed.map(t =>
-          `<span>${t.replace(/_/g, ' ')}</span>`).join('')}</div>`
-      : '';
-
-    const messageHTML = `
-      <div class="message ${isUser ? 'user' : ''}">
-        <div class="message-avatar ${isBloodhound ? 'bloodhound' : ''}">${initials}</div>
-        <div class="message-bubble">
-          ${formattedText}
-          ${toolsBadges}
-        </div>
-      </div>
-    `;
-
-    container.insertAdjacentHTML('beforeend', messageHTML);
-    container.scrollTop = container.scrollHeight;
-  }
-
-  function formatMessageText(text) {
-    // Escape HTML to prevent XSS — Alfred outputs plain text, but just in case
-    const escaped = text
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;');
-
-    // Convert markdown-style code blocks ```...``` to <pre>
-    const withCodeBlocks = escaped.replace(
-      /```[\w]*\n?([\s\S]*?)```/g,
-      (_, code) => `<pre>${code.trim()}</pre>`
+  } catch (err) {
+    removeTypingIndicator(typingId);
+    appendMessage(currentAgent,
+      `⚠️ Could not reach the KLG AI OS backend. Make sure the server is running.\n\nError: ${err.message}`,
+      getAgentName()
     );
+    setStatusDot(false);
+  } finally {
+    setLoading(false);
+  }
+}
 
-    // Convert **bold** to <strong>
-    const withBold = withCodeBlocks.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+function getAgentName() {
+  return currentAgent === 'bloodhound' ? 'Bloodhound' : 'Alfred';
+}
 
-    // Convert newlines to <br>
-    return withBold.replace(/\n/g, '<br>');
+// ═══════════════════════════════════════════════════════════════════════════
+// CHAT — MESSAGE RENDERING
+// ═══════════════════════════════════════════════════════════════════════════
+
+function appendMessage(role, text, name, toolsUsed = []) {
+  const isUser      = role === 'user';
+  const isBloodhound = !isUser && currentAgent === 'bloodhound';
+  const containerId = isBloodhound ? 'bloodhound-messages' : 'alfred-messages';
+  const container   = document.getElementById(containerId);
+
+  const initials       = name ? name[0].toUpperCase() : '?';
+  const formattedText  = formatMessageText(text);
+  const avatarClass    = isBloodhound ? 'bloodhound' : '';
+
+  let toolsHTML = '';
+  if (toolsUsed && toolsUsed.length > 0) {
+    const badges = toolsUsed.map(t => `<span>${t.replace(/_/g, ' ')}</span>`).join('');
+    toolsHTML = `<div class="tools-used"><span class="tools-used-label">via </span>${badges}</div>`;
   }
 
-  // ── Typing Indicator ─────────────────────────────────────────────────────
+  const html = `
+    <div class="message ${isUser ? 'user' : ''}">
+      <div class="message-avatar ${avatarClass}">${initials}</div>
+      <div class="message-content">
+        <div class="message-bubble">${formattedText}</div>
+        ${toolsHTML}
+      </div>
+    </div>
+  `;
 
-  let typingCounter = 0;
+  container.insertAdjacentHTML('beforeend', html);
+  container.scrollTop = container.scrollHeight;
+}
 
-  function showTypingIndicator() {
-    const id = 'typing-' + (++typingCounter);
-    const containerId = currentAgent === 'bloodhound' ? 'bloodhound-messages' : 'alfred-messages';
-    const container = document.getElementById(containerId);
-    const isBloodhound = currentAgent === 'bloodhound';
-    const initial = isBloodhound ? 'B' : 'A';
-    container.insertAdjacentHTML('beforeend', `
-      <div class="message" id="${id}">
-        <div class="message-avatar ${isBloodhound ? 'bloodhound' : ''}">${initial}</div>
+function formatMessageText(text) {
+  // Escape HTML
+  const escaped = text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+
+  // Code blocks
+  const withCode = escaped.replace(
+    /```[\w]*\n?([\s\S]*?)```/g,
+    (_, code) => `<pre>${code.trim()}</pre>`
+  );
+
+  // Bold
+  const withBold = withCode.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+
+  // Newlines → <br>
+  return withBold.replace(/\n/g, '<br>');
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// CHAT — TYPING INDICATOR
+// ═══════════════════════════════════════════════════════════════════════════
+
+let typingCounter = 0;
+
+function showTypingIndicator() {
+  const id          = 'typing-' + (++typingCounter);
+  const isBloodhound = currentAgent === 'bloodhound';
+  const containerId = isBloodhound ? 'bloodhound-messages' : 'alfred-messages';
+  const container   = document.getElementById(containerId);
+  const avatarClass = isBloodhound ? 'bloodhound' : '';
+  const initial     = isBloodhound ? 'B' : 'A';
+
+  container.insertAdjacentHTML('beforeend', `
+    <div class="message" id="${id}">
+      <div class="message-avatar ${avatarClass}">${initial}</div>
+      <div class="message-content">
         <div class="message-bubble">
           <div class="typing-indicator">
             <div class="typing-dot"></div>
@@ -362,185 +997,695 @@
           </div>
         </div>
       </div>
-    `);
-    container.scrollTop = container.scrollHeight;
-    return id;
+    </div>
+  `);
+  container.scrollTop = container.scrollHeight;
+  return id;
+}
+
+function removeTypingIndicator(id) {
+  document.getElementById(id)?.remove();
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// CHAT — LOADING STATE
+// ═══════════════════════════════════════════════════════════════════════════
+
+function setLoading(loading) {
+  isLoading = loading;
+  const btn  = document.getElementById('send-btn');
+  const hint = document.getElementById('input-hint');
+  btn.disabled = loading;
+  if (loading) {
+    hint.textContent = currentAgent === 'bloodhound' ? 'Bloodhound is scanning…' : 'Alfred is thinking…';
+  } else {
+    selectAgent(currentAgent); // restore idle hint
   }
+}
 
-  function removeTypingIndicator(id) {
-    document.getElementById(id)?.remove();
+// ═══════════════════════════════════════════════════════════════════════════
+// MATTERS SIDEBAR
+// ═══════════════════════════════════════════════════════════════════════════
+
+async function loadMatters() {
+  const list    = document.getElementById('matter-list');
+  const counter = document.getElementById('sidebar-count');
+  list.innerHTML = `
+    <div class="loading-pulse" style="width:85%;margin:12px 8px 0;"></div>
+    <div class="loading-pulse" style="width:70%;margin:4px 8px;"></div>
+    <div class="loading-pulse" style="width:90%;margin:4px 8px;"></div>
+  `;
+
+  try {
+    // Default to Case Projects only — the actual client legal matters.
+    // The full database also contains Case Support, Operations, and Think Tank
+    // entries which are not displayed here to avoid confusion.
+    const response = await apiFetch('/alfred/matters?category=Case+Project');
+    if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
+    const data = await response.json();
+
+    if (counter) counter.textContent = data.count ? `${data.count} active` : '';
+
+    if (!data.matters || data.matters.length === 0) {
+      list.innerHTML = '<div class="empty-state">No active case matters found.<br>Check your Notion database ID in .env</div>';
+      return;
+    }
+
+    list.innerHTML = data.matters.map(matter => {
+      const name     = matter['Project name'] || 'Untitled';
+      const status   = matter['Status'] || '';
+      const priority = matter['Priority'] || '';
+      const stage    = matter['Case Stage'] || '';
+      const deadline = matter['date:Target Date:start'] || matter['Target Date'] || '';
+      const safeName = name.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+
+      const priorityBadge = priority
+        ? `<span class="priority-badge ${priority}">${priority}</span>`
+        : '';
+      const stageBadge = stage && stage !== 'Active'
+        ? `<span class="status-badge" style="font-size:9px;">${stage}</span>`
+        : '';
+      const deadlineBadge = deadline ? buildDeadlineBadge(deadline) : '';
+
+      return `
+        <div class="matter-card" onclick="askAlfred('Alfred, what is the current status and what is pending on ${safeName}?')" title="${name}">
+          <div class="matter-name">${name}</div>
+          <div class="matter-meta">
+            ${priorityBadge}
+            ${status ? `<span class="status-badge">${status}</span>` : ''}
+            ${stageBadge}
+            ${deadlineBadge}
+          </div>
+        </div>
+      `;
+    }).join('');
+
+  } catch (err) {
+    list.innerHTML = `<div class="empty-state" style="color:var(--urgent);">Error loading matters:<br>${err.message}</div>`;
+    setStatusDot(false);
   }
+}
 
-  // ── Loading State ─────────────────────────────────────────────────────────
+function buildDeadlineBadge(dateStr) {
+  const days = daysUntil(dateStr);
+  const cls  = days < 0 ? 'urgent' : days <= 2 ? 'urgent' : days <= 5 ? 'warning' : 'ok';
+  const label = days < 0 ? 'OVERDUE' : days === 0 ? 'TODAY' : `${days}d`;
+  return `<span class="deadline-badge ${cls}">${label}</span>`;
+}
 
-  function setLoading(loading) {
-    isLoading = loading;
-    const btn = document.getElementById('send-btn');
-    const hint = document.getElementById('input-hint');
-    btn.disabled = loading;
-    if (loading) {
-      const label = currentAgent === 'bloodhound' ? 'Bloodhound is scanning...' : 'Alfred is thinking...';
-      hint.textContent = label;
+// ═══════════════════════════════════════════════════════════════════════════
+// DEADLINES PANEL — High contrast
+// ═══════════════════════════════════════════════════════════════════════════
+
+async function loadDeadlines() {
+  const list = document.getElementById('deadlines-list');
+  list.innerHTML = `
+    <div class="loading-pulse" style="width:100%;margin-bottom:6px;"></div>
+    <div class="loading-pulse" style="width:80%;"></div>
+  `;
+
+  try {
+    const response = await apiFetch('/alfred/deadlines?days=7');
+    if (!response.ok) throw new Error(`${response.status}`);
+    const data = await response.json();
+
+    if (!data.matters || data.matters.length === 0) {
+      list.innerHTML = '<div class="empty-state">No deadlines in the next 7 days. ✓</div>';
+      return;
+    }
+
+    list.innerHTML = data.matters.map(matter => {
+      const name     = matter['Project name'] || 'Untitled';
+      const deadline = matter['date:Target Date:start'] || matter['Target Date'] || '';
+      const days     = daysUntil(deadline);
+      const safeName = name.replace(/'/g, "\\'");
+
+      let countdownCls, countdownLabel;
+      if (days < 0)      { countdownCls = 'overdue';  countdownLabel = 'OVERDUE'; }
+      else if (days === 0) { countdownCls = 'urgent';  countdownLabel = 'TODAY'; }
+      else if (days <= 2)  { countdownCls = 'urgent';  countdownLabel = `${days}d left`; }
+      else if (days <= 5)  { countdownCls = 'warning'; countdownLabel = `${days}d left`; }
+      else                 { countdownCls = 'ok';      countdownLabel = `${days}d`; }
+
+      const dateDisplay = deadline ? deadline.slice(0, 10) : 'No date';
+
+      return `
+        <div class="deadline-item" onclick="askAlfred('Alfred, what is pending on ${safeName} and what do I need to do before the deadline?')">
+          <div class="dl-name">${name}</div>
+          <div class="dl-meta">
+            <span class="dl-date">${dateDisplay}</span>
+            <span class="dl-countdown ${countdownCls}">${countdownLabel}</span>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+  } catch (err) {
+    list.innerHTML = `<div class="empty-state" style="color:var(--urgent);">Error: ${err.message}</div>`;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AGENT TRIGGERS
+// ═══════════════════════════════════════════════════════════════════════════
+
+async function triggerBloodhoundScan() {
+  const btn = document.getElementById('bloodhound-scan-btn');
+  btn.disabled = true;
+  btn.classList.add('running');
+  btn.textContent = '🐕 Scanning feeds…';
+
+  switchWorkspace('chat');
+  selectAgent('bloodhound');
+  appendMessage('bloodhound',
+    'Running Bloodhound feed scan. Fetching RSS feeds and CourtListener alerts, then triaging each signal with AI. This may take a minute…',
+    'Bloodhound'
+  );
+
+  try {
+    const response = await apiFetch('/bloodhound/scan', { method: 'POST' });
+    const data = await response.json();
+
+    if (!response.ok) {
+      appendMessage('bloodhound', `⚠️ Scan error: ${data.detail || response.statusText}`, 'Bloodhound');
+      return;
+    }
+
+    const { total_fetched = 0, new_signals = 0, added_count = 0, skipped_count = 0, added_cases = [] } = data;
+    let summary = `**Scan complete.**\n\n`
+      + `• Signals fetched: ${total_fetched}\n`
+      + `• New signals evaluated: ${new_signals}\n`
+      + `• Cases added to Watch List: ${added_count}\n`
+      + `• Signals skipped (not relevant): ${skipped_count}`;
+
+    if (added_count > 0) {
+      summary += `\n\n**Newly added cases:**`;
+      added_cases.forEach(c => {
+        const tierIcon = { '1': '🔴', '2': '🟡', '3': '⚪' }[c.tier] || '⚪';
+        summary += `\n\n${tierIcon} **${c.case_name}**`;
+        if (c.court) summary += ` (${c.court})`;
+        summary += ` — Tier ${c.tier}`;
+        if (c.nexus) summary += `\n${c.nexus}`;
+        if (c.notion_url) summary += `\nNotion: ${c.notion_url}`;
+      });
     } else {
-      selectAgent(currentAgent); // restore correct idle hint
+      summary += `\n\nNo new cases to add — Watch List is current.`;
     }
+
+    appendMessage('bloodhound', summary, 'Bloodhound');
+
+  } catch (err) {
+    appendMessage('bloodhound', `⚠️ Scan failed: ${err.message}`, 'Bloodhound');
+  } finally {
+    btn.disabled = false;
+    btn.classList.remove('running');
+    btn.textContent = '🐕 Bloodhound Feed Scan';
+  }
+}
+
+async function triggerDeadlineWatch() {
+  switchWorkspace('chat');
+  selectAgent('alfred');
+  appendMessage('alfred', 'Running the daily deadline-watch agent…', 'Alfred');
+
+  try {
+    const response = await apiFetch('/alfred/agents/deadline-watch', { method: 'POST' });
+    const data = await response.json();
+    if (data.status === 'success') {
+      appendMessage('alfred', `**Deadline watch complete:**\n\n${data.message}`, 'Alfred');
+    } else {
+      appendMessage('alfred', `Agent error: ${JSON.stringify(data)}`, 'Alfred');
+    }
+  } catch (err) {
+    appendMessage('alfred', `⚠️ Could not trigger agent: ${err.message}`, 'Alfred');
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// SKILLS NAVIGATOR
+// ═══════════════════════════════════════════════════════════════════════════
+
+function renderSkillsGrid() {
+  const grid    = document.getElementById('skills-grid');
+  const visible = activeCategory === 'ALL'
+    ? KLG_SKILLS
+    : KLG_SKILLS.filter(s => s.category === activeCategory);
+
+  grid.innerHTML = visible.map(skill => `
+    <div class="skill-card" id="skill-card-${skill.id}" onclick="selectSkill('${skill.id}')">
+      <div class="skill-card-header">
+        <div class="skill-icon">${skill.icon}</div>
+        <span class="skill-category-tag">${skill.category}</span>
+      </div>
+      <div class="skill-name">${skill.name}</div>
+      <div class="skill-desc">${skill.desc}</div>
+      <div class="skill-meta">
+        <span class="skill-time">⏱ ${skill.time}</span>
+        <span class="skill-mode-badge ${skill.mode}">${skill.mode}</span>
+      </div>
+    </div>
+  `).join('');
+}
+
+function filterSkills(category) {
+  activeCategory = category;
+
+  document.querySelectorAll('.filter-tab').forEach(t => {
+    t.classList.toggle('active', t.dataset.category === category);
+  });
+
+  // Deselect current skill if it's no longer visible
+  if (selectedSkill && category !== 'ALL' && selectedSkill.category !== category) {
+    selectedSkill = null;
+    document.getElementById('skill-detail-placeholder').style.display = 'flex';
+    document.getElementById('skill-detail-content').classList.remove('visible');
+    document.getElementById('skill-detail-footer').style.display = 'none';
   }
 
-  // ── Matters Sidebar ───────────────────────────────────────────────────────
+  renderSkillsGrid();
+}
 
-  async function loadMatters() {
-    const list = document.getElementById('matter-list');
-    list.innerHTML = '<div style="padding:16px;font-size:12px;color:var(--text-muted);">Loading...</div>';
+function selectSkill(id) {
+  selectedSkill = KLG_SKILLS.find(s => s.id === id);
+  if (!selectedSkill) return;
 
-    try {
-      const response = await fetch('/alfred/matters');
-      if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
-      const data = await response.json();
+  // Highlight selected card
+  document.querySelectorAll('.skill-card').forEach(c => c.classList.remove('selected'));
+  const card = document.getElementById(`skill-card-${id}`);
+  if (card) card.classList.add('selected');
 
-      if (!data.matters || data.matters.length === 0) {
-        list.innerHTML = '<div style="padding:16px;font-size:12px;color:var(--text-muted);">No active matters found.<br>Check your Notion database ID in .env</div>';
-        return;
-      }
+  // Build detail panel
+  const placeholder = document.getElementById('skill-detail-placeholder');
+  const content     = document.getElementById('skill-detail-content');
+  const footer      = document.getElementById('skill-detail-footer');
 
-      list.innerHTML = data.matters.map(matter => {
-        const name = matter['Project name'] || 'Untitled';
-        const status = matter['Status'] || '';
-        const priority = matter['Priority'] || '';
-        const deadline = matter['date:Target Date:start'] || matter['Target Date'] || '';
-        const url = matter['url'] || '#';
+  placeholder.style.display = 'none';
+  content.classList.add('visible');
+  footer.style.display = 'block';
 
-        const deadlineDisplay = deadline ? formatDeadline(deadline) : '';
-        const priorityBadge = priority
-          ? `<span class="priority-badge ${priority}">${priority}</span>`
-          : '';
+  const checklistHTML = selectedSkill.checklist.map(item => `<li>${item}</li>`).join('');
 
-        return `
-          <div class="matter-card" onclick="askAlfred('Alfred, what is the current status and what is pending on ${name.replace(/'/g, "\\'")}?')">
-            <div class="matter-name" title="${name}">${name}</div>
-            <div class="matter-meta">
-              ${priorityBadge}
-              ${status ? `<span>${status}</span>` : ''}
-              ${deadlineDisplay}
-            </div>
+  content.innerHTML = `
+    <div>
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px;">
+        <div class="skill-icon" style="width:44px;height:44px;font-size:20px;">${selectedSkill.icon}</div>
+        <div>
+          <div class="skill-detail-name">${selectedSkill.name}</div>
+          <div class="skill-detail-meta-row">
+            <span class="skill-category-tag">${selectedSkill.category}</span>
+            <span class="skill-mode-badge ${selectedSkill.mode}">${selectedSkill.mode}</span>
+            <span class="skill-time" style="font-size:11px;color:var(--text-muted);">⏱ ${selectedSkill.time}</span>
           </div>
-        `;
-      }).join('');
+        </div>
+      </div>
+      <p style="font-size:12px;color:var(--text-secondary);line-height:1.6;">${selectedSkill.desc}</p>
+    </div>
 
-    } catch (err) {
-      list.innerHTML = `<div style="padding:16px;font-size:12px;color:var(--urgent);">Error loading matters: ${err.message}</div>`;
-      setStatusDot(false);
+    <div>
+      <div class="skill-owner-row">
+        <div class="skill-owner-item">
+          <div class="skill-owner-label">Owner</div>
+          <div class="skill-owner-value">${selectedSkill.owner}</div>
+        </div>
+        <div class="skill-owner-item">
+          <div class="skill-owner-label">Time Est.</div>
+          <div class="skill-owner-value">${selectedSkill.time}</div>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <div class="skill-detail-section-title">Workflow Checklist</div>
+      <ul class="skill-checklist">${checklistHTML}</ul>
+    </div>
+
+    <div>
+      <div class="skill-detail-section-title">Launch Prompt</div>
+      <div style="background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);padding:12px;font-size:11px;color:var(--text-secondary);line-height:1.6;font-family:var(--font-mono);">
+        ${selectedSkill.prompt}
+      </div>
+    </div>
+  `;
+}
+
+function launchSelectedSkill() {
+  if (!selectedSkill) return;
+
+  // Switch to Chat, select Alfred, and send the launch prompt
+  switchWorkspace('chat');
+  selectAgent('alfred');
+
+  const input = document.getElementById('chat-input');
+  input.value = selectedSkill.prompt;
+  sendMessage();
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// UTILITIES
+// ═══════════════════════════════════════════════════════════════════════════
+
+function daysUntil(dateStr) {
+  if (!dateStr) return 999;
+  try {
+    const deadline = new Date(dateStr.slice(0, 10));
+    const today    = new Date();
+    today.setHours(0, 0, 0, 0);
+    return Math.round((deadline - today) / (1000 * 60 * 60 * 24));
+  } catch { return 999; }
+}
+
+function setStatusDot(online) {
+  const dot = document.getElementById('status-dot');
+  dot.classList.toggle('offline', !online);
+  dot.title = online ? 'Backend connected' : 'Backend unreachable';
+}
+
+async function checkHealth() {
+  try {
+    const r = await fetch('/health');
+    setStatusDot(r.ok);
+  } catch {
+    setStatusDot(false);
+  }
+}
+
+// Clock in header
+function updateClock() {
+  const el = document.getElementById('header-clock');
+  if (!el) return;
+  const now = new Date();
+  const time = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', timeZoneName: 'short' });
+  el.textContent = `KLG Internal · ${time}`;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// INITIALIZATION
+// ═══════════════════════════════════════════════════════════════════════════
+
+(async function init() {
+  // Ensure correct initial display
+  document.getElementById('alfred-messages').classList.add('active');
+  document.getElementById('bloodhound-messages').classList.remove('active');
+
+  // Render skills grid
+  renderSkillsGrid();
+
+  // Clock
+  updateClock();
+  setInterval(updateClock, 30000);
+
+  // Restore or prompt for user identity + password
+  const savedUser = localStorage.getItem('klg_user');
+  if (savedUser) {
+    updateHeaderUser(savedUser);
+    // If user is known but password missing (first time after auth was added), ask for it
+    if (!getPassword()) {
+      showUserModal();
     }
+  } else {
+    showUserModal();
   }
 
-  // ── Deadlines Panel ───────────────────────────────────────────────────────
+  // Load data
+  await checkHealth();
+  await Promise.all([loadMatters(), loadDeadlines()]);
+})();
 
-  async function loadDeadlines() {
-    const list = document.getElementById('deadlines-list');
+// Refresh sidebar data every 5 minutes
+setInterval(() => { loadMatters(); loadDeadlines(); }, 5 * 60 * 1000);
 
-    try {
-      const response = await fetch('/alfred/deadlines?days=7');
-      if (!response.ok) throw new Error(`${response.status}`);
-      const data = await response.json();
+// ═══════════════════════════════════════════════════════════════════════════
+// CASE FILE WORKSPACE
+// ═══════════════════════════════════════════════════════════════════════════
 
-      if (!data.matters || data.matters.length === 0) {
-        list.innerHTML = '<div style="font-size:12px;color:var(--text-muted);">No deadlines in the next 7 days.</div>';
-        return;
-      }
+let activeCaseId   = null;
+let activeCaseName = '';
+let caseMatters    = [];
 
-      list.innerHTML = data.matters.map(matter => {
-        const name = matter['Project name'] || 'Untitled';
-        const deadline = matter['date:Target Date:start'] || matter['Target Date'] || '';
-        const daysRemaining = daysUntil(deadline);
-        const urgencyClass = daysRemaining <= 2 ? 'urgent' : daysRemaining <= 5 ? 'warning' : 'ok';
-        const urgencyEmoji = daysRemaining <= 2 ? '🔴' : daysRemaining <= 5 ? '🟡' : '🟢';
-        const daysLabel = daysRemaining === 0 ? 'TODAY'
-          : daysRemaining < 0 ? 'OVERDUE'
-          : `${daysRemaining}d`;
+async function loadCaseList() {
+  const list = document.getElementById('casefile-matter-list');
+  list.innerHTML = `
+    <div class="loading-pulse" style="width:85%;margin:12px 8px 0;"></div>
+    <div class="loading-pulse" style="width:70%;margin:4px 8px;"></div>
+    <div class="loading-pulse" style="width:90%;margin:4px 8px;"></div>
+  `;
+  try {
+    const r    = await apiFetch('/alfred/matters?category=Case+Project');
+    const data = await r.json();
+    caseMatters = data.matters || [];
+    list.innerHTML = caseMatters.map(m => {
+      const name     = m['Project name'] || 'Untitled';
+      const stage    = m['Case Stage']   || '';
+      const priority = m['Priority']     || '';
+      const deadline = m['date:Target Date:start'] || m['Target Date'] || '';
+      const days     = daysUntil(deadline);
+      const urgency  = days < 0 ? 'urgent' : days <= 3 ? 'urgent' : days <= 7 ? 'warning' : 'ok';
+      const stageTag = stage ? `<span class="cf-stage-tag">${stage}</span>` : '';
+      const deadTag  = deadline ? `<span class="deadline-badge ${urgency}" style="font-size:9px;">${days < 0 ? 'OVERDUE' : days === 0 ? 'TODAY' : days + 'd'}</span>` : '';
+      return `
+        <div class="cf-matter-card ${activeCaseId === m.id ? 'selected' : ''}"
+             id="cf-card-${m.id}"
+             onclick="openCase('${m.id}', '${name.replace(/'/g,"\\'")}')"
+             title="${name}">
+          <div class="matter-name">${name}</div>
+          <div class="matter-meta">${stageTag}${deadTag}</div>
+        </div>
+      `;
+    }).join('') || '<div class="empty-state">No active case matters.</div>';
+  } catch(e) {
+    list.innerHTML = `<div class="empty-state" style="color:var(--urgent);">Error: ${e.message}</div>`;
+  }
+}
 
-        return `
-          <div class="deadline-item">
-            <div class="name">${urgencyEmoji} ${name}</div>
-            <div class="days deadline-badge ${urgencyClass}">
-              ${deadline ? deadline.slice(0, 10) : 'No date'} · ${daysLabel}
-            </div>
+async function openCase(pageId, name) {
+  activeCaseId   = pageId;
+  activeCaseName = name;
+
+  // Highlight selected card
+  document.querySelectorAll('.cf-matter-card').forEach(c => c.classList.remove('selected'));
+  const card = document.getElementById(`cf-card-${pageId}`);
+  if (card) card.classList.add('selected');
+
+  // Show loading
+  document.getElementById('casefile-placeholder').style.display = 'none';
+  document.getElementById('casefile-content').style.display     = 'none';
+  document.getElementById('casefile-loading').style.display     = 'flex';
+
+  try {
+    const r    = await apiFetch(`/cases/${pageId}`);
+    const data = await r.json();
+    renderCaseDetail(data);
+  } catch(e) {
+    document.getElementById('casefile-loading').style.display = 'none';
+    document.getElementById('casefile-placeholder').style.display = 'flex';
+    document.getElementById('casefile-placeholder').querySelector('p').textContent =
+      `Error loading case: ${e.message}`;
+  }
+}
+
+function renderCaseDetail(data) {
+  const m    = data.matter || {};
+  const body = data.page_content || '';
+  const slack = data.slack || {};
+
+  // ── Header ──────────────────────────────────────────────────────────────
+  const name      = m['Project name'] || 'Unknown';
+  const stage     = m['Case Stage']   || '';
+  const status    = m['Status']       || '';
+  const priority  = m['Priority']     || '';
+  const assignee  = (m['Assignee'] && m['Assignee'].length) ? m['Assignee'].join(', ') : 'Unassigned';
+  const targetDt  = m['Target Date']  || '';
+  const courtDt   = m['Next Court Deadline'] || '';
+  const courtInfo = m['Next Deadline Info']  || '';
+  const notionUrl = m['url'] || '';
+
+  const priorityColor = priority === 'High' ? 'var(--urgent)' : priority === 'Medium' ? 'var(--warning)' : 'var(--ok)';
+  const stageEl = stage ? `<span class="cf-stage-badge">${stage}</span>` : '';
+  const courtEl = courtDt
+    ? `<div class="cf-deadline-row court"><span class="cf-dl-label">Court deadline</span><span class="cf-dl-val urgent">${courtDt.slice(0,10)} · ${_daysLabel(courtDt)}</span></div>`
+    : '';
+  const targetEl = targetDt
+    ? `<div class="cf-deadline-row"><span class="cf-dl-label">Target date</span><span class="cf-dl-val">${targetDt.slice(0,10)} · ${_daysLabel(targetDt)}</span></div>`
+    : '';
+  const courtInfoEl = (courtInfo && courtInfo !== 'No upcoming court deadline')
+    ? `<div class="cf-deadline-info">${courtInfo}</div>` : '';
+
+  document.getElementById('case-header').innerHTML = `
+    <div class="case-header-inner">
+      <div class="case-header-title">
+        <div class="case-name">${name}</div>
+        <div class="case-header-tags">
+          ${stageEl}
+          <span class="cf-status-badge">${status}</span>
+          <span class="cf-priority-badge" style="color:${priorityColor};border-color:${priorityColor};">${priority}</span>
+        </div>
+      </div>
+      <div class="case-header-meta">
+        <div class="cf-meta-item"><span class="cf-meta-label">Assignee</span><span class="cf-meta-val">${assignee}</span></div>
+        ${courtEl}${targetEl}${courtInfoEl}
+      </div>
+      ${notionUrl ? `<a href="${notionUrl}" target="_blank" class="cf-notion-link">Open in Notion ↗</a>` : ''}
+    </div>
+  `;
+
+  // ── Properties grid ─────────────────────────────────────────────────────
+  const props = [
+    ['Status',    status],
+    ['Priority',  priority],
+    ['Stage',     stage],
+    ['Assignee',  assignee],
+    ['Category',  m['Category'] || ''],
+    ['Last Edited', (m['last_edited_time'] || '').slice(0,10)],
+  ].filter(([,v]) => v);
+  document.getElementById('case-properties').innerHTML = `
+    <div class="cf-props-grid">
+      ${props.map(([k,v]) => `<div class="cf-prop"><div class="cf-prop-label">${k}</div><div class="cf-prop-val">${v}</div></div>`).join('')}
+    </div>
+  `;
+
+  // ── Summary ──────────────────────────────────────────────────────────────
+  const summary = m['Summary'] || '';
+  document.getElementById('case-summary').innerHTML = summary
+    ? `<p style="font-size:12px;line-height:1.7;color:var(--text-secondary);">${escapeHtml(summary)}</p>`
+    : '<p style="font-size:11px;color:var(--text-dim);">No summary on record.</p>';
+
+  // ── Page notes ───────────────────────────────────────────────────────────
+  document.getElementById('case-page-content').innerHTML = body.trim()
+    ? `<pre style="white-space:pre-wrap;font-family:var(--font-sans);font-size:11px;line-height:1.7;color:var(--text-secondary);">${escapeHtml(body)}</pre>`
+    : '<p style="font-size:11px;color:var(--text-dim);">No page notes yet.</p>';
+
+  // ── Images ───────────────────────────────────────────────────────────────
+  const images = (slack.files || []).filter(f => f.is_image);
+  const imagesSection = document.getElementById('case-images-section');
+  const imagesGrid    = document.getElementById('case-images-grid');
+  if (images.length > 0) {
+    imagesSection.style.display = 'block';
+    imagesGrid.innerHTML = images.map(f => `
+      <div class="cf-image-card" onclick="openLightbox('${f.proxy_url}', '${escapeAttr(f.name)}')">
+        <img src="${f.proxy_url}" alt="${escapeAttr(f.name)}" loading="lazy"
+             onerror="this.parentElement.style.display='none'" />
+        <div class="cf-image-caption">${escapeHtml(f.name)}</div>
+        <div class="cf-image-meta">${f.user ? 'Shared by ' + f.user + ' · ' : ''}${f.type}</div>
+      </div>
+    `).join('');
+  } else {
+    imagesSection.style.display = 'none';
+  }
+
+  // ── Slack messages ───────────────────────────────────────────────────────
+  const channelInfo = slack.channel;
+  const channelLabel = document.getElementById('case-slack-channel-label');
+  if (channelInfo && channelInfo.found) {
+    channelLabel.innerHTML = `Slack · <span style="color:var(--accent);">#${channelInfo.name}</span>`;
+  } else {
+    channelLabel.textContent = 'Slack Activity (cross-channel search)';
+  }
+
+  const msgs = slack.messages || [];
+  const feed = document.getElementById('case-slack-messages');
+  if (slack.error === 'Slack not configured') {
+    feed.innerHTML = `<div class="empty-state" style="color:var(--text-dim);">Slack not configured.<br>Add <code style="font-size:10px;background:var(--bg-input);padding:1px 4px;border-radius:3px;">SLACK_BOT_TOKEN</code> to .env to enable this.</div>`;
+  } else if (channelInfo && !channelInfo.found && !msgs.length) {
+    const mattName = escapeHtml(activeCaseName);
+    feed.innerHTML = `
+      <div class="empty-state" style="text-align:left;padding:14px;">
+        <div style="font-size:11px;color:var(--text-secondary);margin-bottom:10px;">No dedicated Slack channel found for this matter.</div>
+        <div style="font-size:11px;color:var(--text-muted);line-height:1.7;">
+          To connect Slack activity, invite the Alfred bot to the case channel:<br>
+          <code style="background:var(--bg-input);padding:2px 8px;border-radius:4px;font-size:10px;display:inline-block;margin-top:6px;">/invite @alfred</code><br><br>
+          Or create a case channel named after key words in this matter and invite the bot.
+        </div>
+      </div>`;
+  } else if (slack.error && !msgs.length) {
+    feed.innerHTML = `<div class="empty-state" style="color:var(--text-dim);">Slack error: ${escapeHtml(slack.error)}</div>`;
+  } else if (!msgs.length) {
+    feed.innerHTML = '<div class="empty-state">No recent Slack messages found for this matter.</div>';
+  } else {
+    feed.innerHTML = msgs.map(msg => {
+      const time   = msg.ts ? new Date(parseFloat(msg.ts) * 1000).toLocaleString('en-US', {month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}) : '';
+      const text   = formatSlackText(msg.text || '');
+      const thread = msg.reply_count > 0 ? `<div class="cf-thread-count">${msg.reply_count} repl${msg.reply_count === 1 ? 'y' : 'ies'}</div>` : '';
+      const channel = msg.channel ? `<span class="cf-msg-channel">#${msg.channel}</span>` : '';
+      return `
+        <div class="cf-msg">
+          <div class="cf-msg-header">
+            <span class="cf-msg-user">${escapeHtml(msg.user || 'Unknown')}</span>
+            ${channel}
+            <span class="cf-msg-time">${time}</span>
           </div>
-        `;
-      }).join('');
+          <div class="cf-msg-text">${text}</div>
+          ${thread}
+        </div>
+      `;
+    }).join('');
+  }
 
-    } catch (err) {
-      list.innerHTML = `<div style="font-size:12px;color:var(--urgent);">Error: ${err.message}</div>`;
+  // Show content
+  document.getElementById('casefile-loading').style.display  = 'none';
+  document.getElementById('casefile-content').style.display  = 'block';
+}
+
+function _daysLabel(dateStr) {
+  if (!dateStr) return '';
+  const d = daysUntil(dateStr);
+  if (d < 0)  return `${Math.abs(d)} days overdue`;
+  if (d === 0) return 'today';
+  if (d === 1) return 'tomorrow';
+  return `in ${d} days`;
+}
+
+function formatSlackText(text) {
+  return escapeHtml(text)
+    .replace(/&lt;@([A-Z0-9]+)\|([^&]+)&gt;/g, '<span class="cf-mention">@$2</span>')
+    .replace(/&lt;@([A-Z0-9]+)&gt;/g, '<span class="cf-mention">@$1</span>')
+    .replace(/&lt;(https?:\/\/[^|&]+)\|([^&]+)&gt;/g, '<a href="$1" target="_blank" style="color:var(--accent)">$2</a>')
+    .replace(/&lt;(https?:\/\/[^&]+)&gt;/g, '<a href="$1" target="_blank" style="color:var(--accent)">$1</a>')
+    .replace(/\*([^*]+)\*/g, '<strong>$1</strong>')
+    .replace(/\n/g, '<br>');
+}
+
+function escapeHtml(str) {
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function escapeAttr(str) {
+  return String(str).replace(/'/g,"\\'").replace(/"/g,'&quot;');
+}
+
+function askAlfredAboutCase() {
+  if (!activeCaseName) return;
+  switchWorkspace('chat');
+  selectAgent('alfred');
+  askAlfred(`Alfred, give me a full briefing on the current status of ${activeCaseName} — what is the case stage, what's pending, what deadlines are coming up, and what should the team be focused on?`);
+}
+
+function openLightbox(src, alt) {
+  const lb  = document.getElementById('image-lightbox');
+  const img = document.getElementById('lightbox-img');
+  img.src = src;
+  img.alt = alt;
+  lb.classList.add('visible');
+}
+
+function closeLightbox() {
+  document.getElementById('image-lightbox').classList.remove('visible');
+}
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') closeLightbox();
+});
+
+// Load case list when switching to Case File workspace
+// Override switchWorkspace to trigger case list load on first visit
+(function() {
+  const _orig = window.switchWorkspace || switchWorkspace;
+  window.switchWorkspace = function(name) {
+    _orig(name);
+    if (name === 'casefile' && caseMatters.length === 0) {
+      loadCaseList();
     }
-  }
-
-  // ── Agent Triggers ────────────────────────────────────────────────────────
-
-  async function triggerDeadlineWatch() {
-    appendMessage('alfred',
-      'Running the daily deadline-watch agent...',
-      'Alfred'
-    );
-    try {
-      const response = await fetch('/alfred/agents/deadline-watch', { method: 'POST' });
-      const data = await response.json();
-      if (data.status === 'success') {
-        appendMessage('alfred', `Deadline watch complete:\n\n${data.message}`, 'Alfred');
-      } else {
-        appendMessage('alfred', `Agent error: ${JSON.stringify(data)}`, 'Alfred');
-      }
-    } catch (err) {
-      appendMessage('alfred', `Could not trigger agent: ${err.message}`, 'Alfred');
-    }
-  }
-
-  // ── Utilities ─────────────────────────────────────────────────────────────
-
-  function daysUntil(dateStr) {
-    if (!dateStr) return 999;
-    try {
-      const deadline = new Date(dateStr.slice(0, 10));
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      return Math.round((deadline - today) / (1000 * 60 * 60 * 24));
-    } catch { return 999; }
-  }
-
-  function formatDeadline(dateStr) {
-    const days = daysUntil(dateStr);
-    const cls = days <= 2 ? 'urgent' : days <= 5 ? 'warning' : 'ok';
-    const label = days === 0 ? 'today' : days < 0 ? 'overdue' : `${days}d`;
-    return `<span class="deadline-badge ${cls}">${label}</span>`;
-  }
-
-  function setStatusDot(online) {
-    const dot = document.getElementById('status-dot');
-    dot.classList.toggle('offline', !online);
-    dot.title = online ? 'Connected to backend' : 'Backend unreachable';
-  }
-
-  // ── Health Check ──────────────────────────────────────────────────────────
-
-  async function checkHealth() {
-    try {
-      const r = await fetch('/health');
-      setStatusDot(r.ok);
-    } catch {
-      setStatusDot(false);
-    }
-  }
-
-  // ── Initialization ────────────────────────────────────────────────────────
-  // Run all data loads when the page first opens.
-
-  (async function init() {
-    // Set initial display state explicitly — don't rely on CSS alone
-    document.getElementById('alfred-messages').style.display = 'flex';
-    document.getElementById('bloodhound-messages').style.display = 'none';
-    await checkHealth();
-    await Promise.all([loadMatters(), loadDeadlines()]);
-  })();
-
-  // Refresh sidebar data every 5 minutes so it stays current during long sessions
-  setInterval(() => { loadMatters(); loadDeadlines(); }, 5 * 60 * 1000);
+  };
+})();
 
 </script>
 </body>

@@ -49,7 +49,7 @@ pydantic-ai>=0.0.14
 # The official Notion Python SDK. Handles authentication, rate limiting,
 # and all REST calls to the Notion API. We use the AsyncClient variant
 # so it doesn't block the FastAPI event loop.
-notion-client>=2.2.1
+notion-client>=2.2.1,<3.0.0
 
 
 # ── Slack ─────────────────────────────────────────────────────────────────────
@@ -108,6 +108,12 @@ msal>=1.31.0
 # mcp_server.py uses FastMCP to expose Alfred's skills as model-agnostic tools
 # callable by Claude, GPT-4, or any other MCP-compatible AI client.
 mcp>=1.0.0
+
+
+# ── Rate Limiting ─────────────────────────────────────────────────────────────
+# slowapi wraps limits/redis to add per-IP rate limiting to FastAPI routes.
+# Applied to /alfred/chat and /bloodhound/scan to prevent runaway Anthropic costs.
+slowapi>=0.1.9
 
 
 # ── Developer Experience ──────────────────────────────────────────────────────
