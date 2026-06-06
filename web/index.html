@@ -550,15 +550,20 @@ function showUserModal() {
 }
 
 function hideUserModal() {
+  // Never close the modal unless both identity and password are confirmed.
+  if (getUser() === 'Team' || !getPassword()) return;
   document.getElementById('user-modal').classList.remove('visible');
 }
 
-// Close modal on overlay click (but not on the card itself)
+// Overlay click only closes the modal if the user is already authenticated.
+// This prevents bypassing the password by clicking outside the modal.
 document.addEventListener('DOMContentLoaded', () => {
   const overlay = document.getElementById('user-modal');
   if (overlay) {
     overlay.addEventListener('click', e => {
-      if (e.target === overlay) hideUserModal();
+      if (e.target === overlay && getUser() !== 'Team' && getPassword()) {
+        hideUserModal();
+      }
     });
   }
 });
