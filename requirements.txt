@@ -34,9 +34,12 @@ python-multipart>=0.0.9
 # Alfred uses Claude as its reasoning and language engine.
 anthropic>=0.40.0
 
-# OpenAI SDK — used for ChatGPT Deep Research integration.
-# Bloodhound and Alfred can hand off to ChatGPT for long-form legal research.
+# OpenAI SDK — GPT-4o model routing in Alfred + ChatGPT Deep Research tool.
 openai>=1.50.0
+
+# Google Generative AI SDK — Gemini model routing in Alfred.
+# Required by pydantic-ai's GeminiModel provider.
+google-generativeai>=0.8.0
 
 # Pydantic AI — the agent framework that wraps the above SDKs.
 # It gives us type-safe tool definitions, dependency injection, and a clean

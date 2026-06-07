@@ -73,7 +73,11 @@ class ChatRequest(BaseModel):
     )
     model: str = Field(
         default="",
-        description="Claude model override for this request.",
+        description=(
+            "Model to use for this request. Empty string = Claude default. "
+            "Supported: 'claude-sonnet-4-6', 'claude-opus-4-8', "
+            "'gpt-4o', 'gpt-4o-mini', 'gemini-2.0-flash', 'gemini-1.5-pro'."
+        ),
     )
 
 
@@ -150,14 +154,19 @@ async def chat_with_alfred(
     Rate limiting: Not yet implemented. Future versions should add
     rate limiting per user to prevent accidental runaway usage.
     """
-    from alfred.agent import AlfredAgent
+    from alfred.agent import AlfredAgent, resolve_alfred_model
 
-    logger.info("Alfred chat from '%s': %s", request.user, request.message[:100])
+    logger.info(
+        "Alfred chat from '%s' [model=%s]: %s",
+        request.user, request.model or "default", request.message[:100],
+    )
 
     try:
+        model_override = resolve_alfred_model(request.model)
         result = await AlfredAgent.run(
             request.message,
             deps=alfred_deps,
+            model=model_override,
         )
 
         # Extract which tools Alfred called from the message history
@@ -186,11 +195,11 @@ async def chat_with_alfred(
 
         return chat_response
 
+    except ValueError as e:
+        # Missing API key or unsupported model — caller's fault, not ours
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         logger.error("Alfred chat error for user '%s': %s", request.user, e, exc_info=True)
-        # Return a 500 with enough context to debug, but don't leak stack traces
-        # to the client in production (debug=True in config exposes them in FastAPI's
-        # default error handling, but this explicit message is always safe).
         raise HTTPException(
             status_code=500,
             detail=f"Alfred encountered an error processing your request. "
@@ -219,16 +228,32 @@ async def chat_with_alfred_stream(
     The frontend reads these with a fetch + ReadableStream (not EventSource,
     since EventSource does not support POST or Authorization headers).
     """
-    from alfred.agent import AlfredAgent
+    from alfred.agent import AlfredAgent, resolve_alfred_model
     from config import settings as _settings
 
-    logger.info("Alfred stream from '%s': %s", request.user, request.message[:100])
+    logger.info(
+        "Alfred stream from '%s' [model=%s]: %s",
+        request.user, request.model or "default", request.message[:100],
+    )
+
+    try:
+        model_override = resolve_alfred_model(request.model)
+    except ValueError as e:
+        async def _err():
+            yield f"data: {json.dumps({'error': str(e)})}\n\n"
+        return StreamingResponse(
+            _err(),
+            media_type="text/event-stream",
+            headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        )
 
     async def generate():
         full_response = ""
         tools_used: list[str] = []
         try:
-            async with AlfredAgent.run_stream(request.message, deps=alfred_deps) as result:
+            async with AlfredAgent.run_stream(
+                request.message, deps=alfred_deps, model=model_override
+            ) as result:
                 async for chunk in result.stream_text(delta=True):
                     full_response += chunk
                     yield f"data: {json.dumps({'delta': chunk})}\n\n"

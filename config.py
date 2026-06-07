@@ -81,10 +81,17 @@ class Settings(BaseSettings):
     openai_api_key: str = ""
     """
     OPTIONAL. Your OpenAI API key.
-    Only needed if you enable the ChatGPT Deep Research hand-off — where
-    Alfred writes a research prompt and triggers a ChatGPT session for
-    long-form legal research (4,000–6,000 word memos).
-    Leave empty if you're not using that feature yet.
+    Required for GPT-4o and GPT-4o-mini model routing via Alfred's chat endpoints,
+    and for the ChatGPT Deep Research tool (long-form legal research memos).
+    Leave empty if you're not using those features yet.
+    """
+
+    google_api_key: str = ""
+    """
+    OPTIONAL. Google AI API key (starts with AIza...).
+    Required for Gemini model routing via Alfred's chat endpoints.
+    Get one at: https://aistudio.google.com/app/apikey
+    Set GOOGLE_API_KEY in Railway env vars to activate.
     """
 
     # ── Notion ────────────────────────────────────────────────────────────────

@@ -268,6 +268,63 @@ AlfredAgent: Agent[AlfredDependencies, str] = Agent(
     deps_type=AlfredDependencies,
     output_type=str,
 )
+
+
+def resolve_alfred_model(model_str: str):
+    """
+    Map a model-identifier string from ChatRequest.model to a Pydantic AI
+    Model instance suitable for passing as the ``model=`` override in
+    AlfredAgent.run() / AlfredAgent.run_stream().
+
+    Returns None when the caller wants the agent's configured default (Claude),
+    so the caller can always pass ``model=resolve_alfred_model(req.model)``
+    without any extra branching — None is the no-op value.
+
+    Supported prefixes:
+      ""            → None (use agent default)
+      "claude-*"    → AnthropicModel override (allows picking a specific Claude tier)
+      "gpt-*"       → OpenAIModel (requires OPENAI_API_KEY)
+      "gemini-*"    → GeminiModel (requires GOOGLE_API_KEY)
+
+    Raises ValueError if the requested model's API key is not configured.
+    """
+    if not model_str or model_str.lower().startswith("claude"):
+        if model_str and model_str != settings.alfred_model:
+            # Specific Claude tier requested — override with that version
+            return AnthropicModel(
+                model_str,
+                provider=AnthropicProvider(api_key=settings.anthropic_api_key),
+            )
+        return None  # Use AlfredAgent's configured default
+
+    if model_str.lower().startswith("gpt"):
+        if not settings.openai_api_key:
+            raise ValueError(
+                "OpenAI API key not configured. Set OPENAI_API_KEY in Railway "
+                "env vars to enable GPT models."
+            )
+        from pydantic_ai.models.openai import OpenAIModel
+        from pydantic_ai.providers.openai import OpenAIProvider
+        return OpenAIModel(
+            model_str,
+            provider=OpenAIProvider(api_key=settings.openai_api_key),
+        )
+
+    if model_str.lower().startswith("gemini"):
+        if not settings.google_api_key:
+            raise ValueError(
+                "Google API key not configured. Set GOOGLE_API_KEY in Railway "
+                "env vars to enable Gemini models."
+            )
+        from pydantic_ai.models.gemini import GeminiModel
+        from pydantic_ai.providers.google import GoogleProvider
+        return GeminiModel(
+            model_str,
+            provider=GoogleProvider(api_key=settings.google_api_key),
+        )
+
+    logger.warning("Unknown model identifier '%s' — falling back to Claude default.", model_str)
+    return None
 """
 The Alfred Pydantic AI agent.
 
