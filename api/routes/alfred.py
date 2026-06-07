@@ -79,6 +79,14 @@ class ChatRequest(BaseModel):
             "'gpt-4o', 'gpt-4o-mini', 'gemini-2.0-flash', 'gemini-1.5-pro'."
         ),
     )
+    history: list[Any] = Field(
+        default_factory=list,
+        description=(
+            "Serialized conversation history returned by the previous response. "
+            "Pass it back unchanged to give Alfred context from earlier in the session. "
+            "Send an empty list (or omit) to start a fresh conversation."
+        ),
+    )
 
 
 class ChatResponse(BaseModel):
@@ -89,7 +97,8 @@ class ChatResponse(BaseModel):
         {
             "response": "Petersen has a filing deadline in 4 days...",
             "user": "Tim",
-            "tools_used": ["find_and_summarize_matter"]
+            "tools_used": ["find_and_summarize_matter"],
+            "history": [...]
         }
     """
 
@@ -98,6 +107,13 @@ class ChatResponse(BaseModel):
     tools_used: list[str] = Field(
         default_factory=list,
         description="List of tool names Alfred called while processing this message.",
+    )
+    history: list[Any] = Field(
+        default_factory=list,
+        description=(
+            "Updated conversation history. Store this client-side and send it "
+            "back as ChatRequest.history on the next message to maintain context."
+        ),
     )
 
 
@@ -162,23 +178,41 @@ async def chat_with_alfred(
     )
 
     try:
+        from pydantic_ai.messages import ModelMessagesTypeAdapter
+
         model_override = resolve_alfred_model(request.model)
+
+        message_history = []
+        if request.history:
+            try:
+                message_history = ModelMessagesTypeAdapter.validate_python(request.history)
+            except Exception:
+                message_history = []
+
         result = await AlfredAgent.run(
             request.message,
             deps=alfred_deps,
             model=model_override,
+            message_history=message_history,
         )
 
-        # Extract which tools Alfred called from the message history
         tools_used = _extract_tools_used(result)
+
+        new_history: list[Any] = []
+        try:
+            new_history = ModelMessagesTypeAdapter.dump_python(
+                result.all_messages(), mode="json"
+            )
+        except Exception:
+            pass
 
         chat_response = ChatResponse(
             response=result.output,
             user=request.user,
             tools_used=tools_used,
+            history=new_history,
         )
 
-        # Log interaction to Comms Log (non-blocking — failure never affects response)
         if alfred_deps.comms_log:
             try:
                 from config import settings as _settings
@@ -196,7 +230,6 @@ async def chat_with_alfred(
         return chat_response
 
     except ValueError as e:
-        # Missing API key or unsupported model — caller's fault, not ours
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         logger.error("Alfred chat error for user '%s': %s", request.user, e, exc_info=True)
@@ -236,6 +269,8 @@ async def chat_with_alfred_stream(
         request.user, request.model or "default", request.message[:100],
     )
 
+    from pydantic_ai.messages import ModelMessagesTypeAdapter
+
     try:
         model_override = resolve_alfred_model(request.model)
     except ValueError as e:
@@ -247,19 +282,36 @@ async def chat_with_alfred_stream(
             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
         )
 
+    message_history = []
+    if request.history:
+        try:
+            message_history = ModelMessagesTypeAdapter.validate_python(request.history)
+        except Exception:
+            message_history = []
+
     async def generate():
         full_response = ""
         tools_used: list[str] = []
         try:
             async with AlfredAgent.run_stream(
-                request.message, deps=alfred_deps, model=model_override
+                request.message,
+                deps=alfred_deps,
+                model=model_override,
+                message_history=message_history,
             ) as result:
                 async for chunk in result.stream_text(delta=True):
                     full_response += chunk
                     yield f"data: {json.dumps({'delta': chunk})}\n\n"
                 tools_used = _extract_tools_used(result)
 
-            # Log after stream — before sending done so client waits cleanly
+            new_history: list = []
+            try:
+                new_history = ModelMessagesTypeAdapter.dump_python(
+                    result.all_messages(), mode="json"
+                )
+            except Exception:
+                pass
+
             if alfred_deps.comms_log:
                 try:
                     await alfred_deps.comms_log.log_interaction(
@@ -273,7 +325,7 @@ async def chat_with_alfred_stream(
                 except Exception:
                     pass
 
-            yield f"data: {json.dumps({'done': True, 'tools_used': tools_used})}\n\n"
+            yield f"data: {json.dumps({'done': True, 'tools_used': tools_used, 'history': new_history})}\n\n"
 
         except Exception as e:
             logger.error("Alfred stream error for '%s': %s", request.user, e, exc_info=True)

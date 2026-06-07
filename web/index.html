@@ -184,11 +184,13 @@
 
       <div class="model-selector-wrap">
         <span class="model-label">Model</span>
-        <select id="model-select" title="Select AI model">
-          <option value="claude-sonnet-4-5">Sonnet 4.5</option>
-          <option value="claude-sonnet-4-6" selected>Sonnet 4.6</option>
-          <option value="claude-opus-4">Opus 4</option>
-          <option value="claude-opus-4-5">Opus 4.5</option>
+        <select id="model-select" title="Select AI model" onchange="chatHistory = []">
+          <option value="claude-sonnet-4-6" selected>Claude Sonnet 4.6</option>
+          <option value="claude-opus-4-8">Claude Opus 4.8</option>
+          <option value="gpt-4o">GPT-4o</option>
+          <option value="gpt-4o-mini">GPT-4o mini</option>
+          <option value="gemini-2.0-flash">Gemini 2.0 Flash</option>
+          <option value="gemini-1.5-pro">Gemini 1.5 Pro</option>
         </select>
       </div>
     </div>
@@ -449,6 +451,7 @@
 let currentAgent        = 'alfred';
 let isLoading           = false;
 let activeWorkspace     = 'chat';
+let chatHistory         = [];   // serialized pydantic-ai messages, sent back each turn
 let activeMatterCategory = 'Case Project';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -899,6 +902,7 @@ function switchWorkspace(name) {
 // ═══════════════════════════════════════════════════════════════════════════
 
 function selectAgent(agent) {
+  if (agent !== currentAgent) chatHistory = [];
   currentAgent = agent;
   const isBH = agent === 'bloodhound';
 
@@ -1015,9 +1019,10 @@ async function callAgent(message) {
   const endpoint  = useStream ? '/alfred/chat/stream' : '/alfred/chat';
 
   try {
+    const body = { message, user: getUser(), model, history: chatHistory };
     const response = await apiFetch(endpoint, {
       method: 'POST',
-      body: JSON.stringify({ message, user: getUser(), model }),
+      body: JSON.stringify(body),
     });
 
     if (!response.ok) {
@@ -1074,7 +1079,7 @@ async function callAgent(message) {
         }
 
         if (evt.done) {
-          // Apply full markdown formatting on the completed text
+          if (evt.history) chatHistory = evt.history;  // update for next turn
           if (msgId) finalizeStreamingMessage(msgId, fullText, evt.tools_used || []);
         }
       }
