@@ -40,13 +40,13 @@
 
   <div class="workspace-tabs" id="workspace-tabs">
     <button class="workspace-tab active" id="tab-chat" onclick="switchWorkspace('chat')">
-      Chat Workspace
+      <span class="tab-long">Chat Workspace</span><span class="tab-short">Chat</span>
     </button>
     <button class="workspace-tab" id="tab-skills" onclick="switchWorkspace('skills')">
-      Skills Navigator
+      <span class="tab-long">Skills Navigator</span><span class="tab-short">Skills</span>
     </button>
     <button class="workspace-tab" id="tab-casefile" onclick="switchWorkspace('casefile')">
-      Case Files
+      <span class="tab-long">Case Files</span><span class="tab-short">Cases</span>
     </button>
   </div>
 
@@ -172,6 +172,7 @@
 
     <!-- Toolbar -->
     <div class="chat-toolbar">
+      <button class="drawer-toggle-btn" id="chat-sidebar-toggle" onclick="toggleChatSidebar()" title="Toggle matters list" aria-label="Toggle matters list">☰</button>
       <div class="agent-selector">
         <button class="agent-btn active" data-agent="alfred" id="btn-alfred" onclick="selectAgent('alfred')">
           Alfred
@@ -352,6 +353,12 @@
     <!-- Main: Case Detail -->
     <main class="casefile-main" id="casefile-main">
 
+      <!-- Mobile-only toolbar: opens the case list drawer -->
+      <div class="casefile-toolbar">
+        <button class="drawer-toggle-btn" id="casefile-sidebar-toggle" onclick="toggleCasefileSidebar()" title="Case list" aria-label="Toggle case list">☰</button>
+        <span class="casefile-toolbar-label">Case Projects</span>
+      </div>
+
       <!-- Placeholder shown before a matter is selected -->
       <div class="casefile-placeholder" id="casefile-placeholder">
         <div class="casefile-placeholder-icon">⚖️</div>
@@ -419,6 +426,9 @@
     </main>
   </div>
 </div>
+
+<!-- Drawer overlay — shared by chat sidebar and casefile sidebar drawers -->
+<div class="drawer-overlay" id="drawer-overlay" onclick="closeAllDrawers()"></div>
 
 <!-- Image lightbox -->
 <div class="modal-overlay" id="image-lightbox" onclick="closeLightbox()" style="cursor:zoom-out;">
@@ -875,12 +885,11 @@ const KLG_SKILLS = [
 
 function switchWorkspace(name) {
   activeWorkspace = name;
+  closeAllDrawers();
 
-  // Toggle workspace divs
   document.querySelectorAll('.workspace').forEach(ws => ws.classList.remove('active'));
   document.getElementById(`workspace-${name}`).classList.add('active');
 
-  // Toggle header tabs
   document.querySelectorAll('.workspace-tab').forEach(t => t.classList.remove('active'));
   document.getElementById(`tab-${name}`).classList.add('active');
 }
@@ -941,8 +950,49 @@ async function sendMessage() {
   await callAgent(message);
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// RESPONSIVE — Drawer management (mobile sidebar toggles)
+// ═══════════════════════════════════════════════════════════════════════════
+
+function toggleChatSidebar() {
+  const sidebar = document.querySelector('#workspace-chat .sidebar');
+  const overlay = document.getElementById('drawer-overlay');
+  const isOpen  = sidebar.classList.toggle('open');
+  overlay.classList.toggle('visible', isOpen);
+}
+
+function closeChatSidebar() {
+  document.querySelector('#workspace-chat .sidebar')?.classList.remove('open');
+  _hideOverlayIfNone();
+}
+
+function toggleCasefileSidebar() {
+  const sidebar = document.querySelector('.casefile-sidebar');
+  const overlay = document.getElementById('drawer-overlay');
+  const isOpen  = sidebar.classList.toggle('open');
+  overlay.classList.toggle('visible', isOpen);
+}
+
+function closeCasefileSidebar() {
+  document.querySelector('.casefile-sidebar')?.classList.remove('open');
+  _hideOverlayIfNone();
+}
+
+function closeAllDrawers() {
+  document.querySelector('#workspace-chat .sidebar')?.classList.remove('open');
+  document.querySelector('.casefile-sidebar')?.classList.remove('open');
+  document.getElementById('drawer-overlay').classList.remove('visible');
+}
+
+function _hideOverlayIfNone() {
+  const anyOpen =
+    document.querySelector('#workspace-chat .sidebar.open') ||
+    document.querySelector('.casefile-sidebar.open');
+  if (!anyOpen) document.getElementById('drawer-overlay').classList.remove('visible');
+}
+
 function askAlfred(message) {
-  // Switch to Chat workspace if needed, select Alfred
+  closeChatSidebar();
   switchWorkspace('chat');
   selectAgent('alfred');
   const input = document.getElementById('chat-input');
@@ -1548,6 +1598,7 @@ async function loadCaseList() {
 }
 
 async function openCase(pageId, name) {
+  closeCasefileSidebar();
   activeCaseId   = pageId;
   activeCaseName = name;
 

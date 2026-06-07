@@ -1587,3 +1587,201 @@ header::after {
   background: rgba(13,18,32,0.9);
   backdrop-filter: blur(8px);
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   DRAWER — slide-in sidebar toggle button + overlay
+   Hidden on desktop; shown via media queries below.
+═══════════════════════════════════════════════════════════════════════════ */
+
+.drawer-toggle-btn {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text-muted);
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: color 0.15s, background 0.15s, border-color 0.15s;
+}
+.drawer-toggle-btn:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+  border-color: var(--border-accent);
+}
+
+.drawer-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  top: 52px;
+  background: rgba(0, 0, 0, 0.55);
+  z-index: 190;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.25s var(--ease);
+}
+.drawer-overlay.visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* Mobile-only casefile toolbar (drawer trigger + label) */
+.casefile-toolbar {
+  display: none;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--border);
+  background: rgba(13,18,32,0.9);
+  backdrop-filter: blur(8px);
+  flex-shrink: 0;
+}
+.casefile-toolbar-label {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--text-muted);
+}
+
+/* Short tab labels — hidden until mobile */
+.tab-short { display: none; }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   RESPONSIVE — Tablet  ≤ 1100px
+   Drop the right panel; narrow the left sidebar slightly.
+═══════════════════════════════════════════════════════════════════════════ */
+
+@media (max-width: 1100px) {
+  /* Hide non-critical header chrome */
+  .header-meta  { display: none; }
+  .header-badge { display: none; }
+
+  /* Chat: 2-column — sidebar + chat only */
+  #workspace-chat { grid-template-columns: 240px 1fr; }
+  .right-panel    { display: none; }
+
+  /* Skills: shrink detail panel */
+  .skills-layout  { grid-template-columns: 1fr 300px; }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   RESPONSIVE — Mobile  ≤ 768px
+   Sidebars become drawers; columns stack; header compresses.
+═══════════════════════════════════════════════════════════════════════════ */
+
+@media (max-width: 768px) {
+  /* ── Header ─────────────────────────────────────────────────────────── */
+  header       { padding: 0 10px; gap: 4px; }
+  .header-left { gap: 8px; }
+  .status-dot       { display: none; }
+  .brand-sub        { display: none; }
+  .header-user-name { display: none; }
+
+  /* Swap long labels for short ones */
+  .tab-long  { display: none; }
+  .tab-short { display: inline; }
+  .workspace-tab { padding: 5px 12px; font-size: 10px; letter-spacing: 0.02em; }
+
+  /* ── Shared overlay ──────────────────────────────────────────────────── */
+  .drawer-overlay { display: block; }
+
+  /* ── Chat workspace ─────────────────────────────────────────────────── */
+  #workspace-chat { grid-template-columns: 1fr; }
+  .right-panel    { display: none; }
+
+  /* Chat sidebar → fixed drawer */
+  .sidebar {
+    position: fixed;
+    left: 0;
+    top: 52px;
+    bottom: 0;
+    width: 280px;
+    z-index: 200;
+    transform: translateX(-100%);
+    transition: transform 0.25s var(--ease);
+  }
+  .sidebar.open {
+    transform: translateX(0);
+    box-shadow: 8px 0 32px rgba(0, 0, 0, 0.55);
+  }
+
+  /* Show the drawer toggle button in the chat toolbar */
+  .drawer-toggle-btn { display: flex; }
+
+  /* Tighten chat chrome */
+  .chat-toolbar    { padding: 8px 12px; gap: 8px; }
+  .chat-messages   { padding: 16px 12px; }
+  .chat-input-area { padding: 10px 12px; }
+  .message-content { max-width: 88%; }
+
+  /* ── Skills workspace ───────────────────────────────────────────────── */
+  .skills-layout {
+    grid-template-columns: 1fr;
+    overflow-y: auto;
+  }
+  .skills-main { padding: 14px; }
+  .skill-detail-panel {
+    border-left: none;
+    border-top: 1px solid var(--border);
+  }
+
+  /* ── Case Files workspace ───────────────────────────────────────────── */
+  .casefile-layout    { grid-template-columns: 1fr; }
+  .casefile-toolbar   { display: flex; }
+
+  /* Casefile sidebar → fixed drawer */
+  .casefile-sidebar {
+    position: fixed;
+    left: 0;
+    top: 52px;
+    bottom: 0;
+    width: 280px;
+    z-index: 200;
+    transform: translateX(-100%);
+    transition: transform 0.25s var(--ease);
+  }
+  .casefile-sidebar.open {
+    transform: translateX(0);
+    box-shadow: 8px 0 32px rgba(0, 0, 0, 0.55);
+  }
+
+  /* Stack the two case body columns vertically */
+  .casefile-body {
+    grid-template-columns: 1fr;
+    overflow-y: auto;
+    flex: 1;
+  }
+  .casefile-col {
+    overflow-y: visible;
+    height: auto;
+  }
+  .casefile-col:first-child {
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+  }
+
+  /* Modal: full-width on mobile */
+  .modal          { width: 95vw; }
+  .modal-header   { padding: 20px 18px 16px; }
+  .modal-body     { padding: 14px 18px; }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   RESPONSIVE — Small phones  ≤ 480px
+═══════════════════════════════════════════════════════════════════════════ */
+
+@media (max-width: 480px) {
+  .brand-main    { font-size: 10px; letter-spacing: 0.06em; }
+  .workspace-tab { padding: 5px 9px; font-size: 9px; }
+
+  /* Single-column name grid */
+  .name-grid { grid-template-columns: 1fr; }
+  .name-btn:last-child:nth-child(odd) { grid-column: auto; max-width: 100%; }
+}
