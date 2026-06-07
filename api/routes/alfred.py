@@ -290,6 +290,11 @@ async def chat_with_alfred_stream(
             message_history = []
 
     async def generate():
+        # Send a ping immediately so Railway's proxy knows this is SSE
+        # and won't buffer the response waiting for the connection to close.
+        # The frontend ignores lines that don't start with "data:".
+        yield ": ping\n\n"
+
         full_response = ""
         tools_used: list[str] = []
         try:
@@ -336,7 +341,8 @@ async def chat_with_alfred_stream(
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",
-            "X-Accel-Buffering": "no",  # disable Nginx buffering if present
+            "X-Accel-Buffering": "no",
+            "Connection": "keep-alive",
         },
     )
 
