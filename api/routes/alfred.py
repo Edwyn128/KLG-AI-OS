@@ -25,10 +25,12 @@ ENDPOINTS IN THIS FILE
 
 from __future__ import annotations
 
+import json
 import logging
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
@@ -194,6 +196,72 @@ async def chat_with_alfred(
             detail=f"Alfred encountered an error processing your request. "
                    f"Check the server logs for details. Error type: {type(e).__name__}",
         )
+
+
+@router.post("/chat/stream", summary="Stream Alfred's response token by token")
+async def chat_with_alfred_stream(
+    request: ChatRequest,
+    alfred_deps=Depends(get_alfred_deps),
+) -> StreamingResponse:
+    """
+    Server-Sent Events (SSE) endpoint for Alfred.
+
+    Streams Alfred's response as it is generated so the first words appear
+    in ~0.5 seconds rather than waiting for the full response. Tool calls
+    (Notion queries, etc.) still execute before text begins streaming — the
+    typing indicator covers that gap on the frontend.
+
+    Each SSE message is a JSON object on a `data:` line:
+      {"delta": "..."} — incremental text chunk
+      {"done": true, "tools_used": [...]} — stream finished
+      {"error": "..."} — an error occurred
+
+    The frontend reads these with a fetch + ReadableStream (not EventSource,
+    since EventSource does not support POST or Authorization headers).
+    """
+    from alfred.agent import AlfredAgent
+    from config import settings as _settings
+
+    logger.info("Alfred stream from '%s': %s", request.user, request.message[:100])
+
+    async def generate():
+        full_response = ""
+        tools_used: list[str] = []
+        try:
+            async with AlfredAgent.run_stream(request.message, deps=alfred_deps) as result:
+                async for chunk in result.stream_text(delta=True):
+                    full_response += chunk
+                    yield f"data: {json.dumps({'delta': chunk})}\n\n"
+                tools_used = _extract_tools_used(result)
+
+            # Log after stream — before sending done so client waits cleanly
+            if alfred_deps.comms_log:
+                try:
+                    await alfred_deps.comms_log.log_interaction(
+                        user=request.user,
+                        agent="alfred",
+                        message=request.message,
+                        response=full_response,
+                        tools_used=tools_used,
+                        model=request.model or _settings.alfred_model,
+                    )
+                except Exception:
+                    pass
+
+            yield f"data: {json.dumps({'done': True, 'tools_used': tools_used})}\n\n"
+
+        except Exception as e:
+            logger.error("Alfred stream error for '%s': %s", request.user, e, exc_info=True)
+            yield f"data: {json.dumps({'error': str(e)})}\n\n"
+
+    return StreamingResponse(
+        generate(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",  # disable Nginx buffering if present
+        },
+    )
 
 
 @router.get("/matters", summary="List active matters by category")

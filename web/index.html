@@ -1009,7 +1009,10 @@ async function callAgent(message) {
   const typingId = showTypingIndicator();
   const model    = document.getElementById('model-select').value;
 
-  const endpoint = currentAgent === 'bloodhound' ? '/alfred/chat' : '/alfred/chat';
+  // Bloodhound uses the standard endpoint (no streaming needed for scan results).
+  // Alfred uses the streaming endpoint for live token-by-token output.
+  const useStream = currentAgent !== 'bloodhound';
+  const endpoint  = useStream ? '/alfred/chat/stream' : '/alfred/chat';
 
   try {
     const response = await apiFetch(endpoint, {
@@ -1017,16 +1020,68 @@ async function callAgent(message) {
       body: JSON.stringify({ message, user: getUser(), model }),
     });
 
-    removeTypingIndicator(typingId);
-
     if (!response.ok) {
+      removeTypingIndicator(typingId);
       const err = await response.json().catch(() => ({ detail: 'Unknown error' }));
       appendMessage(currentAgent, `⚠️ Error: ${err.detail || response.statusText}`, getAgentName());
       return;
     }
 
-    const data = await response.json();
-    appendMessage(currentAgent, data.response, getAgentName(), data.tools_used);
+    if (!useStream) {
+      // Non-streaming path (Bloodhound)
+      removeTypingIndicator(typingId);
+      const data = await response.json();
+      appendMessage(currentAgent, data.response, getAgentName(), data.tools_used);
+      return;
+    }
+
+    // ── Streaming path (Alfred) ──────────────────────────────────────────────
+    const reader  = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer    = '';
+    let fullText  = '';
+    let msgId     = null;
+    let started   = false;
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop(); // hold incomplete last line
+
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        let evt;
+        try { evt = JSON.parse(line.slice(6)); } catch { continue; }
+
+        if (evt.error) {
+          removeTypingIndicator(typingId);
+          appendMessage(currentAgent, `⚠️ Alfred error: ${evt.error}`, getAgentName());
+          return;
+        }
+
+        if (evt.delta) {
+          if (!started) {
+            removeTypingIndicator(typingId);
+            msgId   = 'stream-' + Date.now();
+            started = true;
+            appendStreamingMessage(currentAgent, msgId, getAgentName());
+          }
+          fullText += evt.delta;
+          updateStreamingMessage(msgId, fullText);
+        }
+
+        if (evt.done) {
+          // Apply full markdown formatting on the completed text
+          if (msgId) finalizeStreamingMessage(msgId, fullText, evt.tools_used || []);
+        }
+      }
+    }
+
+    // Fallback: if stream ended without content (e.g. tool-only run)
+    if (!started) removeTypingIndicator(typingId);
 
   } catch (err) {
     removeTypingIndicator(typingId);
@@ -1037,6 +1092,49 @@ async function callAgent(message) {
     setStatusDot(false);
   } finally {
     setLoading(false);
+  }
+}
+
+// ── Streaming message helpers ────────────────────────────────────────────────
+
+function appendStreamingMessage(agent, id, name) {
+  const isBloodhound = agent === 'bloodhound';
+  const containerId  = isBloodhound ? 'bloodhound-messages' : 'alfred-messages';
+  const container    = document.getElementById(containerId);
+  const avatarClass  = isBloodhound ? 'bloodhound' : '';
+  const initial      = name ? name[0].toUpperCase() : 'A';
+
+  container.insertAdjacentHTML('beforeend', `
+    <div class="message" id="${id}">
+      <div class="message-avatar ${avatarClass}">${initial}</div>
+      <div class="message-content">
+        <div class="message-bubble" id="${id}-bubble"></div>
+      </div>
+    </div>
+  `);
+  container.scrollTop = container.scrollHeight;
+}
+
+function updateStreamingMessage(id, text) {
+  const bubble = document.getElementById(`${id}-bubble`);
+  if (!bubble) return;
+  // Lightweight render during stream: just newlines → <br>, no markdown yet
+  bubble.innerHTML = text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');
+  bubble.closest('.chat-messages')?.scrollTo({ top: 99999, behavior: 'instant' });
+}
+
+function finalizeStreamingMessage(id, text, toolsUsed) {
+  const bubble = document.getElementById(`${id}-bubble`);
+  if (!bubble) return;
+  // Apply full markdown formatting on the completed response
+  bubble.innerHTML = formatMessageText(text);
+
+  if (toolsUsed && toolsUsed.length > 0) {
+    const badges  = toolsUsed.map(t => `<span>${t.replace(/_/g,' ')}</span>`).join('');
+    const toolsEl = document.createElement('div');
+    toolsEl.className = 'tools-used';
+    toolsEl.innerHTML = `<span class="tools-used-label">via </span>${badges}`;
+    bubble.closest('.message-content').appendChild(toolsEl);
   }
 }
 
