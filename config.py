@@ -94,6 +94,16 @@ class Settings(BaseSettings):
     Set GOOGLE_API_KEY in Railway env vars to activate.
     """
 
+    perplexity_api_key: str = ""
+    """
+    OPTIONAL. Perplexity API key (starts with pplx-).
+    Required for Perplexity Sonar model routing via Alfred's chat endpoints.
+    Sonar Pro provides real-time web search grounded in cited sources — useful
+    for legal news, docket lookups, and current-events research.
+    Get one at: https://www.perplexity.ai/settings/api
+    Set PERPLEXITY_API_KEY in Railway env vars to activate.
+    """
+
     # ── Notion ────────────────────────────────────────────────────────────────
 
     notion_token: str

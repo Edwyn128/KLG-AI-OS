@@ -295,6 +295,7 @@ def resolve_alfred_model(model_str: str):
       "claude-*"    → AnthropicModel override (allows picking a specific Claude tier)
       "gpt-*"       → OpenAIModel (requires OPENAI_API_KEY)
       "gemini-*"    → GeminiModel (requires GOOGLE_API_KEY)
+      "sonar-*"     → Perplexity via OpenAI-compatible API (requires PERPLEXITY_API_KEY)
 
     Raises ValueError if the requested model's API key is not configured.
     """
@@ -331,6 +332,22 @@ def resolve_alfred_model(model_str: str):
         return GeminiModel(
             model_str,
             provider=GoogleProvider(api_key=settings.google_api_key),
+        )
+
+    if model_str.lower().startswith("sonar"):
+        if not settings.perplexity_api_key:
+            raise ValueError(
+                "Perplexity API key not configured. Set PERPLEXITY_API_KEY in Railway "
+                "env vars to enable Perplexity Sonar models."
+            )
+        from pydantic_ai.models.openai import OpenAIModel
+        from pydantic_ai.providers.openai import OpenAIProvider
+        return OpenAIModel(
+            model_str,
+            provider=OpenAIProvider(
+                api_key=settings.perplexity_api_key,
+                base_url="https://api.perplexity.ai",
+            ),
         )
 
     logger.warning("Unknown model identifier '%s' — falling back to Claude default.", model_str)

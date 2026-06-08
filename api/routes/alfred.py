@@ -76,7 +76,8 @@ class ChatRequest(BaseModel):
         description=(
             "Model to use for this request. Empty string = Claude default. "
             "Supported: 'claude-sonnet-4-6', 'claude-opus-4-8', "
-            "'gpt-4o', 'gpt-4o-mini', 'gemini-2.0-flash', 'gemini-1.5-pro'."
+            "'gpt-4o', 'gpt-4o-mini', 'gemini-2.0-flash', 'gemini-1.5-pro', "
+            "'sonar-pro', 'sonar-reasoning-pro'."
         ),
     )
     history: list[Any] = Field(
@@ -345,6 +346,89 @@ async def chat_with_alfred_stream(
             "Connection": "keep-alive",
         },
     )
+
+
+@router.get("/activity", summary="Get recent Comms Log activity for the Activity Log tab")
+async def get_activity(
+    days: int = 14,
+    alfred_deps=Depends(get_alfred_deps),
+) -> dict[str, Any]:
+    """
+    Return recent Comms Log entries for the Activity Log tab.
+
+    Covers all entry types: Alfred/Bloodhound chat interactions, huddle
+    imports, and other comms (emails, call notes). Sorted newest first.
+
+    Each entry includes a normalised 'type' field:
+      'chat'   — Alfred or Bloodhound conversation
+      'huddle' — Slack huddle canvas import
+      'other'  — Everything else (emails, call notes)
+
+    Query parameters:
+      days: Look-back window (default 14, max 60).
+    """
+    days = min(max(days, 1), 60)
+
+    if not alfred_deps.comms_log:
+        return {"count": 0, "entries": [], "days": days}
+
+    try:
+        raw = await alfred_deps.comms_log.get_recent(days=days)
+    except Exception as e:
+        logger.error("get_activity error: %s", e, exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+    entries = []
+    for item in raw[:100]:
+        name = item.get("Name") or ""
+        notes = item.get("Notes") or ""
+        name_lower = name.lower()
+
+        if "alfred chat" in name_lower or "bloodhound chat" in name_lower:
+            entry_type = "chat"
+        elif name_lower.startswith("huddle"):
+            entry_type = "huddle"
+        else:
+            entry_type = "other"
+
+        # Parse Notes: "Tools: find_matter, ... | Model: claude-sonnet-4-6 | Agent: alfred"
+        tools: list[str] = []
+        model = ""
+        agent = "alfred"
+        for part in notes.split("|"):
+            part = part.strip()
+            if part.startswith("Tools:"):
+                raw_tools = part[6:].strip()
+                tools = [
+                    t.strip() for t in raw_tools.split(",")
+                    if t.strip() and t.strip().lower() != "none"
+                ]
+            elif part.startswith("Model:"):
+                model = part[6:].strip()
+            elif part.startswith("Agent:"):
+                agent = part[6:].strip()
+
+        # Extract user from "Alfred chat — Tim" → "Tim"
+        user = ""
+        if entry_type == "chat" and "—" in name:
+            user = name.split("—")[-1].strip()
+
+        entries.append({
+            "id": item.get("id", ""),
+            "type": entry_type,
+            "name": name,
+            "created_time": item.get("created_time", ""),
+            "user": user,
+            "agent": agent,
+            "message": (item.get("Email Text") or "")[:300],
+            "response_summary": (item.get("Summary") or "")[:300],
+            "tools": tools,
+            "model": model,
+            "meeting_date": str(item.get("Comm Date") or "")[:10],
+            "actions": item.get("Actions") or "",
+        })
+
+    return {"count": len(entries), "entries": entries, "days": days}
 
 
 @router.get("/matters", summary="List active matters by category")
