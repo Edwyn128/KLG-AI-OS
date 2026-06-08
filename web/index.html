@@ -1090,11 +1090,16 @@ async function callAgent(message) {
 
   } catch (err) {
     removeTypingIndicator(typingId);
-    appendMessage(currentAgent,
-      `⚠️ Could not reach the KLG AI OS backend. Make sure the server is running.\n\nError: ${err.message}`,
-      getAgentName()
-    );
-    setStatusDot(false);
+    // If the stream already started, a network error on close is the Railway proxy
+    // terminating the SSE connection ungracefully — the response arrived fine.
+    // Only show the error if Alfred never sent anything.
+    if (!started) {
+      appendMessage(currentAgent,
+        `⚠️ Could not reach the KLG AI OS backend. Make sure the server is running.\n\nError: ${err.message}`,
+        getAgentName()
+      );
+      setStatusDot(false);
+    }
   } finally {
     setLoading(false);
   }
