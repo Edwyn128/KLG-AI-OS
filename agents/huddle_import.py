@@ -183,28 +183,59 @@ async def run_huddle_import(
 
 
 async def _search_huddle_files(slack_client: Any) -> list[dict] | None:
-    """Search Slack for huddle canvas files. Returns None on auth/scope failure."""
-    try:
-        resp = await slack_client.search_files(
-            query="Huddle notes",
-            sort="timestamp",
-            sort_dir="desc",
-            count=20,
-        )
-        return (resp.get("files") or {}).get("matches") or []
-    except Exception as e:
-        err = str(e)
-        if "missing_scope" in err:
-            logger.error(
-                "HuddleImport: Slack search failed — missing scope. "
-                "Add 'search:read' to your Slack app's bot token scopes "
-                "(api.slack.com/apps → OAuth & Permissions → Bot Token Scopes) "
-                "and reinstall the app. Error: %s",
-                err,
-            )
-        else:
-            logger.error("HuddleImport: Slack search error: %s", e, exc_info=True)
-        return None
+    """
+    Find huddle canvas files by scanning recent history in every known channel.
+
+    search.files is unreliable with bot tokens — it was built for user tokens
+    and frequently returns nothing even when the bot is in the channel.
+    conversations.history is the reliable alternative: the bot reads the last
+    7 days of messages in each channel and extracts any file attachments whose
+    name contains "huddle notes".
+
+    Requires channels:history scope (already granted via message.channels event
+    subscription).
+    """
+    import time
+
+    oldest = str(time.time() - 7 * 24 * 3600)  # 7 days back
+    found: list[dict] = []
+    seen_ids: set[str] = set()
+
+    for channel_id in CHANNEL_MAP:
+        try:
+            cursor = None
+            while True:
+                kwargs: dict = {"channel": channel_id, "oldest": oldest, "limit": 200}
+                if cursor:
+                    kwargs["cursor"] = cursor
+                resp = await slack_client.conversations_history(**kwargs)
+                for msg in resp.get("messages", []):
+                    for f in msg.get("files", []):
+                        fid = f.get("id", "")
+                        name = (f.get("name") or f.get("title") or "").lower()
+                        if fid and fid not in seen_ids and "huddle" in name:
+                            found.append(f)
+                            seen_ids.add(fid)
+                # Pagination
+                meta = resp.get("response_metadata") or {}
+                cursor = meta.get("next_cursor")
+                if not cursor:
+                    break
+        except Exception as e:
+            err = str(e)
+            if "missing_scope" in err:
+                logger.warning(
+                    "HuddleImport: conversations_history missing scope for %s — "
+                    "ensure channels:history is in Bot Token Scopes. Error: %s",
+                    channel_id, err,
+                )
+            elif "not_in_channel" in err or "channel_not_found" in err:
+                logger.debug("HuddleImport: Bot not in channel %s — skipping.", channel_id)
+            else:
+                logger.warning("HuddleImport: history error for %s: %s", channel_id, e)
+
+    logger.info("HuddleImport: Found %d huddle file(s) across all channels.", len(found))
+    return found
 
 
 async def _resolve_unknown_channel(
