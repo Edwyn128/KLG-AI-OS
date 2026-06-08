@@ -232,13 +232,18 @@ async def _search_huddle_files(slack_client: Any) -> list[dict] | None:
                             seen_ids.add(fid)
                             logger.debug("HuddleImport: Found via files[]: %s", fid)
 
-                    # Primary: Slackbot messages with thread replies may be huddle threads
-                    is_slackbot = (
-                        msg.get("user") == "USLACKBOT"
-                        or (msg.get("bot_profile") or {}).get("name", "").lower() == "slackbot"
+                    # Primary: any message with thread replies could be a huddle thread.
+                    # Avoid relying on user ID or subtype — Slack returns huddle system
+                    # messages differently for bot tokens vs user tokens.
+                    has_replies = msg.get("reply_count", 0) > 0 or msg.get("reply_users_count", 0) > 0
+                    text_lower = msg.get("text", "").lower()
+                    # Quick pre-filter: only dig into threads that look huddle-related
+                    looks_like_huddle = (
+                        "huddle" in text_lower
+                        or msg.get("subtype") in ("huddle_thread", "bot_message")
+                        or msg.get("user") == "USLACKBOT"
                     )
-                    has_replies = msg.get("reply_count", 0) > 0
-                    if not (is_slackbot and has_replies):
+                    if not (has_replies and looks_like_huddle):
                         continue
 
                     # Fetch thread replies to find the canvas-ready notification
