@@ -103,10 +103,20 @@ async def run_huddle_import(
         await _post_report(slack_client, result)
         return result
 
+    # Surface any scope errors discovered during channel scanning
+    scope_errors = [f["_scope_error"] for f in files if f.get("_scope_error")]
+    if scope_errors:
+        result["errors"].extend(scope_errors)
+        await _post_report(slack_client, result)
+        return result
+
     logger.info("HuddleImport: Found %d file(s) matching 'Huddle notes'", len(files))
 
     # ── Step 2–6: Process each file ──────────────────────────────────────────
     seen_titles: set[str] = set()
+
+    # Filter out any diagnostic sentinel objects added during search
+    files = [f for f in files if not f.get("_scope_error")]
 
     for file in files:
         canvas_id = file.get("id", "")
@@ -291,11 +301,10 @@ async def _search_huddle_files(slack_client: Any) -> list[dict] | None:
         except Exception as e:
             err = str(e)
             if "missing_scope" in err:
-                logger.warning(
-                    "HuddleImport: missing scope for channel %s — "
-                    "ensure channels:history is in Bot Token Scopes. Error: %s",
-                    channel_id, err,
-                )
+                msg = f"Missing Slack scope — add 'channels:history' to Bot Token Scopes and reinstall the app."
+                logger.warning("HuddleImport: %s Channel: %s. Error: %s", msg, channel_id, err)
+                found.append({"_scope_error": msg})  # surfaces in result for diagnosis
+                break  # no point checking other channels
             elif "not_in_channel" in err or "channel_not_found" in err:
                 logger.debug("HuddleImport: Bot not in %s — skipping.", channel_id)
             else:
