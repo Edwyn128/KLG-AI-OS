@@ -265,6 +265,7 @@ async def lifespan(app: FastAPI):
         project_pages=project_pages,
         slack_client=app.state.slack_client,
         watch_list=watch_list,
+        bridge=bridge,
     )
     scheduler.start()
     app.state.scheduler = scheduler

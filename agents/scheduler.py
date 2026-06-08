@@ -68,6 +68,7 @@ def create_scheduler(
     project_pages: Any,  # ProjectPages
     slack_client: Any | None = None,
     watch_list: Any | None = None,  # WatchList — for Bloodhound daily scan
+    bridge: Any | None = None,      # NotionBridge — for huddle import
 ) -> AsyncIOScheduler:
     """
     Create and configure the APScheduler instance with all three agents.
@@ -87,6 +88,7 @@ def create_scheduler(
         project_pages: Initialized ProjectPages instance (from NotionBridge).
         slack_client:  Initialized slack_sdk.WebClient, or None if Slack
                        is not configured.
+        bridge:        Initialized NotionBridge, used by the huddle importer.
 
     Returns:
         Configured AsyncIOScheduler, ready to start. Jobs are registered
@@ -94,6 +96,7 @@ def create_scheduler(
     """
     from agents.case_checkin import run_case_checkin
     from agents.deadline_watch import run_deadline_watch
+    from agents.huddle_import import run_huddle_import
     from api.routes.bloodhound import run_bloodhound_scan
 
     scheduler = AsyncIOScheduler(
@@ -219,6 +222,32 @@ def create_scheduler(
         misfire_grace_time=3600,
     )
     logger.info("Scheduler: Registered 'case_checkin_thursday' at 09:00 Pacific Thursdays.")
+
+    # ── Job 6: Weekday Huddle Import ──────────────────────────────────────────
+    # Searches Slack for new huddle summary canvases and imports them into the
+    # Notion Comms Log. Runs Monday–Friday at 12:30 PM Pacific.
+    # Posts a summary to #klg-systems-development when complete.
+    # Requires Slack scopes: search:read, files:read
+    #
+    if bridge:
+        scheduler.add_job(
+            func=run_huddle_import,
+            trigger=CronTrigger(
+                day_of_week="mon-fri", hour=12, minute=30, timezone=PACIFIC_TZ
+            ),
+            args=[bridge, slack_client],
+            id="huddle_import_weekday",
+            name="Weekday Huddle Canvas Import",
+            replace_existing=True,
+            misfire_grace_time=3600,
+        )
+        logger.info(
+            "Scheduler: Registered 'huddle_import_weekday' at 12:30 Pacific Mon–Fri."
+        )
+    else:
+        logger.info(
+            "Scheduler: Huddle import not scheduled — bridge not provided."
+        )
 
     return scheduler
 

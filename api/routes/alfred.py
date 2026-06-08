@@ -402,6 +402,44 @@ async def get_upcoming_deadlines(
 
 
 @router.post(
+    "/agents/huddle-import",
+    summary="Manually trigger the Slack huddle → Notion import",
+)
+async def trigger_huddle_import(request: Request) -> dict[str, Any]:
+    """
+    Manually trigger the Slack huddle canvas importer.
+
+    Searches Slack for new huddle summary canvases, checks for duplicates in
+    Notion, and creates Comms Log entries for any new huddles found. Posts a
+    summary to #klg-systems-development when complete.
+
+    Returns the import result: how many were imported, skipped, and any errors.
+
+    Required Slack scopes: search:read, files:read
+    """
+    from agents.huddle_import import run_huddle_import
+
+    alfred_deps = request.app.state.alfred_deps
+    slack_client = getattr(request.app.state, "slack_client", None)
+
+    try:
+        result = await run_huddle_import(
+            bridge=alfred_deps.bridge,
+            slack_client=slack_client,
+        )
+        return {
+            "status": "success",
+            "imported": result["imported"],
+            "imported_count": len(result["imported"]),
+            "skipped": result["skipped"],
+            "errors": result["errors"],
+        }
+    except Exception as e:
+        logger.error("trigger_huddle_import error: %s", e, exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post(
     "/agents/case-checkin",
     summary="Manually trigger the case check-in agent",
 )
