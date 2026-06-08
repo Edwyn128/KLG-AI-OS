@@ -125,7 +125,7 @@
     <button class="workspace-tab" id="tab-casefile" onclick="switchWorkspace('casefile')">
       <span class="tab-long">Case Files</span><span class="tab-short">Cases</span>
     </button>
-    <button class="workspace-tab" id="tab-activity" onclick="switchWorkspace('activity')">
+    <button class="workspace-tab" id="tab-activity" onclick="switchWorkspace('activity')" style="display:none">
       <span class="tab-long">Activity Log</span><span class="tab-short">Log</span>
     </button>
   </div>
@@ -694,6 +694,8 @@ function updateHeaderUser(name) {
   if (avatar) avatar.textContent = name ? name[0].toUpperCase() : '?';
   if (label)  label.textContent  = name || 'Select user';
 
+  refreshActivityTab();
+
   // Only admins can switch users — lock the chip for everyone else.
   if (chip) {
     const admin = KLG_USERS.find(u => u.name === name)?.admin ?? false;
@@ -715,6 +717,7 @@ function switchUser() {
   localStorage.removeItem('klg_password');
   // Also clear the stored user so the name grid is fully interactive.
   localStorage.removeItem('klg_user');
+  activityLoaded = false;
   showUserModal();
 }
 
@@ -1017,17 +1020,26 @@ let activityEntries = [];
 let activityFilter  = 'all';
 let activityLoaded  = false;
 
+function isActivityAdmin() {
+  return ['Tim', 'Stu'].includes(getUser());
+}
+
+function refreshActivityTab() {
+  const tab = document.getElementById('tab-activity');
+  if (!tab) return;
+  tab.style.display = isActivityAdmin() ? '' : 'none';
+  if (!isActivityAdmin() && activeWorkspace === 'activity') switchWorkspace('chat');
+}
+
 async function loadActivity() {
+  if (!isActivityAdmin()) return;
   const days = document.getElementById('activity-days')?.value || 14;
   const feed  = document.getElementById('activity-feed');
   const count = document.getElementById('activity-count');
   if (feed)  feed.innerHTML  = '<div style="color:var(--text-dim);font-size:11px;padding:12px 0;">Loading…</div>';
   if (count) count.textContent = '';
   try {
-    const creds = localStorage.getItem('klg_auth');
-    const headers = creds ? { Authorization: `Basic ${creds}` } : {};
-    const res = await fetch(`/alfred/activity?days=${days}`, { headers });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const res = await apiFetch(`/alfred/activity?days=${days}`);
     const data = await res.json();
     activityEntries = data.entries || [];
     activityLoaded  = true;

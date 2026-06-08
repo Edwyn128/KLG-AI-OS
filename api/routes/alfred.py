@@ -348,8 +348,12 @@ async def chat_with_alfred_stream(
     )
 
 
+_ACTIVITY_ALLOWED = {"tim", "stu"}
+
+
 @router.get("/activity", summary="Get recent Comms Log activity for the Activity Log tab")
 async def get_activity(
+    request: Request,
     days: int = 14,
     alfred_deps=Depends(get_alfred_deps),
 ) -> dict[str, Any]:
@@ -367,6 +371,18 @@ async def get_activity(
     Query parameters:
       days: Look-back window (default 14, max 60).
     """
+    import base64
+    from fastapi import HTTPException
+    auth = request.headers.get("Authorization", "")
+    username = ""
+    if auth.startswith("Basic "):
+        try:
+            username = base64.b64decode(auth[6:]).decode().split(":", 1)[0].lower()
+        except Exception:
+            pass
+    if username not in _ACTIVITY_ALLOWED:
+        raise HTTPException(status_code=403, detail="Access restricted.")
+
     days = min(max(days, 1), 60)
 
     if not alfred_deps.comms_log:
