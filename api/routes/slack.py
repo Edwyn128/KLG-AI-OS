@@ -150,12 +150,13 @@ async def _run_alfred_and_reply(
         response_text = result.output
 
         if slack_client:
-            await slack_client.chat_postMessage(
-                channel=channel,
-                text=response_text,
-                thread_ts=thread_ts,
-            )
-            logger.info("Slack ← Alfred: replied in thread %s", thread_ts)
+            # DMs (channel starts with D): post directly, no thread_ts.
+            # Threading in DMs hides replies behind a "1 reply" link.
+            post_kwargs: dict = {"channel": channel, "text": response_text}
+            if not channel.startswith("D"):
+                post_kwargs["thread_ts"] = thread_ts
+            await slack_client.chat_postMessage(**post_kwargs)
+            logger.info("Slack ← Alfred: replied in %s", channel)
 
     except Exception as e:
         logger.error("Slack Alfred reply error for user %s: %s", user_id, e, exc_info=True)
