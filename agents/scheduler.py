@@ -5,7 +5,7 @@ agents/scheduler.py — APScheduler setup for all Layer 3 background agents.
 PURPOSE
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-This module configures APScheduler to run the three Layer 3 background agents
+This module configures APScheduler to run the Layer 3 background agents
 on their scheduled cadences:
 
   1. DEADLINE WATCH  — Daily at 8:00 AM Pacific.
@@ -17,6 +17,11 @@ on their scheduled cadences:
   3. HYGIENE SCAN    — Monday at 8:00 AM Pacific (after the agenda).
                        Scans for stale matters, missing dates, incomplete owners.
                        Posts anomalies to #case-management.
+
+  4. CASE CHECK-IN   — Monday at 9:00 AM Pacific and Thursday at 9:00 AM Pacific.
+                       Posts a check-in message to each active matter's Slack channel,
+                       asking the team for weekly updates. Replies @mentioning Alfred
+                       are auto-logged to Notion.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 HOW THE SCHEDULER INTEGRATES WITH FASTAPI
@@ -87,6 +92,7 @@ def create_scheduler(
         Configured AsyncIOScheduler, ready to start. Jobs are registered
         but not running yet.
     """
+    from agents.case_checkin import run_case_checkin
     from agents.deadline_watch import run_deadline_watch
     from api.routes.bloodhound import run_bloodhound_scan
 
@@ -178,6 +184,41 @@ def create_scheduler(
         misfire_grace_time=3600,
     )
     logger.info("Scheduler: Registered 'hygiene_scan_weekly' at 08:15 Pacific Mondays.")
+
+    # ── Job 4: Monday Case Check-in ───────────────────────────────────────────
+    # Posts a brief status check-in to each active matter's Slack channel.
+    # Team replies mentioning @Alfred are auto-logged to that matter's Notion page.
+    #
+    # Runs at 9:00 AM Pacific on Mondays (after agenda and hygiene scan).
+    #
+    scheduler.add_job(
+        func=run_case_checkin,
+        trigger=CronTrigger(
+            day_of_week="mon", hour=9, minute=0, timezone=PACIFIC_TZ
+        ),
+        args=[project_pages, slack_client],
+        id="case_checkin_monday",
+        name="Monday Case Check-in",
+        replace_existing=True,
+        misfire_grace_time=3600,
+    )
+    logger.info("Scheduler: Registered 'case_checkin_monday' at 09:00 Pacific Mondays.")
+
+    # ── Job 5: Thursday Case Check-in ────────────────────────────────────────
+    # Same check-in cadence as Monday, mid-week touchpoint.
+    #
+    scheduler.add_job(
+        func=run_case_checkin,
+        trigger=CronTrigger(
+            day_of_week="thu", hour=9, minute=0, timezone=PACIFIC_TZ
+        ),
+        args=[project_pages, slack_client],
+        id="case_checkin_thursday",
+        name="Thursday Case Check-in",
+        replace_existing=True,
+        misfire_grace_time=3600,
+    )
+    logger.info("Scheduler: Registered 'case_checkin_thursday' at 09:00 Pacific Thursdays.")
 
     return scheduler
 

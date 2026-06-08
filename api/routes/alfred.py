@@ -402,6 +402,36 @@ async def get_upcoming_deadlines(
 
 
 @router.post(
+    "/agents/case-checkin",
+    summary="Manually trigger the case check-in agent",
+)
+async def trigger_case_checkin(request: Request) -> dict[str, str]:
+    """
+    Manually trigger the case check-in agent.
+
+    Posts a check-in message to each active matter's Slack channel immediately,
+    without waiting for the Monday or Thursday schedule. Useful for testing
+    channel resolution and Slack connectivity.
+
+    Returns how many matters were posted and how many were skipped.
+    """
+    from agents.case_checkin import run_case_checkin
+
+    alfred_deps = request.app.state.alfred_deps
+    slack_client = getattr(request.app.state, "slack_client", None)
+
+    try:
+        await run_case_checkin(
+            project_pages=alfred_deps.project_pages,
+            slack_client=slack_client,
+        )
+        return {"status": "success", "detail": "Check-in run complete. See server logs for per-matter results."}
+    except Exception as e:
+        logger.error("trigger_case_checkin error: %s", e, exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post(
     "/agents/deadline-watch",
     summary="Manually trigger the daily deadline-watch agent",
 )

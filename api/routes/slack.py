@@ -142,6 +142,10 @@ async def _run_alfred_and_reply(
 
     Posts the response in the same thread as the original message so it doesn't
     flood the channel with top-level replies.
+
+    For channel @mentions (not DMs): if the channel name maps to an active matter,
+    the original message is also logged to that matter's Notion page so the team
+    has a record of Slack activity alongside case notes.
     """
     from alfred.agent import AlfredAgent
 
@@ -157,6 +161,36 @@ async def _run_alfred_and_reply(
                 post_kwargs["thread_ts"] = thread_ts
             await slack_client.chat_postMessage(**post_kwargs)
             logger.info("Slack ← Alfred: replied in %s", channel)
+
+        # Auto-log @mentions in case channels to Notion.
+        # Only runs for public/private channels (not DMs) when the channel name
+        # maps to an active matter. Requires channels:read scope — degrades
+        # gracefully (debug-level log) if the scope is missing or the channel
+        # doesn't match any matter.
+        if not channel.startswith("D") and slack_client:
+            try:
+                info_resp = await slack_client.conversations_info(channel=channel)
+                channel_name = (info_resp.get("channel") or {}).get("name", "")
+                if channel_name:
+                    from agents.case_checkin import resolve_matter_for_channel
+                    matter = await resolve_matter_for_channel(
+                        channel_name, alfred_deps.project_pages
+                    )
+                    if matter and matter.get("id"):
+                        snippet = message[:200].replace("\n", " ")
+                        await alfred_deps.project_pages.log_skill_action(
+                            page_id=matter["id"],
+                            skill_name="slack-mention",
+                            action_summary=f"@mention from {user_id}: {snippet}",
+                        )
+                        logger.info(
+                            "Slack: Logged @mention from %s in #%s to matter '%s'",
+                            user_id,
+                            channel_name,
+                            matter.get("Project name", matter["id"][:8]),
+                        )
+            except Exception as e:
+                logger.debug("Slack: Could not log @mention to Notion: %s", e)
 
     except Exception as e:
         logger.error("Slack Alfred reply error for user %s: %s", user_id, e, exc_info=True)
