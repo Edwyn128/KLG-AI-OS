@@ -874,17 +874,49 @@ async def send_slack_message(
             "Set SLACK_BOT_TOKEN in Railway env vars to enable Slack messaging."
         )
 
-    # Normalize channel — add # if missing and it looks like a channel name
-    if not channel.startswith(("#", "D", "U", "C")) and not channel.startswith("@"):
-        channel = f"#{channel}"
+    resolved = channel.strip().lstrip("@")
+
+    # Channel name — post directly
+    if resolved.startswith("#"):
+        target = resolved
+    # Looks like a raw Slack ID (U.../D.../C...) — use as-is
+    elif resolved[:1] in ("U", "D", "C") and len(resolved) > 6:
+        target = resolved
+    else:
+        # Person's name — resolve to their Slack User ID via users.list
+        target = None
+        try:
+            resp = await ctx.deps.slack_client.users_list()
+            name_lower = resolved.lower()
+            for member in (resp.get("members") or []):
+                if member.get("is_bot") or member.get("deleted"):
+                    continue
+                profile = member.get("profile", {})
+                candidates = [
+                    profile.get("display_name", ""),
+                    profile.get("real_name", ""),
+                    profile.get("first_name", ""),
+                    member.get("name", ""),
+                ]
+                if any(name_lower in c.lower() for c in candidates if c):
+                    target = member["id"]
+                    break
+        except Exception as e:
+            logger.warning("Slack user lookup failed: %s", e)
+
+        if not target:
+            return (
+                f"Could not find a Slack user matching '{channel}'. "
+                f"Try using their exact Slack display name or a channel like #case-management."
+            )
 
     try:
         response = await ctx.deps.slack_client.chat_postMessage(
-            channel=channel,
+            channel=target,
             text=message,
         )
         if response.get("ok"):
-            logger.info("Alfred → Slack: sent to %s", channel)
+            logger.info("Alfred → Slack: sent to %s", target)
             return f"Message sent to {channel}."
         else:
             error = response.get("error", "unknown error")
