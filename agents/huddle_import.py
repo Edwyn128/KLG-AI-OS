@@ -81,10 +81,10 @@ async def run_huddle_import(
     """
     Run the huddle canvas import cycle.
 
-    Returns a summary dict: {"imported": [...], "skipped": int, "errors": [...]}
-    so callers (manual trigger endpoint) can surface the result to the user.
+    Returns a summary dict: {"imported": [...], "skipped": int, "errors": [...],
+    "diag": {...}} so callers (manual trigger endpoint) can surface the result.
     """
-    result: dict[str, Any] = {"imported": [], "skipped": 0, "errors": []}
+    result: dict[str, Any] = {"imported": [], "skipped": 0, "errors": [], "diag": {}}
 
     if not slack_client:
         logger.info("HuddleImport: Slack not configured — skipping.")
@@ -97,7 +97,9 @@ async def run_huddle_import(
     logger.info("HuddleImport: Starting...")
 
     # ── Step 1: Search Slack for recent huddle canvases ────────────────────────
-    files = await _search_huddle_files(slack_client)
+    files, diag = await _search_huddle_files(slack_client)
+    result["diag"] = diag
+
     if files is None:
         result["errors"].append("Slack search failed — check server logs for scope errors")
         await _post_report(slack_client, result)
@@ -193,39 +195,45 @@ async def run_huddle_import(
 # =============================================================================
 
 
-async def _search_huddle_files(slack_client: Any) -> list[dict] | None:
+async def _search_huddle_files(slack_client: Any) -> tuple[list[dict] | None, dict]:
     """
     Find huddle canvas files by scanning channel history and thread replies.
 
-    Bot tokens don't receive the `files` array on Slackbot huddle messages via
-    conversations.history. The reliable signal is the thread reply Slackbot
-    posts when the canvas is ready: "AI huddle notes are ready... View AI Notes"
-    with the file ID embedded in the link as /docs/TEAM_ID/FILE_ID.
+    Returns (found_files, diag_dict). found_files is None on total failure.
+    diag_dict contains per-channel scanning stats for troubleshooting.
 
     Strategy:
       1. Scan each channel's history for the last 7 days.
-      2. For any Slackbot message that has thread replies, fetch those replies.
-      3. In the replies, look for the "huddle notes are ready" notification and
-         extract the file ID from the /docs/ URL.
-      4. Fetch the full file object via files.info.
+      2. For any message with thread replies that looks huddle-related, fetch replies.
+      3. Look for the "huddle notes are ready" canvas-link notification in replies.
+      4. Extract the file ID from /docs/TEAM_ID/FILE_ID and call files.info.
+    Fallback: also check msg["files"] directly.
 
-    Fallback: also check msg["files"] directly in case Slack ever returns them.
-
-    Requires: channels:history (have it), files:read (have it).
+    Requires: channels:history (public) or groups:history (private) + files:read.
     """
     import time
 
-    oldest = str(time.time() - 7 * 24 * 3600)  # 7 days back
+    oldest = str(time.time() - 7 * 24 * 3600)
     found: list[dict] = []
     seen_ids: set[str] = set()
 
-    # Regex to extract file ID from Slack canvas URL in thread reply text:
-    # <https://workspace.slack.com/docs/TEAM_ID/FILE_ID|View AI Notes>
+    diag: dict = {
+        "channels_scanned": 0,
+        "channels_skipped": [],
+        "messages_checked": 0,
+        "huddle_candidates": 0,
+        "threads_fetched": 0,
+        "canvas_links_found": 0,
+        "channel_errors": {},
+    }
+
     _CANVAS_LINK_RE = re.compile(r"/docs/[A-Z0-9]+/([A-Z0-9]+)", re.IGNORECASE)
 
     for channel_id in CHANNEL_MAP:
+        channel_name = CHANNEL_MAP[channel_id][0]
         try:
             cursor = None
+            channel_msgs = 0
             while True:
                 kwargs: dict = {"channel": channel_id, "oldest": oldest, "limit": 200}
                 if cursor:
@@ -233,7 +241,9 @@ async def _search_huddle_files(slack_client: Any) -> list[dict] | None:
                 resp = await slack_client.conversations_history(**kwargs)
 
                 for msg in resp.get("messages", []):
-                    # Fallback: direct files array (works for some bot token configs)
+                    channel_msgs += 1
+
+                    # Fallback: direct files array
                     for f in msg.get("files", []):
                         fid = f.get("id", "")
                         name = (f.get("name") or f.get("title") or "").lower()
@@ -242,12 +252,8 @@ async def _search_huddle_files(slack_client: Any) -> list[dict] | None:
                             seen_ids.add(fid)
                             logger.debug("HuddleImport: Found via files[]: %s", fid)
 
-                    # Primary: any message with thread replies could be a huddle thread.
-                    # Avoid relying on user ID or subtype — Slack returns huddle system
-                    # messages differently for bot tokens vs user tokens.
                     has_replies = msg.get("reply_count", 0) > 0 or msg.get("reply_users_count", 0) > 0
                     text_lower = msg.get("text", "").lower()
-                    # Quick pre-filter: only dig into threads that look huddle-related
                     looks_like_huddle = (
                         "huddle" in text_lower
                         or msg.get("subtype") in ("huddle_thread", "bot_message")
@@ -256,23 +262,24 @@ async def _search_huddle_files(slack_client: Any) -> list[dict] | None:
                     if not (has_replies and looks_like_huddle):
                         continue
 
-                    # Fetch thread replies to find the canvas-ready notification
+                    diag["huddle_candidates"] += 1
                     thread_ts = msg.get("ts", "")
                     try:
                         t_resp = await slack_client.conversations_replies(
                             channel=channel_id, ts=thread_ts, limit=20,
                         )
-                        for reply in t_resp.get("messages", [])[1:]:  # skip parent
+                        diag["threads_fetched"] += 1
+                        for reply in t_resp.get("messages", [])[1:]:
                             reply_text = reply.get("text", "")
                             if "huddle notes" not in reply_text.lower():
                                 continue
                             m = _CANVAS_LINK_RE.search(reply_text)
                             if not m:
                                 continue
+                            diag["canvas_links_found"] += 1
                             fid = m.group(1).upper()
                             if fid in seen_ids:
                                 continue
-                            # Fetch the full file object
                             try:
                                 fi_resp = await slack_client.files_info(file=fid)
                                 f = fi_resp.get("file") or {}
@@ -298,20 +305,37 @@ async def _search_huddle_files(slack_client: Any) -> list[dict] | None:
                 if not cursor:
                     break
 
+            diag["channels_scanned"] += 1
+            diag["messages_checked"] += channel_msgs
+            logger.debug("HuddleImport: #%s — %d messages scanned.", channel_name, channel_msgs)
+
         except Exception as e:
             err = str(e)
+            # Capture exact error string per channel for diagnosis
+            diag["channel_errors"][channel_name] = err[:200]
             if "missing_scope" in err:
-                msg = f"Missing Slack scope — add 'channels:history' to Bot Token Scopes and reinstall the app."
-                logger.warning("HuddleImport: %s Channel: %s. Error: %s", msg, channel_id, err)
-                found.append({"_scope_error": msg})  # surfaces in result for diagnosis
-                break  # no point checking other channels
+                scope_msg = (
+                    f"Missing Slack scope on #{channel_name} — "
+                    "add 'channels:history' (public) or 'groups:history' (private) "
+                    "to Bot Token Scopes and reinstall the app."
+                )
+                logger.warning("HuddleImport: %s Error: %s", scope_msg, err)
+                found.append({"_scope_error": scope_msg})
+                break
             elif "not_in_channel" in err or "channel_not_found" in err:
+                diag["channels_skipped"].append(f"{channel_name}: not_in_channel")
                 logger.debug("HuddleImport: Bot not in %s — skipping.", channel_id)
             else:
+                diag["channels_skipped"].append(f"{channel_name}: {err[:80]}")
                 logger.warning("HuddleImport: history error for %s: %s", channel_id, e)
 
-    logger.info("HuddleImport: Found %d huddle canvas(es) across all channels.", len(found))
-    return found
+    logger.info(
+        "HuddleImport: Found %d canvas(es). Scanned %d/%d channels, %d messages, "
+        "%d huddle candidates, %d threads fetched.",
+        len(found), diag["channels_scanned"], len(CHANNEL_MAP),
+        diag["messages_checked"], diag["huddle_candidates"], diag["threads_fetched"],
+    )
+    return found, diag
 
 
 async def _resolve_unknown_channel(

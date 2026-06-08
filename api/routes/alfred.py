@@ -533,6 +533,7 @@ async def trigger_huddle_import(request: Request) -> dict[str, Any]:
             "imported_count": len(result["imported"]),
             "skipped": result["skipped"],
             "errors": result["errors"],
+            "diag": result.get("diag", {}),
         }
     except Exception as e:
         logger.error("trigger_huddle_import error: %s", e, exc_info=True)
