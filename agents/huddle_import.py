@@ -110,7 +110,8 @@ async def run_huddle_import(
 
     for file in files:
         canvas_id = file.get("id", "")
-        name = file.get("name") or file.get("title") or ""
+        # Try title (raw) before name (sanitized) — title preserves original chars
+        name = file.get("title") or file.get("name") or ""
 
         parsed_title = _parse_huddle_title(name)
         if not parsed_title:
@@ -184,22 +185,33 @@ async def run_huddle_import(
 
 async def _search_huddle_files(slack_client: Any) -> list[dict] | None:
     """
-    Find huddle canvas files by scanning recent history in every known channel.
+    Find huddle canvas files by scanning channel history and thread replies.
 
-    search.files is unreliable with bot tokens — it was built for user tokens
-    and frequently returns nothing even when the bot is in the channel.
-    conversations.history is the reliable alternative: the bot reads the last
-    7 days of messages in each channel and extracts any file attachments whose
-    name contains "huddle notes".
+    Bot tokens don't receive the `files` array on Slackbot huddle messages via
+    conversations.history. The reliable signal is the thread reply Slackbot
+    posts when the canvas is ready: "AI huddle notes are ready... View AI Notes"
+    with the file ID embedded in the link as /docs/TEAM_ID/FILE_ID.
 
-    Requires channels:history scope (already granted via message.channels event
-    subscription).
+    Strategy:
+      1. Scan each channel's history for the last 7 days.
+      2. For any Slackbot message that has thread replies, fetch those replies.
+      3. In the replies, look for the "huddle notes are ready" notification and
+         extract the file ID from the /docs/ URL.
+      4. Fetch the full file object via files.info.
+
+    Fallback: also check msg["files"] directly in case Slack ever returns them.
+
+    Requires: channels:history (have it), files:read (have it).
     """
     import time
 
     oldest = str(time.time() - 7 * 24 * 3600)  # 7 days back
     found: list[dict] = []
     seen_ids: set[str] = set()
+
+    # Regex to extract file ID from Slack canvas URL in thread reply text:
+    # <https://workspace.slack.com/docs/TEAM_ID/FILE_ID|View AI Notes>
+    _CANVAS_LINK_RE = re.compile(r"/docs/[A-Z0-9]+/([A-Z0-9]+)", re.IGNORECASE)
 
     for channel_id in CHANNEL_MAP:
         try:
@@ -209,32 +221,82 @@ async def _search_huddle_files(slack_client: Any) -> list[dict] | None:
                 if cursor:
                     kwargs["cursor"] = cursor
                 resp = await slack_client.conversations_history(**kwargs)
+
                 for msg in resp.get("messages", []):
+                    # Fallback: direct files array (works for some bot token configs)
                     for f in msg.get("files", []):
                         fid = f.get("id", "")
                         name = (f.get("name") or f.get("title") or "").lower()
                         if fid and fid not in seen_ids and "huddle" in name:
                             found.append(f)
                             seen_ids.add(fid)
-                # Pagination
+                            logger.debug("HuddleImport: Found via files[]: %s", fid)
+
+                    # Primary: Slackbot messages with thread replies may be huddle threads
+                    is_slackbot = (
+                        msg.get("user") == "USLACKBOT"
+                        or (msg.get("bot_profile") or {}).get("name", "").lower() == "slackbot"
+                    )
+                    has_replies = msg.get("reply_count", 0) > 0
+                    if not (is_slackbot and has_replies):
+                        continue
+
+                    # Fetch thread replies to find the canvas-ready notification
+                    thread_ts = msg.get("ts", "")
+                    try:
+                        t_resp = await slack_client.conversations_replies(
+                            channel=channel_id, ts=thread_ts, limit=20,
+                        )
+                        for reply in t_resp.get("messages", [])[1:]:  # skip parent
+                            reply_text = reply.get("text", "")
+                            if "huddle notes" not in reply_text.lower():
+                                continue
+                            m = _CANVAS_LINK_RE.search(reply_text)
+                            if not m:
+                                continue
+                            fid = m.group(1).upper()
+                            if fid in seen_ids:
+                                continue
+                            # Fetch the full file object
+                            try:
+                                fi_resp = await slack_client.files_info(file=fid)
+                                f = fi_resp.get("file") or {}
+                                if f:
+                                    found.append(f)
+                                    seen_ids.add(fid)
+                                    logger.debug(
+                                        "HuddleImport: Found via thread reply: %s in %s",
+                                        fid, channel_id,
+                                    )
+                            except Exception as fe:
+                                logger.warning(
+                                    "HuddleImport: files_info failed for %s: %s", fid, fe
+                                )
+                    except Exception as te:
+                        logger.debug(
+                            "HuddleImport: thread fetch failed %s/%s: %s",
+                            channel_id, thread_ts, te,
+                        )
+
                 meta = resp.get("response_metadata") or {}
                 cursor = meta.get("next_cursor")
                 if not cursor:
                     break
+
         except Exception as e:
             err = str(e)
             if "missing_scope" in err:
                 logger.warning(
-                    "HuddleImport: conversations_history missing scope for %s — "
+                    "HuddleImport: missing scope for channel %s — "
                     "ensure channels:history is in Bot Token Scopes. Error: %s",
                     channel_id, err,
                 )
             elif "not_in_channel" in err or "channel_not_found" in err:
-                logger.debug("HuddleImport: Bot not in channel %s — skipping.", channel_id)
+                logger.debug("HuddleImport: Bot not in %s — skipping.", channel_id)
             else:
                 logger.warning("HuddleImport: history error for %s: %s", channel_id, e)
 
-    logger.info("HuddleImport: Found %d huddle file(s) across all channels.", len(found))
+    logger.info("HuddleImport: Found %d huddle canvas(es) across all channels.", len(found))
     return found
 
 
@@ -305,21 +367,45 @@ def _parse_huddle_title(name: str) -> tuple[str, str] | None:
     """
     Parse a Slack huddle file name to (YYYY-MM-DD, channel_id).
 
-    Handles: "Huddle notes: 6/6/26 in <#C0AA65K626B>"
-             "Huddle notes: 12/31/2025 in <#C0AA65K626B>"
-    Returns None if the name doesn't match the expected format.
+    Handles two formats returned by the Slack API:
+      Raw title:       "Huddle notes: 6/6/26 in <#C0AA65K626B>"
+      Sanitized name:  "_headphones__Huddle_notes__6_8_26_in___C09GT3XBKD0_"
+                       (Slack replaces special chars with underscores in the
+                        file.name field; the title field keeps the original)
+
+    Checks file.title first (via the `title` key), falls back to reconstructing
+    from the sanitized name by treating it as the raw string.
+    Returns None if no recognisable date + channel ID can be extracted.
     """
+    # Try the raw format first (works when file.title is the original string)
     m = _TITLE_RE.search(name)
-    if not m:
-        return None
-    date_str, channel_id = m.group(1), m.group(2)
-    try:
-        # Handles both 2-digit (26) and 4-digit (2026) years
-        fmt = "%m/%d/%y" if len(date_str.split("/")[-1]) <= 2 else "%m/%d/%Y"
-        dt = datetime.strptime(date_str, fmt)
-        return dt.strftime("%Y-%m-%d"), channel_id
-    except ValueError:
-        return None
+    if m:
+        date_str, channel_id = m.group(1), m.group(2)
+        try:
+            fmt = "%m/%d/%y" if len(date_str.split("/")[-1]) <= 2 else "%m/%d/%Y"
+            dt = datetime.strptime(date_str, fmt)
+            return dt.strftime("%Y-%m-%d"), channel_id
+        except ValueError:
+            return None
+
+    # Sanitized fallback: "_headphones__Huddle_notes__6_8_26_in___C09GT3XBKD0_"
+    # Extract date (digits separated by underscores where slashes were) and channel ID
+    # Pattern: ..._M_D_YY_in___CHANNEL_ID_
+    san = re.search(
+        r"[Hh]uddle[_\s][Nn]otes[_\s]+(\d{1,2})[_/](\d{1,2})[_/](\d{2,4})[_\s]+in[_\s]+([A-Z0-9]{9,12})",
+        name,
+    )
+    if san:
+        month, day, year, channel_id = san.group(1), san.group(2), san.group(3), san.group(4)
+        date_str = f"{month}/{day}/{year}"
+        try:
+            fmt = "%m/%d/%y" if len(year) <= 2 else "%m/%d/%Y"
+            dt = datetime.strptime(date_str, fmt)
+            return dt.strftime("%Y-%m-%d"), channel_id
+        except ValueError:
+            pass
+
+    return None
 
 
 def _resolve_users(text: str, extra_map: dict[str, str] | None = None) -> str:
