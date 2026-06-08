@@ -23,6 +23,83 @@
   <title>KLG · Skills OS · V2.4 — California Appellate Workflow Navigator</title>
   <meta name="description" content="KLG AI Operating System — Alfred executive assistant and Bloodhound surveillance engine for Kowal Law Group appellate practice.">
   <link rel="stylesheet" href="/static/style.css">
+  <style>
+    /* ── Activity Log workspace ───────────────────────────────────────── */
+    #workspace-activity { display:flex; flex-direction:column; height:100%; overflow:hidden; }
+    .activity-layout {
+      display:flex; flex-direction:column; height:100%;
+      max-width:860px; width:100%; margin:0 auto;
+      padding:0 20px; box-sizing:border-box;
+    }
+    .activity-header {
+      display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+      padding:12px 0; border-bottom:1px solid var(--border); flex-shrink:0;
+    }
+    .activity-title {
+      font-size:11px; font-weight:700; letter-spacing:0.08em;
+      text-transform:uppercase; color:var(--text-primary); white-space:nowrap;
+    }
+    .activity-filters { display:flex; gap:4px; flex:1; flex-wrap:wrap; }
+    .act-filter {
+      padding:3px 10px; border-radius:var(--radius); border:1px solid var(--border);
+      background:transparent; color:var(--text-muted); font-size:10px;
+      font-family:var(--font-sans); cursor:pointer; transition:all 0.15s;
+      letter-spacing:0.04em;
+    }
+    .act-filter:hover, .act-filter.active {
+      background:var(--accent-dim); color:var(--accent); border-color:var(--accent);
+    }
+    #activity-days {
+      padding:3px 8px; background:var(--bg-input); border:1px solid var(--border);
+      border-radius:var(--radius); color:var(--text-secondary);
+      font-size:10px; font-family:var(--font-sans); cursor:pointer;
+    }
+    .activity-meta-bar {
+      font-size:10px; color:var(--text-dim); padding:5px 0 0; flex-shrink:0;
+    }
+    .activity-feed { flex:1; overflow-y:auto; padding:4px 0 32px; }
+    .act-entry {
+      display:flex; gap:11px; padding:11px 0;
+      border-bottom:1px solid var(--border); align-items:flex-start;
+    }
+    .act-entry:last-child { border-bottom:none; }
+    .act-avatar {
+      width:30px; height:30px; border-radius:50%; flex-shrink:0; margin-top:1px;
+      display:flex; align-items:center; justify-content:center;
+      font-size:12px; font-weight:700;
+      background:var(--bg-input); border:1px solid var(--border); color:var(--text-secondary);
+    }
+    .act-avatar.alfred   { background:var(--accent-dim); color:var(--accent); border-color:var(--accent); }
+    .act-avatar.bloodhound { background:rgba(239,68,68,.1); color:#ef4444; border-color:rgba(239,68,68,.3); }
+    .act-avatar.huddle   { background:rgba(16,185,129,.1); color:#10b981; border-color:rgba(16,185,129,.25); }
+    .act-body { flex:1; min-width:0; }
+    .act-row  { display:flex; align-items:baseline; gap:8px; margin-bottom:2px; }
+    .act-name {
+      font-size:12px; font-weight:600; color:var(--text-primary);
+      flex:1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+    }
+    .act-ts { font-size:10px; color:var(--text-dim); white-space:nowrap; flex-shrink:0; }
+    .act-msg {
+      font-size:11px; color:var(--text-secondary); line-height:1.5;
+      overflow:hidden; display:-webkit-box;
+      -webkit-line-clamp:2; -webkit-box-orient:vertical; margin-bottom:3px;
+    }
+    .act-badges { display:flex; flex-wrap:wrap; gap:4px; margin-top:3px; }
+    .act-badge {
+      display:inline-block; padding:1px 7px; border-radius:999px;
+      font-size:9px; letter-spacing:0.03em;
+      background:var(--bg-input); border:1px solid var(--border); color:var(--text-muted);
+      text-transform:uppercase;
+    }
+    .act-badge.model {
+      background:var(--accent-dim); border-color:transparent; color:var(--accent);
+      text-transform:none;
+    }
+    @media (max-width:600px) {
+      .activity-filters { order:3; width:100%; }
+      .activity-layout { padding:0 12px; }
+    }
+  </style>
 </head>
 <body>
 
@@ -47,6 +124,9 @@
     </button>
     <button class="workspace-tab" id="tab-casefile" onclick="switchWorkspace('casefile')">
       <span class="tab-long">Case Files</span><span class="tab-short">Cases</span>
+    </button>
+    <button class="workspace-tab" id="tab-activity" onclick="switchWorkspace('activity')">
+      <span class="tab-long">Activity Log</span><span class="tab-short">Log</span>
     </button>
   </div>
 
@@ -426,6 +506,34 @@
       </div>
 
     </main>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════════════════════
+     WORKSPACE 4 — ACTIVITY LOG
+════════════════════════════════════════════════════════════════════════ -->
+<div class="workspace" id="workspace-activity">
+  <div class="activity-layout">
+    <div class="activity-header">
+      <div class="activity-title">Activity Log</div>
+      <div class="activity-filters" id="activity-filters">
+        <button class="act-filter active" data-type="all" onclick="filterActivity('all')">All</button>
+        <button class="act-filter" data-type="chat" onclick="filterActivity('chat')">Chats</button>
+        <button class="act-filter" data-type="huddle" onclick="filterActivity('huddle')">Huddles</button>
+        <button class="act-filter" data-type="other" onclick="filterActivity('other')">Other</button>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <select id="activity-days" onchange="loadActivity()">
+          <option value="7">7 days</option>
+          <option value="14" selected>14 days</option>
+          <option value="30">30 days</option>
+          <option value="60">60 days</option>
+        </select>
+        <button class="sidebar-refresh-btn" onclick="loadActivity()" title="Refresh">↺</button>
+      </div>
+    </div>
+    <div class="activity-meta-bar" id="activity-count"></div>
+    <div class="activity-feed" id="activity-feed"></div>
   </div>
 </div>
 
@@ -895,6 +1003,105 @@ function switchWorkspace(name) {
 
   document.querySelectorAll('.workspace-tab').forEach(t => t.classList.remove('active'));
   document.getElementById(`tab-${name}`).classList.add('active');
+
+  if (name === 'activity' && !activityLoaded) loadActivity();
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ACTIVITY LOG
+// ═══════════════════════════════════════════════════════════════════════════
+
+let activityEntries = [];
+let activityFilter  = 'all';
+let activityLoaded  = false;
+
+async function loadActivity() {
+  const days = document.getElementById('activity-days')?.value || 14;
+  const feed  = document.getElementById('activity-feed');
+  const count = document.getElementById('activity-count');
+  if (feed)  feed.innerHTML  = '<div style="color:var(--text-dim);font-size:11px;padding:12px 0;">Loading…</div>';
+  if (count) count.textContent = '';
+  try {
+    const creds = localStorage.getItem('klg_auth');
+    const headers = creds ? { Authorization: `Basic ${creds}` } : {};
+    const res = await fetch(`/alfred/activity?days=${days}`, { headers });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    activityEntries = data.entries || [];
+    activityLoaded  = true;
+    if (count) count.textContent = `${activityEntries.length} entr${activityEntries.length === 1 ? 'y' : 'ies'} · last ${days} days`;
+    renderActivityFeed();
+  } catch (e) {
+    if (feed) feed.innerHTML = `<div style="color:var(--text-dim);font-size:11px;padding:12px 0;">Could not load activity: ${e.message}</div>`;
+  }
+}
+
+function filterActivity(type) {
+  activityFilter = type;
+  document.querySelectorAll('.act-filter').forEach(b => b.classList.toggle('active', b.dataset.type === type));
+  renderActivityFeed();
+}
+
+function renderActivityFeed() {
+  const feed = document.getElementById('activity-feed');
+  if (!feed) return;
+  const visible = activityFilter === 'all'
+    ? activityEntries
+    : activityEntries.filter(e => e.type === activityFilter);
+  if (!visible.length) {
+    feed.innerHTML = '<div style="color:var(--text-dim);font-size:11px;padding:16px 0;">No entries.</div>';
+    return;
+  }
+  feed.innerHTML = visible.map(renderActivityEntry).join('');
+}
+
+function renderActivityEntry(e) {
+  const avatarClass = e.agent === 'bloodhound' ? 'bloodhound' : e.type === 'huddle' ? 'huddle' : 'alfred';
+  const avatarLabel = e.type === 'huddle' ? '🎙' : e.agent === 'bloodhound' ? 'B' : 'A';
+  const nameDisplay = e.type === 'huddle'
+    ? (e.name || 'Huddle')
+    : e.user ? `${e.user} → ${e.agent || 'alfred'}` : (e.name || '—');
+  const msgText = e.type === 'huddle'
+    ? (e.response_summary || '')
+    : (e.message || '');
+  const timeStr  = e.type === 'huddle' && e.meeting_date
+    ? e.meeting_date
+    : formatActivityTime(e.created_time);
+  const badges = [
+    ...(e.tools || []).map(t => `<span class="act-badge">${escHtml(t)}</span>`),
+    e.model ? `<span class="act-badge model">${escHtml(e.model)}</span>` : '',
+  ].filter(Boolean).join('');
+  return `
+    <div class="act-entry">
+      <div class="act-avatar ${avatarClass}">${avatarLabel}</div>
+      <div class="act-body">
+        <div class="act-row">
+          <span class="act-name">${escHtml(nameDisplay)}</span>
+          <span class="act-ts">${escHtml(timeStr)}</span>
+        </div>
+        ${msgText ? `<div class="act-msg">${escHtml(msgText)}</div>` : ''}
+        ${badges ? `<div class="act-badges">${badges}</div>` : ''}
+      </div>
+    </div>`;
+}
+
+function formatActivityTime(iso) {
+  if (!iso) return '';
+  try {
+    const d = new Date(iso);
+    const now = new Date();
+    const diffMs = now - d;
+    const diffH  = diffMs / 3600000;
+    if (diffH < 1)  return `${Math.max(1, Math.round(diffMs / 60000))}m ago`;
+    if (diffH < 24) return `${Math.round(diffH)}h ago`;
+    const diffD = Math.floor(diffH / 24);
+    if (diffD < 7)  return `${diffD}d ago`;
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  } catch { return iso.slice(0, 10); }
+}
+
+function escHtml(str) {
+  return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
