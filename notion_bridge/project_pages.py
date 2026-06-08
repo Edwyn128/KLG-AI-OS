@@ -45,6 +45,7 @@ USAGE
 from __future__ import annotations
 
 import logging
+import re
 from datetime import date, timedelta
 from typing import Any
 
@@ -98,19 +99,34 @@ class ProjectPages:
         results = await self._bridge.search(name, filter_type="page")
 
         if not results:
-            logger.info("find_matter('%s'): no results found", name)
+            # Keyword fallback: decompose the name and try each significant word,
+            # starting from the last (most likely to be a surname or unique identifier).
+            # Handles cases like "Judge Altman" → tries "Altman" alone, or
+            # "FedSoc Altman event" → tries "Altman", "FedSoc" in turn.
+            keywords = [
+                w for w in re.split(r"\W+", name)
+                if len(w) >= 4
+            ]
+            for word in reversed(keywords):
+                fallback = await self._bridge.search(word, filter_type="page")
+                if fallback:
+                    logger.info(
+                        "find_matter('%s'): full-name search empty, found via keyword '%s'",
+                        name, word,
+                    )
+                    results = fallback
+                    break
+
+        if not results:
+            logger.info("find_matter('%s'): no results found after keyword fallback", name)
             return None
 
         if len(results) > 1:
             logger.warning(
-                "find_matter('%s'): %d results found, returning most recently edited. "
-                "Consider using a more specific name.",
-                name,
-                len(results),
+                "find_matter('%s'): %d results found, returning most recently edited.",
+                name, len(results),
             )
 
-        # Results are sorted by relevance by Notion's search engine.
-        # Take the first one (most relevant match).
         return results[0]
 
     async def get_matter_summary(self, page_id: str) -> str:

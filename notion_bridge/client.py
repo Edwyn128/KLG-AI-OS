@@ -393,6 +393,28 @@ class NotionBridge:
         response = await self._client.blocks.children.list(block_id=page_id)
         return blocks_to_text(response.get("results", []))
 
+    async def get_page_snippet(self, page_id: str, max_chars: int = 220) -> str:
+        """
+        Return a short preview of a page's body — first few blocks only.
+
+        Used by search_notion to enrich results so Alfred can judge relevance
+        without fetching the full page. Intentionally lightweight: fetches at
+        most 6 blocks and silently returns "" on any error.
+        """
+        try:
+            response = await self._client.blocks.children.list(
+                block_id=page_id, page_size=6
+            )
+            parts = []
+            for block in response.get("results", []):
+                btype = block.get("type", "")
+                rich = block.get(btype, {}).get("rich_text", [])
+                for rt in rich:
+                    parts.append(rt.get("plain_text", ""))
+            return " ".join(parts)[:max_chars].strip()
+        except Exception:
+            return ""
+
     @_notion_retry
     async def append_block(self, page_id: str, text: str) -> None:
         """

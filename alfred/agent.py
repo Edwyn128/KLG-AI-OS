@@ -59,6 +59,7 @@ USAGE
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -208,6 +209,37 @@ HOW YOU COMMUNICATE
   moved forward.
 - You speak as one trusted colleague to another — not as a chatbot
   announcing its capabilities.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SEARCH STRATEGY — READ THIS BEFORE EVERY NOTION LOOKUP
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Never stop at one search attempt. If the first search returns nothing
+useful, you are required to try at least two more approaches before
+telling the user you couldn't find it.
+
+NAMES: When searching for a person, the page title almost certainly
+uses their full name, not their title. Drop honorifics. "Judge Altman"
+→ search "Altman", then "Roy Altman". "Professor Smith" → "Smith".
+
+PHRASES: Long queries compete against themselves. "Judge Altman
+Federalist Society event" may rank FedSoc pages above Altman. Break
+it: search "Altman" first, then "FedSoc" separately, then combine.
+
+CONTENT VS TITLE: A page titled "FedSoc Event — July" may be exactly
+what the user wants even though the name isn't in the title. The
+search results include content previews — read them before concluding
+a page is irrelevant.
+
+RELATED CONCEPTS: If searching for the person fails, search for the
+organization, event type, or date. "Federalist Society", "FedSoc",
+the month, the court — any anchor that might appear on the page.
+
+MINIMUM SEARCH PROTOCOL for any person or event query:
+  1. Full query as stated
+  2. Last name only (or most distinctive single word)
+  3. Organization or event type if still nothing
+  Only report "not found" after all three attempts return nothing.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 CONSTRAINTS
@@ -488,20 +520,58 @@ async def search_notion(
         A list of matching pages with their titles and Notion URLs.
         Returns "No results found" if nothing matches.
     """
-    results = await ctx.deps.bridge.search(query)
+    # Words that carry no search signal — don't bother searching these alone.
+    _STOP = {
+        "when", "what", "where", "which", "with", "that", "this", "have",
+        "from", "about", "event", "judge", "society", "the", "and", "for",
+        "will", "been", "does", "their", "there", "then", "than", "some",
+    }
+
+    seen_ids: set[str] = set()
+    results: list[dict] = []
+
+    def _add(rows: list[dict]) -> None:
+        for r in rows:
+            pid = r.get("id", "")
+            if pid not in seen_ids:
+                results.append(r)
+                seen_ids.add(pid)
+
+    # Round 1 — full query
+    _add(await ctx.deps.bridge.search(query))
+
+    # Round 2 — if nothing found, try each significant keyword individually.
+    # This catches hyphenated titles ("Roy-Altman"), partial-name pages, and
+    # cases where a multi-word query deprioritises the most distinctive term.
+    if not results:
+        keywords = [
+            w for w in re.split(r"\W+", query)
+            if len(w) >= 4 and w.lower() not in _STOP
+        ]
+        for kw in keywords:
+            _add(await ctx.deps.bridge.search(kw))
 
     if not results:
-        return f"No Notion pages found matching '{query}'."
+        return (
+            f"No Notion pages found for '{query}' or its keywords. "
+            f"The page may not be connected to the KLG AI OS integration — "
+            f"open the page in Notion, click '...' → Connections, and add the integration."
+        )
 
+    # Enrich top results with a content snippet so Alfred can judge relevance
+    # without opening every page.
     lines = [f"Notion search results for '{query}' ({len(results)} found):\n"]
-    for r in results[:10]:  # Cap at 10 to keep response readable
+    for r in results[:12]:
         title = r.get("Project name") or r.get("title") or "(Untitled)"
-        url = r.get("url", "")
-        edited = r.get("last_edited_time", "")[:10]  # Just the date part
-        lines.append(f"  • {title}\n    {url}\n    Last edited: {edited}")
+        url   = r.get("url", "")
+        edited = r.get("last_edited_time", "")[:10]
+        page_id = r.get("id", "")
+        snippet = await ctx.deps.bridge.get_page_snippet(page_id) if page_id else ""
+        snippet_line = f"\n    Preview: {snippet}" if snippet else ""
+        lines.append(f"  • {title}\n    {url}\n    Last edited: {edited}{snippet_line}")
 
-    if len(results) > 10:
-        lines.append(f"\n  ... and {len(results) - 10} more results.")
+    if len(results) > 12:
+        lines.append(f"\n  ... and {len(results) - 12} more results.")
 
     return "\n".join(lines)
 
