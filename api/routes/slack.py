@@ -82,14 +82,20 @@ async def receive_event(request: Request) -> JSONResponse:
         if bot_id:
             return JSONResponse({"ok": True})
 
-        # Only process app_mention and direct-message events
-        is_mention = event_type == "app_mention"
-        is_direct_message = event_type == "message" and text.lower().startswith("alfred,")
+        channel_type = event.get("channel_type", "")
 
-        if not (is_mention or is_direct_message):
+        # DMs (im): any message is addressed to Alfred — no prefix needed
+        is_dm = event_type == "message" and channel_type == "im"
+        # Channel @mention
+        is_mention = event_type == "app_mention"
+        # Channel message starting with "Alfred," (no @mention)
+        is_channel_direct = event_type == "message" and text.lower().startswith("alfred,")
+
+        if not (is_dm or is_mention or is_channel_direct):
             return JSONResponse({"ok": True})
 
         # Strip the @mention prefix so Alfred gets clean input
+        # (DMs don't have a mention prefix — _strip_mention is a no-op on clean text)
         clean_text = _strip_mention(text)
 
         if not clean_text:
