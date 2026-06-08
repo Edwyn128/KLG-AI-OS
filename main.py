@@ -232,20 +232,8 @@ async def lifespan(app: FastAPI):
     if comms_log:
         logger.info("Comms Log initialized.")
 
-    # 3. Build Alfred's dependencies — the runtime objects his tools use.
-    from alfred.agent import AlfredDependencies
-
-    app.state.alfred_deps = AlfredDependencies(
-        bridge=bridge,
-        project_pages=project_pages,
-        watch_list=watch_list,
-        sharepoint=sharepoint,
-        comms_log=comms_log,
-    )
-    logger.info("Alfred dependencies assembled.")
-
-    # 4. Initialize Slack client (if configured).
-    #    We store it on app.state even if it's None — route handlers check for None.
+    # 3. Initialize Slack client (if configured) — must happen before Alfred deps
+    #    so the slack_client reference is available when AlfredDependencies is built.
     app.state.slack_client = None
     if settings.slack_bot_token:
         from slack_sdk.web.async_client import AsyncWebClient as SlackClient
@@ -256,6 +244,19 @@ async def lifespan(app: FastAPI):
         logger.info(
             "SLACK_BOT_TOKEN not set — background agents will log to console only."
         )
+
+    # 4. Build Alfred's dependencies — the runtime objects his tools use.
+    from alfred.agent import AlfredDependencies
+
+    app.state.alfred_deps = AlfredDependencies(
+        bridge=bridge,
+        project_pages=project_pages,
+        watch_list=watch_list,
+        sharepoint=sharepoint,
+        comms_log=comms_log,
+        slack_client=app.state.slack_client,
+    )
+    logger.info("Alfred dependencies assembled.")
 
     # 5. Start the background agent scheduler.
     from agents.scheduler import create_scheduler

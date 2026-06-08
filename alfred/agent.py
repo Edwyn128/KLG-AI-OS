@@ -132,6 +132,12 @@ class AlfredDependencies:
     Optional — gracefully absent if NOTION_COMMS_LOG_DB_ID is not set.
     """
 
+    slack_client: Any | None = None
+    """
+    Slack AsyncWebClient for posting messages to channels and DMs.
+    Optional — gracefully absent if SLACK_BOT_TOKEN is not configured.
+    """
+
     conversation_history: list[dict] = field(default_factory=list)
     """
     Optional conversation history for multi-turn sessions.
@@ -184,6 +190,10 @@ read the current state, and give a direct answer — you do not guess.
 Bloodhound (your outward-facing counterpart) tracks legal landscape signals.
 When you are asked about a doctrine or opposing organization, you can query
 the Watch List to surface what Bloodhound has found.
+
+You can also send messages to Slack channels and team members. Use the
+send_slack_message tool when the team asks you to notify someone, post
+an update to a channel, or ping a colleague about a matter.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 HOW YOU COMMUNICATE
@@ -831,6 +841,57 @@ async def search_sharepoint(
         )
 
     return "\n".join(lines)
+
+
+@AlfredAgent.tool
+async def send_slack_message(
+    ctx: RunContext[AlfredDependencies],
+    channel: str,
+    message: str,
+) -> str:
+    """
+    Post a message to a Slack channel or send a direct message to a team member.
+
+    Use this when the team asks Alfred to notify someone, post an update to a
+    channel, or ping a colleague. Examples:
+      - "Alfred, let Brittney know the Petersen brief is ready for review"
+      - "Post to #case-management that Smith has a deadline on Friday"
+      - "DM Tim that the Bloodhound scan found something on supersedeas"
+
+    Args:
+        channel: The Slack channel name (e.g. "#case-management", "#alfred")
+                 or a team member's name (e.g. "Tim", "Brittney"). Channel names
+                 should include the # prefix. For DMs, use the person's first name
+                 and Alfred will resolve it to their Slack handle if possible.
+        message: The message text to send.
+
+    Returns:
+        Confirmation that the message was sent, or an error description.
+    """
+    if not ctx.deps.slack_client:
+        return (
+            "Slack is not configured on this deployment. "
+            "Set SLACK_BOT_TOKEN in Railway env vars to enable Slack messaging."
+        )
+
+    # Normalize channel — add # if missing and it looks like a channel name
+    if not channel.startswith(("#", "D", "U", "C")) and not channel.startswith("@"):
+        channel = f"#{channel}"
+
+    try:
+        response = await ctx.deps.slack_client.chat_postMessage(
+            channel=channel,
+            text=message,
+        )
+        if response.get("ok"):
+            logger.info("Alfred → Slack: sent to %s", channel)
+            return f"Message sent to {channel}."
+        else:
+            error = response.get("error", "unknown error")
+            return f"Slack returned an error: {error}."
+    except Exception as e:
+        logger.error("send_slack_message error: %s", e)
+        return f"Failed to send Slack message: {type(e).__name__}: {e}"
 
 
 @AlfredAgent.tool
