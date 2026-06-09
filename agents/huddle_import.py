@@ -40,6 +40,8 @@ CHANNEL_MAP: dict[str, tuple[str, str]] = {
     "C09H4U8GRHA": ("klg-systems-development", "https://www.notion.so/3250fc06a06c80809620c8d30818a292"),
     "C0B504U3VMZ": ("pc-portal",              "https://www.notion.so/3250fc06a06c80c29d28da7c0b81c6b8"),
 }
+# Reverse map: channel name → channel ID (used when files.list returns plain names)
+_CHANNEL_NAME_TO_ID: dict[str, str] = {v[0]: k for k, v in CHANNEL_MAP.items()}
 DEFAULT_PORTAL = "https://www.notion.so/3250fc06a06c80c29d28da7c0b81c6b8"
 REPORT_CHANNEL = "C09H4U8GRHA"  # klg-systems-development
 
@@ -55,9 +57,15 @@ USER_MAP: dict[str, str] = {
     "U09EKSVG5FZ": "Andi Kowal",
 }
 
-# Title pattern: "Huddle notes: 6/6/26 in <#C0AA65K626B>"
+# Format from message bodies/canvas text: "Huddle notes: 6/6/26 in <#C0AA65K626B>"
+# Also handles "<#ID|name>" (Slack appends display name after pipe in some contexts)
 _TITLE_RE = re.compile(
-    r"Huddle\s+notes?:\s*(\d{1,2}/\d{1,2}/\d{2,4})\s+in\s+<#([A-Z0-9]+)>",
+    r"Huddle\s+notes?:\s*(\d{1,2}/\d{1,2}/\d{2,4})\s+in\s+<#([A-Z0-9]+)(?:\|[^>]*)?>",
+    re.IGNORECASE,
+)
+# Format from files.list: "Huddle notes: 6/6/26 in #case-management" (plain channel name)
+_TITLE_NAME_RE = re.compile(
+    r"Huddle\s+notes?:\s*(\d{1,2}/\d{1,2}/\d{2,4})\s+in\s+#([\w-]+)",
     re.IGNORECASE,
 )
 # Skip phrases — huddle was too short to generate meaningful notes
@@ -131,6 +139,9 @@ async def run_huddle_import(
         if not parsed_title:
             logger.debug("HuddleImport: Skipping '%s' — doesn't match title format", name)
             result["skipped"] += 1
+            diag.setdefault("skipped_titles", [])
+            if len(diag["skipped_titles"]) < 5:
+                diag["skipped_titles"].append(name[:120])
             continue
 
         meeting_date, channel_id = parsed_title
@@ -445,7 +456,7 @@ def _parse_huddle_title(name: str) -> tuple[str, str] | None:
     from the sanitized name by treating it as the raw string.
     Returns None if no recognisable date + channel ID can be extracted.
     """
-    # Try the raw format first (works when file.title is the original string)
+    # Format 1: "<#CHANNELID>" or "<#CHANNELID|name>" — from message bodies / canvas text
     m = _TITLE_RE.search(name)
     if m:
         date_str, channel_id = m.group(1), m.group(2)
@@ -456,9 +467,19 @@ def _parse_huddle_title(name: str) -> tuple[str, str] | None:
         except ValueError:
             return None
 
-    # Sanitized fallback: "_headphones__Huddle_notes__6_8_26_in___C09GT3XBKD0_"
-    # Extract date (digits separated by underscores where slashes were) and channel ID
-    # Pattern: ..._M_D_YY_in___CHANNEL_ID_
+    # Format 2: "#channel-name" (plain text) — returned by files.list
+    m = _TITLE_NAME_RE.search(name)
+    if m:
+        date_str, ch_name = m.group(1), m.group(2).lower()
+        channel_id = _CHANNEL_NAME_TO_ID.get(ch_name, ch_name)
+        try:
+            fmt = "%m/%d/%y" if len(date_str.split("/")[-1]) <= 2 else "%m/%d/%Y"
+            dt = datetime.strptime(date_str, fmt)
+            return dt.strftime("%Y-%m-%d"), channel_id
+        except ValueError:
+            return None
+
+    # Format 3: sanitized name "_headphones__Huddle_notes__6_8_26_in___C09GT3XBKD0_"
     san = re.search(
         r"[Hh]uddle[_\s][Nn]otes[_\s]+(\d{1,2})[_/](\d{1,2})[_/](\d{2,4})[_\s]+in[_\s]+([A-Z0-9]{9,12})",
         name,
