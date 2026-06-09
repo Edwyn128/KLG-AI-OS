@@ -559,19 +559,32 @@ async def search_notion(
         )
 
     # Enrich top results with a content snippet so Alfred can judge relevance
-    # without opening every page.
+    # without opening every page. Cap at 5 and fetch concurrently to avoid
+    # sequential Notion API calls stacking up (each ~300ms → 12× = 3.6s+).
+    import asyncio as _aio
+    top = results[:5]
+
+    async def _snip(r: dict) -> str:
+        pid = r.get("id", "")
+        if not pid:
+            return ""
+        try:
+            return await ctx.deps.bridge.get_page_snippet(pid)
+        except Exception:
+            return ""
+
+    snippets = await _aio.gather(*[_snip(r) for r in top])
+
     lines = [f"Notion search results for '{query}' ({len(results)} found):\n"]
-    for r in results[:12]:
+    for r, snippet in zip(top, snippets):
         title = r.get("Project name") or r.get("title") or "(Untitled)"
         url   = r.get("url", "")
         edited = r.get("last_edited_time", "")[:10]
-        page_id = r.get("id", "")
-        snippet = await ctx.deps.bridge.get_page_snippet(page_id) if page_id else ""
         snippet_line = f"\n    Preview: {snippet}" if snippet else ""
         lines.append(f"  • {title}\n    {url}\n    Last edited: {edited}{snippet_line}")
 
-    if len(results) > 12:
-        lines.append(f"\n  ... and {len(results) - 12} more results.")
+    if len(results) > 5:
+        lines.append(f"\n  ... and {len(results) - 5} more results.")
 
     return "\n".join(lines)
 

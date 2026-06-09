@@ -193,13 +193,15 @@ async def _run_alfred_and_reply(
                 logger.debug("Slack: Could not log @mention to Notion: %s", e)
 
     except Exception as e:
+        err_type = type(e).__name__
+        err_msg = str(e)[:300]
         logger.error("Slack Alfred reply error for user %s: %s", user_id, e, exc_info=True)
         if slack_client:
             try:
                 await slack_client.chat_postMessage(
                     channel=channel,
                     text=(
-                        "Alfred encountered an error processing your request. "
+                        f"Alfred hit an error: `{err_type}: {err_msg}`\n"
                         "Try again or open the web UI directly."
                     ),
                     thread_ts=thread_ts,
