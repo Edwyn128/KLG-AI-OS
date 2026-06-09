@@ -152,7 +152,7 @@ async def run_huddle_import(
         else:
             channel_name, portal_url = await _resolve_unknown_channel(slack_client, channel_id)
 
-        # Build Notion title — detect same-day duplicates and add (PM) suffix
+        # Build Notion title — en-dash U+2013 is required; hyphen breaks duplicate check
         base_title = f"Huddle – #{channel_name} – {meeting_date}"
         notion_title = base_title
 
@@ -242,10 +242,42 @@ async def _search_huddle_files(slack_client: Any) -> tuple[list[dict] | None, di
         "threads_fetched": 0,
         "canvas_links_found": 0,
         "files_list_hits": 0,
+        "search_messages_hits": 0,
         "channel_errors": {},
     }
 
     _CANVAS_LINK_RE = re.compile(r"/docs/[A-Z0-9]+/([A-Z0-9]+)", re.IGNORECASE)
+
+    # ── Track 1: search.messages with content_types="files" (primary) ────────
+    # This is the correct Slack API for finding canvas files.
+    # content_types="files" is REQUIRED — without it, canvas results are zero.
+    # Returns titles in "<#CHANNELID>" mrkdwn format (handled by _TITLE_RE).
+    # Requires: search:read scope.
+    try:
+        s_resp = await slack_client.search_messages(
+            query="huddle",
+            content_types="files",
+            sort="timestamp",
+            sort_dir="desc",
+            count=20,
+        )
+        matches = (s_resp.get("messages") or {}).get("matches") or []
+        for match in matches:
+            for f in match.get("files", []):
+                fid = f.get("id", "")
+                title = (f.get("title") or f.get("name") or "")
+                if fid and fid not in seen_ids and "huddle" in title.lower():
+                    found.append(f)
+                    seen_ids.add(fid)
+                    diag["search_messages_hits"] += 1
+                    logger.debug("HuddleImport: Track1 search.messages: %s — %s", fid, title)
+        logger.info(
+            "HuddleImport: search.messages returned %d match(es), %d huddle file(s)",
+            len(matches), diag["search_messages_hits"],
+        )
+    except Exception as se:
+        logger.warning("HuddleImport: search.messages failed (%s) — falling back to per-channel tracks", se)
+        diag["channel_errors"]["_search_messages"] = str(se)[:200]
 
     for channel_id in CHANNEL_MAP:
         channel_name = CHANNEL_MAP[channel_id][0]
@@ -555,8 +587,12 @@ def _parse_canvas(content: str) -> dict[str, Any]:
     if m:
         result["time_range"] = m.group(1).strip()
 
-    # Transcript file ID from markdown image link: ![...](…/FXXXXXXX/…)
-    m = re.search(r"!\[[^\]]*\]\([^)]*/(F[A-Z0-9]+)[^)]*\)", content)
+    # Transcript file ID — on the LAST line of the canvas, different from canvas ID.
+    # Format: "![FXXXXXXX](https://kowallawgroup.slack.com/files/USLACKBOT/FXXXXXXX/huddle_transcript)"
+    last_line = content.strip().split("\n")[-1]
+    m = re.search(r"/(F[A-Z0-9]+)/huddle_transcript", last_line)
+    if not m:
+        m = re.search(r"!\[[^\]]*\]\([^)]*/(F[A-Z0-9]+)[^)]*\)", content)
     if m:
         result["transcript_id"] = m.group(1)
 
