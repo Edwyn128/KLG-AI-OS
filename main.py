@@ -168,6 +168,14 @@ class _BasicAuthMiddleware(BaseHTTPMiddleware):
         if path in _AUTH_EXEMPT or any(path.startswith(p) for p in _AUTH_EXEMPT_PREFIXES):
             return await call_next(request)
 
+        # Allow Railway Cron Jobs via shared secret header — no Basic Auth needed.
+        # The secret is set in Railway env vars and sent as X-Cron-Secret.
+        cron_header = request.headers.get("X-Cron-Secret", "")
+        if settings.cron_secret and cron_header and secrets.compare_digest(
+            cron_header.encode(), settings.cron_secret.encode()
+        ):
+            return await call_next(request)
+
         # Validate Basic Auth credentials
         auth_header = request.headers.get("Authorization", "")
         if auth_header.startswith("Basic "):
@@ -259,17 +267,24 @@ async def lifespan(app: FastAPI):
     logger.info("Alfred dependencies assembled.")
 
     # 5. Start the background agent scheduler.
-    from agents.scheduler import create_scheduler
-
-    scheduler = create_scheduler(
-        project_pages=project_pages,
-        slack_client=app.state.slack_client,
-        watch_list=watch_list,
-        bridge=bridge,
-    )
-    scheduler.start()
-    app.state.scheduler = scheduler
-    logger.info("Background agent scheduler started.")
+    # In production, set DISABLE_SCHEDULER=true and use Railway Cron Jobs instead.
+    # APScheduler is in-memory — it dies on every deploy and cannot be relied on
+    # for production scheduling. Railway Cron Jobs call the trigger endpoints on
+    # a durable schedule that survives deploys.
+    if settings.disable_scheduler:
+        app.state.scheduler = None
+        logger.info("Background agent scheduler disabled (DISABLE_SCHEDULER=true). Using Railway Cron Jobs.")
+    else:
+        from agents.scheduler import create_scheduler
+        scheduler = create_scheduler(
+            project_pages=project_pages,
+            slack_client=app.state.slack_client,
+            watch_list=watch_list,
+            bridge=bridge,
+        )
+        scheduler.start()
+        app.state.scheduler = scheduler
+        logger.info("Background agent scheduler started.")
 
     logger.info(
         "KLG AI OS ready. "
@@ -285,10 +300,9 @@ async def lifespan(app: FastAPI):
     # ── SHUTDOWN ──────────────────────────────────────────────────────────────
     logger.info("KLG AI OS shutting down...")
 
-    # Gracefully stop the scheduler — waits for any running jobs to complete.
-    # wait=False would kill jobs mid-run, which could leave Notion in a partial state.
-    app.state.scheduler.shutdown(wait=True)
-    logger.info("Scheduler stopped.")
+    if app.state.scheduler:
+        app.state.scheduler.shutdown(wait=True)
+        logger.info("Scheduler stopped.")
 
     logger.info("KLG AI OS shutdown complete.")
 

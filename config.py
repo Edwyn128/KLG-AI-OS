@@ -250,6 +250,21 @@ class Settings(BaseSettings):
     app_password (master) is always checked as a fallback.
     """
 
+    cron_secret: str = ""
+    """
+    Shared secret for Railway Cron Jobs. Set CRON_SECRET in Railway env vars.
+    Cron requests send 'X-Cron-Secret: <value>' — the auth middleware accepts
+    this as an alternative to Basic Auth so Railway can hit trigger endpoints
+    without embedding a username/password in the cron command.
+    """
+
+    disable_scheduler: bool = False
+    """
+    Set DISABLE_SCHEDULER=true in Railway to skip APScheduler startup.
+    All jobs are then driven by Railway Cron Jobs hitting the trigger endpoints.
+    Keep False for local dev (APScheduler is useful there).
+    """
+
     # ── Application ───────────────────────────────────────────────────────────
 
     app_host: str = "0.0.0.0"

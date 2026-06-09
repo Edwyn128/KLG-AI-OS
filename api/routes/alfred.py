@@ -604,6 +604,50 @@ async def trigger_deadline_watch(request: Request) -> dict[str, str]:
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.post(
+    "/agents/weekly-agenda",
+    summary="Manually trigger the Monday weekly agenda agent",
+)
+async def trigger_weekly_agenda(request: Request) -> dict[str, str]:
+    """Trigger the weekly agenda — posts all active matters grouped by priority to #case-management."""
+    from agents.scheduler import _run_weekly_agenda
+
+    alfred_deps = request.app.state.alfred_deps
+    slack_client = getattr(request.app.state, "slack_client", None)
+
+    try:
+        await _run_weekly_agenda(
+            project_pages=alfred_deps.project_pages,
+            slack_client=slack_client,
+        )
+        return {"status": "success", "detail": "Weekly agenda posted. See #case-management."}
+    except Exception as e:
+        logger.error("trigger_weekly_agenda error: %s", e, exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post(
+    "/agents/hygiene-scan",
+    summary="Manually trigger the weekly project hygiene scan",
+)
+async def trigger_hygiene_scan(request: Request) -> dict[str, str]:
+    """Trigger the hygiene scan — surfaces stale matters, missing dates, and owner gaps."""
+    from agents.scheduler import _run_hygiene_scan
+
+    alfred_deps = request.app.state.alfred_deps
+    slack_client = getattr(request.app.state, "slack_client", None)
+
+    try:
+        await _run_hygiene_scan(
+            project_pages=alfred_deps.project_pages,
+            slack_client=slack_client,
+        )
+        return {"status": "success", "detail": "Hygiene scan complete. See #case-management."}
+    except Exception as e:
+        logger.error("trigger_hygiene_scan error: %s", e, exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # =============================================================================
 # HELPER FUNCTIONS
 # =============================================================================
