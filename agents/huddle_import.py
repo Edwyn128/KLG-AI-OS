@@ -197,23 +197,27 @@ async def run_huddle_import(
 
 async def _search_huddle_files(slack_client: Any) -> tuple[list[dict] | None, dict]:
     """
-    Find huddle canvas files by scanning channel history and thread replies.
+    Find huddle canvas files via two parallel tracks:
 
-    Returns (found_files, diag_dict). found_files is None on total failure.
-    diag_dict contains per-channel scanning stats for troubleshooting.
+    Track 1 — files.list per channel (primary):
+        Directly queries the channel's file list for canvas files whose title
+        contains "huddle". Does not depend on message structure or reply counts.
+        Requires: files:read (already granted).
 
-    Strategy:
-      1. Scan each channel's history for the last 7 days.
-      2. For any message with thread replies that looks huddle-related, fetch replies.
-      3. Look for the "huddle notes are ready" canvas-link notification in replies.
-      4. Extract the file ID from /docs/TEAM_ID/FILE_ID and call files.info.
-    Fallback: also check msg["files"] directly.
+    Track 2 — conversations.history + thread scanning (fallback):
+        Scans recent messages for huddle-related content and checks their threads
+        for the "AI huddle notes are ready" canvas-link notification.
+        Key fix: no longer gates on reply_count > 0 — Slack omits that field on
+        system/subtype messages even when a thread reply exists, which was causing
+        every huddle message to be silently skipped.
+        Requires: channels:history or groups:history.
 
-    Requires: channels:history (public) or groups:history (private) + files:read.
+    Returns (found_files, diag_dict).
     """
     import time
 
-    oldest = str(time.time() - 7 * 24 * 3600)
+    oldest_ts = time.time() - 7 * 24 * 3600
+    oldest_str = str(oldest_ts)
     found: list[dict] = []
     seen_ids: set[str] = set()
 
@@ -224,6 +228,7 @@ async def _search_huddle_files(slack_client: Any) -> tuple[list[dict] | None, di
         "huddle_candidates": 0,
         "threads_fetched": 0,
         "canvas_links_found": 0,
+        "files_list_hits": 0,
         "channel_errors": {},
     }
 
@@ -231,11 +236,33 @@ async def _search_huddle_files(slack_client: Any) -> tuple[list[dict] | None, di
 
     for channel_id in CHANNEL_MAP:
         channel_name = CHANNEL_MAP[channel_id][0]
+
+        # ── Track 1: files.list ───────────────────────────────────────────────
+        # Directly lists canvas files shared in this channel. Much simpler than
+        # scanning message history — doesn't depend on reply_count or subtypes.
+        try:
+            fl_resp = await slack_client.files_list(
+                channel=channel_id,
+                ts_from=str(int(oldest_ts)),
+                count=50,
+            )
+            for f in fl_resp.get("files", []):
+                fid = f.get("id", "")
+                title = (f.get("title") or f.get("name") or "").lower()
+                if fid and fid not in seen_ids and "huddle" in title:
+                    found.append(f)
+                    seen_ids.add(fid)
+                    diag["files_list_hits"] += 1
+                    logger.debug("HuddleImport: Track1 files.list hit: %s (%s)", fid, title)
+        except Exception as fle:
+            logger.debug("HuddleImport: files.list failed for #%s: %s", channel_name, fle)
+
+        # ── Track 2: conversations.history + thread scanning ──────────────────
         try:
             cursor = None
             channel_msgs = 0
             while True:
-                kwargs: dict = {"channel": channel_id, "oldest": oldest, "limit": 200}
+                kwargs: dict = {"channel": channel_id, "oldest": oldest_str, "limit": 200}
                 if cursor:
                     kwargs["cursor"] = cursor
                 resp = await slack_client.conversations_history(**kwargs)
@@ -243,7 +270,7 @@ async def _search_huddle_files(slack_client: Any) -> tuple[list[dict] | None, di
                 for msg in resp.get("messages", []):
                     channel_msgs += 1
 
-                    # Fallback: direct files array
+                    # Fallback: direct files array (works on some bot token configs)
                     for f in msg.get("files", []):
                         fid = f.get("id", "")
                         name = (f.get("name") or f.get("title") or "").lower()
@@ -252,16 +279,18 @@ async def _search_huddle_files(slack_client: Any) -> tuple[list[dict] | None, di
                             seen_ids.add(fid)
                             logger.debug("HuddleImport: Found via files[]: %s", fid)
 
-                    has_replies = msg.get("reply_count", 0) > 0 or msg.get("reply_users_count", 0) > 0
                     text_lower = msg.get("text", "").lower()
                     looks_like_huddle = (
                         "huddle" in text_lower
                         or msg.get("subtype") in ("huddle_thread", "bot_message")
                         or msg.get("user") == "USLACKBOT"
                     )
-                    if not (has_replies and looks_like_huddle):
+                    if not looks_like_huddle:
                         continue
 
+                    # Always check the thread for huddle-looking messages.
+                    # Do NOT gate on reply_count — Slack omits that field on system
+                    # messages (subtype=huddle_thread etc.) even when replies exist.
                     diag["huddle_candidates"] += 1
                     thread_ts = msg.get("ts", "")
                     try:
@@ -269,7 +298,7 @@ async def _search_huddle_files(slack_client: Any) -> tuple[list[dict] | None, di
                             channel=channel_id, ts=thread_ts, limit=20,
                         )
                         diag["threads_fetched"] += 1
-                        for reply in t_resp.get("messages", [])[1:]:
+                        for reply in t_resp.get("messages", [])[1:]:  # skip parent
                             reply_text = reply.get("text", "")
                             if "huddle notes" not in reply_text.lower():
                                 continue
@@ -287,8 +316,8 @@ async def _search_huddle_files(slack_client: Any) -> tuple[list[dict] | None, di
                                     found.append(f)
                                     seen_ids.add(fid)
                                     logger.debug(
-                                        "HuddleImport: Found via thread reply: %s in %s",
-                                        fid, channel_id,
+                                        "HuddleImport: Track2 thread hit: %s in #%s",
+                                        fid, channel_name,
                                     )
                             except Exception as fe:
                                 logger.warning(
@@ -311,7 +340,6 @@ async def _search_huddle_files(slack_client: Any) -> tuple[list[dict] | None, di
 
         except Exception as e:
             err = str(e)
-            # Capture exact error string per channel for diagnosis
             diag["channel_errors"][channel_name] = err[:200]
             if "missing_scope" in err:
                 scope_msg = (
