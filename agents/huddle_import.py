@@ -87,10 +87,12 @@ async def run_huddle_import(
     result: dict[str, Any] = {"imported": [], "skipped": 0, "errors": [], "diag": {}}
 
     if not slack_client:
+        result["diag"] = {"skipped_reason": "slack_client is None — SLACK_BOT_TOKEN not set in Railway"}
         logger.info("HuddleImport: Slack not configured — skipping.")
         return result
 
     if not settings.notion_comms_log_db_id:
+        result["diag"] = {"skipped_reason": "NOTION_COMMS_LOG_DB_ID not set in Railway env vars"}
         logger.info("HuddleImport: NOTION_COMMS_LOG_DB_ID not set — skipping.")
         return result
 
