@@ -328,23 +328,27 @@ def resolve_alfred_model(model_str: str):
     so the caller can always pass ``model=resolve_alfred_model(req.model)``
     without any extra branching — None is the no-op value.
 
-    Supported prefixes:
-      ""            → None (use agent default)
-      "claude-*"    → AnthropicModel override (allows picking a specific Claude tier)
-      "gpt-*"       → OpenAIModel (requires OPENAI_API_KEY)
-      "gemini-*"    → GeminiModel (requires GOOGLE_API_KEY)
-      "sonar-*"     → Perplexity via OpenAI-compatible API (requires PERPLEXITY_API_KEY)
+    Supported identifiers:
+      ""                  → None (use agent default)
+      "claude-*"          → AnthropicModel override (specific Claude tier)
+      "extended-thinking" → None (use default Claude; pair with resolve_thinking_settings)
+      "gpt-*"             → OpenAIModel (requires OPENAI_API_KEY)
+      "gemini-*"          → GeminiModel (requires GOOGLE_API_KEY)
+      "sonar-*"           → Perplexity via OpenAI-compatible API (requires PERPLEXITY_API_KEY)
 
     Raises ValueError if the requested model's API key is not configured.
     """
     if not model_str or model_str.lower().startswith("claude"):
         if model_str and model_str != settings.alfred_model:
-            # Specific Claude tier requested — override with that version
             return AnthropicModel(
                 model_str,
                 provider=AnthropicProvider(api_key=settings.anthropic_api_key),
             )
         return None  # Use AlfredAgent's configured default
+
+    # Extended thinking uses the default Claude model — just signals thinking mode.
+    if model_str.lower() == "extended-thinking":
+        return None
 
     if model_str.lower().startswith("gpt"):
         if not settings.openai_api_key:
@@ -390,6 +394,26 @@ def resolve_alfred_model(model_str: str):
 
     logger.warning("Unknown model identifier '%s' — falling back to Claude default.", model_str)
     return None
+
+
+def resolve_thinking_settings(model_str: str):
+    """
+    Return ModelSettings with extended thinking enabled if model_str requests it.
+
+    Extended thinking makes Claude reason through the problem internally before
+    producing its response. The user sees the final answer only — thinking tokens
+    are filtered by pydantic-ai's stream_text() — but the answer is significantly
+    more considered for complex analytical tasks.
+
+    "extended-thinking" → thinking="high" (16 384 thinking tokens, max_tokens=24000)
+
+    Returns None for all other model strings (no thinking overhead).
+    """
+    if not model_str or model_str.lower() != "extended-thinking":
+        return None
+    from pydantic_ai.settings import ModelSettings
+    # "high" = 16 384 thinking token budget. max_tokens must exceed the budget.
+    return ModelSettings(thinking="high", max_tokens=24000)
 """
 The Alfred Pydantic AI agent.
 

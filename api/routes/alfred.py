@@ -171,7 +171,7 @@ async def chat_with_alfred(
     Rate limiting: Not yet implemented. Future versions should add
     rate limiting per user to prevent accidental runaway usage.
     """
-    from alfred.agent import AlfredAgent, resolve_alfred_model
+    from alfred.agent import AlfredAgent, resolve_alfred_model, resolve_thinking_settings
 
     logger.info(
         "Alfred chat from '%s' [model=%s]: %s",
@@ -182,6 +182,7 @@ async def chat_with_alfred(
         from pydantic_ai.messages import ModelMessagesTypeAdapter
 
         model_override = resolve_alfred_model(request.model)
+        thinking_settings = resolve_thinking_settings(request.model)
 
         message_history = []
         if request.history:
@@ -194,6 +195,7 @@ async def chat_with_alfred(
             request.message,
             deps=alfred_deps,
             model=model_override,
+            model_settings=thinking_settings,
             message_history=message_history,
         )
 
@@ -262,7 +264,7 @@ async def chat_with_alfred_stream(
     The frontend reads these with a fetch + ReadableStream (not EventSource,
     since EventSource does not support POST or Authorization headers).
     """
-    from alfred.agent import AlfredAgent, resolve_alfred_model
+    from alfred.agent import AlfredAgent, resolve_alfred_model, resolve_thinking_settings
     from config import settings as _settings
 
     logger.info(
@@ -274,6 +276,7 @@ async def chat_with_alfred_stream(
 
     try:
         model_override = resolve_alfred_model(request.model)
+        thinking_settings = resolve_thinking_settings(request.model)
     except ValueError as e:
         async def _err():
             yield f"data: {json.dumps({'error': str(e)})}\n\n"
@@ -303,6 +306,7 @@ async def chat_with_alfred_stream(
                 request.message,
                 deps=alfred_deps,
                 model=model_override,
+                model_settings=thinking_settings,
                 message_history=message_history,
             ) as result:
                 async for chunk in result.stream_text(delta=True):
