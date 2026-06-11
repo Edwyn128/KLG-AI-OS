@@ -18,6 +18,7 @@ Required Slack scopes (add to your Slack app if not already present):
 
 from __future__ import annotations
 
+import html
 import logging
 import re
 from datetime import date, datetime
@@ -248,36 +249,39 @@ async def _search_huddle_files(slack_client: Any) -> tuple[list[dict] | None, di
 
     _CANVAS_LINK_RE = re.compile(r"/docs/[A-Z0-9]+/([A-Z0-9]+)", re.IGNORECASE)
 
-    # ── Track 1: search.messages with content_types="files" (primary) ────────
-    # This is the correct Slack API for finding canvas files.
-    # content_types="files" is REQUIRED — without it, canvas results are zero.
-    # Returns titles in "<#CHANNELID>" mrkdwn format (handled by _TITLE_RE).
-    # Requires: search:read scope.
-    try:
-        s_resp = await slack_client.search_messages(
-            query="huddle",
-            content_types="files",
-            sort="timestamp",
-            sort_dir="desc",
-            count=20,
-        )
-        matches = (s_resp.get("messages") or {}).get("matches") or []
-        for match in matches:
-            for f in match.get("files", []):
-                fid = f.get("id", "")
-                title = (f.get("title") or f.get("name") or "")
-                if fid and fid not in seen_ids and "huddle" in title.lower():
-                    found.append(f)
-                    seen_ids.add(fid)
-                    diag["search_messages_hits"] += 1
-                    logger.debug("HuddleImport: Track1 search.messages: %s — %s", fid, title)
-        logger.info(
-            "HuddleImport: search.messages returned %d match(es), %d huddle file(s)",
-            len(matches), diag["search_messages_hits"],
-        )
-    except Exception as se:
-        logger.warning("HuddleImport: search.messages failed (%s) — falling back to per-channel tracks", se)
-        diag["channel_errors"]["_search_messages"] = str(se)[:200]
+    # ── Track 1: search.messages with content_types="files" ──────────────────
+    # search.messages requires a USER token (xoxp-) — bot tokens (xoxb-) get
+    # not_allowed_token_type, always. Skip it entirely on bot tokens; files.list
+    # below is the working track for this app's bot-token setup.
+    token = getattr(slack_client, "token", "") or ""
+    if token.startswith("xoxb-"):
+        diag["search_messages_skipped"] = "bot token — search.messages needs a user token"
+    else:
+        try:
+            s_resp = await slack_client.search_messages(
+                query="huddle",
+                content_types="files",
+                sort="timestamp",
+                sort_dir="desc",
+                count=20,
+            )
+            matches = (s_resp.get("messages") or {}).get("matches") or []
+            for match in matches:
+                for f in match.get("files", []):
+                    fid = f.get("id", "")
+                    title = (f.get("title") or f.get("name") or "")
+                    if fid and fid not in seen_ids and "huddle" in title.lower():
+                        found.append(f)
+                        seen_ids.add(fid)
+                        diag["search_messages_hits"] += 1
+                        logger.debug("HuddleImport: Track1 search.messages: %s — %s", fid, title)
+            logger.info(
+                "HuddleImport: search.messages returned %d match(es), %d huddle file(s)",
+                len(matches), diag["search_messages_hits"],
+            )
+        except Exception as se:
+            logger.warning("HuddleImport: search.messages failed (%s) — falling back to per-channel tracks", se)
+            diag["channel_errors"]["_search_messages"] = str(se)[:200]
 
     for channel_id in CHANNEL_MAP:
         channel_name = CHANNEL_MAP[channel_id][0]
@@ -488,6 +492,11 @@ def _parse_huddle_title(name: str) -> tuple[str, str] | None:
     from the sanitized name by treating it as the raw string.
     Returns None if no recognisable date + channel ID can be extracted.
     """
+    # Slack HTML-escapes file titles in API responses: files.list returns
+    # "Huddle notes: 5/15/26 in &lt;#C07Q5784258&gt;". Unescape before matching —
+    # without this, every canvas fails the title regexes and import finds nothing.
+    name = html.unescape(name)
+
     # Format 1: "<#CHANNELID>" or "<#CHANNELID|name>" — from message bodies / canvas text
     m = _TITLE_RE.search(name)
     if m:
