@@ -682,17 +682,15 @@ async def _create_notion_entry(
         "Summary": {"rich_text": [{"text": {"content": actions_summary}}]},
     }
 
-    # These properties exist on the Comms Log DB per the original skill spec.
-    # Wrapped individually so a property name mismatch only skips that one field.
-    try:
-        properties["Comm Date"] = {"date": {"start": meeting_date}}
-    except Exception:
-        pass
+    # Comms Log schema (verified against the live DB and its 94 existing huddle
+    # entries): "Comm Date" is a RICH_TEXT property (not date) and "Team Portal"
+    # is a RELATION (not url). Sending date/url payloads makes Notion reject the
+    # whole create with a validation error — which silently zeroed every import.
+    properties["Comm Date"] = {"rich_text": [{"text": {"content": meeting_date}}]}
 
-    try:
-        properties["Team Portal"] = {"url": portal_url}
-    except Exception:
-        pass
+    portal_page_id = _portal_page_id(portal_url)
+    if portal_page_id:
+        properties["Team Portal"] = {"relation": [{"id": portal_page_id}]}
 
     # ── Page body blocks ────────────────────────────────────────────────────────
     blocks: list[dict] = []
@@ -739,12 +737,58 @@ async def _create_notion_entry(
     else:
         blocks.append(_paragraph("No transcript link found in canvas."))
 
-    # Notion's create_page API accepts max 100 blocks per request
-    await bridge.create_page(
-        database_id=settings.notion_comms_log_db_id,
-        properties=properties,
-        children=blocks[:100],
-    )
+    # Notion's create_page API accepts max 100 blocks per request.
+    # If the full property set is rejected (schema drift), retry with the
+    # minimal set so one renamed property can't zero the whole import again.
+    try:
+        await bridge.create_page(
+            database_id=settings.notion_comms_log_db_id,
+            properties=properties,
+            children=blocks[:100],
+        )
+    except Exception as first_err:
+        # Most likely failure: the Team Portal page isn't shared with the
+        # integration (ObjectNotFound on the relation). Drop the relation but
+        # keep everything else before falling all the way back to Name+Summary.
+        logger.warning(
+            "HuddleImport: create_page rejected for '%s' (%s) — retrying without Team Portal",
+            title, first_err,
+        )
+        without_portal = {k: v for k, v in properties.items() if k != "Team Portal"}
+        try:
+            await bridge.create_page(
+                database_id=settings.notion_comms_log_db_id,
+                properties=without_portal,
+                children=blocks[:100],
+            )
+        except Exception as second_err:
+            logger.warning(
+                "HuddleImport: still rejected for '%s' (%s) — retrying with minimal properties",
+                title, second_err,
+            )
+            minimal = {
+                "Name": properties["Name"],
+                "Summary": properties["Summary"],
+            }
+            await bridge.create_page(
+                database_id=settings.notion_comms_log_db_id,
+                properties=minimal,
+                children=blocks[:100],
+            )
+
+
+def _portal_page_id(portal_url: str) -> str | None:
+    """Extract the Notion page ID from a portal URL as a dashed UUID.
+
+    "https://www.notion.so/3250fc06a06c80c29d28da7c0b81c6b8"
+        → "3250fc06-a06c-80c2-9d28-da7c0b81c6b8"
+    The Team Portal relation needs the page ID, not the URL.
+    """
+    m = re.search(r"([0-9a-f]{32})", portal_url)
+    if not m:
+        return None
+    h = m.group(1)
+    return f"{h[0:8]}-{h[8:12]}-{h[12:16]}-{h[16:20]}-{h[20:32]}"
 
 
 # ── Notion block constructors ─────────────────────────────────────────────────
