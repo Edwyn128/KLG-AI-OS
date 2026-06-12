@@ -63,7 +63,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Any
 
-from pydantic_ai import Agent, RunContext
+from pydantic_ai import Agent, ModelRetry, RunContext
 from pydantic_ai.models.anthropic import AnthropicModel
 from pydantic_ai.providers.anthropic import AnthropicProvider
 
@@ -211,6 +211,31 @@ HOW YOU COMMUNICATE
   announcing its capabilities.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+HOW YOU REASON
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Before answering anything non-trivial, think it through. Break the
+request into what the user actually needs, decide which tools will get
+you there, and plan the sequence before calling them. When tool results
+come back, weigh them against the question—if they only partially
+answer it, dig further instead of presenting partial findings as if
+they were complete.
+
+Reason like a colleague, not a script. Connect facts across matters and
+tools: if a deadline lands while the owner is out, say so; if two
+matters share an issue Bloodhound is tracking, surface the link. State
+the implication, not just the data.
+
+If a request is ambiguous, make the most reasonable reading, act on it,
+and note the assumption in one line. Do not interrogate the user with
+clarifying questions for routine asks—reserve questions for genuinely
+consequential forks (destructive changes, conflicting instructions).
+
+After acting, sanity-check your own answer: does it actually resolve
+what was asked? Did you verify rather than assume? If you are not
+confident, say what you are unsure about rather than papering over it.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 SEARCH STRATEGY — READ THIS BEFORE EVERY NOTION LOOKUP
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -254,6 +279,13 @@ CONSTRAINTS
   fact. "Do you want me to check Notion?" is not acceptable when you
   could have already checked. Alfred's value is in having already
   looked, not in asking permission to look.
+- FINISH THE WORK IN THIS TURN: Never end your response by announcing
+  what you are about to do. "Let me find that in Notion" or "I'll pull
+  the matter now" is not an answer — it is a stall. You cannot do
+  anything after your response ends; there is no background process
+  that continues your work. Call the tools NOW, then respond with what
+  you found or changed. The only acceptable future-tense ending is a
+  question the user must answer before you can safely proceed.
 - Prefer to confirm before making structural changes to a project page.
   Routine updates (adding a log note, updating status) can proceed;
   major structural changes (deleting content, restructuring milestones)
@@ -315,7 +347,72 @@ AlfredAgent: Agent[AlfredDependencies, str] = Agent(
     system_prompt=_ALFRED_SYSTEM_PROMPT,
     deps_type=AlfredDependencies,
     output_type=str,
+    # Allow the stalled-promise validator below to force up to two
+    # continuations before giving up and returning the text as-is.
+    output_retries=2,
 )
+
+
+# ── Stalled-promise guard ─────────────────────────────────────────────────────
+#
+# A plain-text model response ENDS a pydantic-ai run. When the model answers
+# "Let me find that in Notion…" instead of calling a tool, that promise becomes
+# Alfred's final message and the work never happens — the exact "he says he'll
+# look and then stops" failure. This validator detects promise-only responses
+# and raises ModelRetry, which sends the run back to the model so it actually
+# executes the tools it announced.
+
+_PROMISE_RE = re.compile(
+    r"\b(?:"
+    r"let me (?!know\b)"                      # "let me check/find/pull…" but not "let me know"
+    r"|i(?:'|’)?ll (?:search|check|look|find|pull|grab|get|fetch|query|dig|update|create|add|start|go)"
+    r"|i (?:will|am going to|can go)\s"
+    r"|i(?:'|’)?m (?:going to|now going|about to)"
+    r"|one (?:moment|second|sec)\b"
+    r"|give me a (?:moment|minute|second|sec)"
+    r"|hold on\b|stand by\b|bear with me"
+    r"|(?:searching|checking|looking|pulling|querying) (?:notion|now|for|into)"
+    r")",
+    re.IGNORECASE,
+)
+
+# A genuine answer that merely closes with "let me know if…" is long; a stalled
+# promise ("Sure — let me pull up the Petersen page.") is short. The length
+# gate keeps completed answers from being retried.
+_PROMISE_MAX_LEN = 400
+
+
+def _looks_like_stalled_promise(text: str) -> bool:
+    """True when a final response announces work instead of containing it."""
+    stripped = (text or "").strip()
+    if not stripped or len(stripped) > _PROMISE_MAX_LEN:
+        return False
+    if stripped.endswith("?"):
+        return False  # a question back to the user is a legitimate turn end
+    return bool(_PROMISE_RE.search(stripped))
+
+
+@AlfredAgent.output_validator
+async def _no_stalled_promises(
+    ctx: RunContext[AlfredDependencies], output: str
+) -> str:
+    # Streaming validates partial chunks too ("Let me" may be the start of a
+    # fine sentence) — only judge the complete final text.
+    if ctx.partial_output:
+        return output
+    if _looks_like_stalled_promise(output):
+        logger.info(
+            "Alfred: stalled-promise response detected — forcing continuation. "
+            "Response was: %r", output[:120],
+        )
+        raise ModelRetry(
+            "You announced work instead of doing it. Your turn is the ONLY "
+            "chance to act — nothing runs after your response ends. Call the "
+            "tools you need right now (search Notion, read the page, make the "
+            "update), then reply with the actual findings or the result of "
+            "the change. Do not describe what you are about to do."
+        )
+    return output
 
 
 def resolve_alfred_model(model_str: str):
@@ -398,32 +495,42 @@ def resolve_alfred_model(model_str: str):
 
 def resolve_thinking_settings(model_str: str):
     """
-    Return ModelSettings with extended thinking enabled if model_str requests it.
+    Return ModelSettings controlling how deeply the model reasons on this request.
 
-    Extended thinking makes Claude reason through the problem internally before
-    producing its response. The user sees the final answer only — thinking tokens
-    are filtered by pydantic-ai's stream_text() — but the answer is significantly
-    more considered for complex analytical tasks.
+    Alfred reasons by default. Every Claude request runs with adaptive thinking:
+    the model decides per request whether and how much to deliberate before
+    answering, the same mechanism Claude Code uses. Multi-step questions get
+    genuine internal reasoning (planning tool calls, weighing results, catching
+    gaps); trivial ones stay fast. Thinking tokens never reach the user — both
+    routes surface only the final answer, and pydantic-ai's stream_text()
+    filters thinking deltas on the SSE path.
 
-    "extended-thinking" → thinking="high" (16 384 thinking tokens, max_tokens=24000)
-
-    Returns None for all other model strings (no thinking overhead).
+    Mapping:
+      "" or "claude-*"     → adaptive thinking, model-default effort
+                             (on pre-4.6 Claude models pydantic-ai translates
+                             this to a budget_tokens config automatically)
+      "extended-thinking"  → deep-reasoning mode: adaptive thinking at the
+                             highest supported effort, larger output ceiling,
+                             for hard analytical work
+      "gpt-*" / "gemini-*" / "sonar-*" → None (those providers manage their
+                             own reasoning; an unsupported reasoning flag
+                             would 400 on non-reasoning models like gpt-4o)
     """
-    if not model_str or model_str.lower() != "extended-thinking":
-        return None
     from pydantic_ai.settings import ModelSettings
-    # "high" = 16 384 thinking token budget. max_tokens must exceed the budget.
-    return ModelSettings(thinking="high", max_tokens=24000)
-"""
-The Alfred Pydantic AI agent.
 
-This is the object you call to run Alfred:
-    result = await AlfredAgent.run("What's pending on Petersen?", deps=deps)
-    print(result.data)
+    s = (model_str or "").strip().lower()
 
-The model, system prompt, and tools are defined here. The agent is stateless —
-all state lives in the dependencies (ctx.deps) and in Notion.
-"""
+    if s == "extended-thinking":
+        # 'xhigh' maps to output_config effort xhigh where supported, else 'max'.
+        # max_tokens must leave headroom for thinking + answer.
+        return ModelSettings(thinking="xhigh", max_tokens=32000)
+
+    if not s or s.startswith("claude"):
+        # thinking=True → {'type': 'adaptive'} on 4.6+ models. Effort is left
+        # at the model default so simple lookups stay cheap and fast.
+        return ModelSettings(thinking=True, max_tokens=16000)
+
+    return None
 
 
 # =============================================================================
