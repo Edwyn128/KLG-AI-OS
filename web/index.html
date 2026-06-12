@@ -25,7 +25,11 @@
   <link rel="stylesheet" href="/static/style.css">
   <style>
     /* ── Activity Log workspace ───────────────────────────────────────── */
-    #workspace-activity { display:flex; flex-direction:column; height:100%; overflow:hidden; }
+    /* No bare display rule here: an ID selector outranks .workspace
+       { display:none }, which kept this panel permanently visible and split
+       the page in half. Only style it when it is the active workspace. */
+    #workspace-activity { flex-direction:column; height:100%; overflow:hidden; }
+    #workspace-activity.active { display:flex; }
     .activity-layout {
       display:flex; flex-direction:column; height:100%;
       max-width:860px; width:100%; margin:0 auto;
@@ -71,7 +75,6 @@
     }
     .act-avatar.alfred   { background:var(--accent-dim); color:var(--accent); border-color:var(--accent); }
     .act-avatar.bloodhound { background:rgba(239,68,68,.1); color:#ef4444; border-color:rgba(239,68,68,.3); }
-    .act-avatar.huddle   { background:rgba(16,185,129,.1); color:#10b981; border-color:rgba(16,185,129,.25); }
     .act-body { flex:1; min-width:0; }
     .act-row  { display:flex; align-items:baseline; gap:8px; margin-bottom:2px; }
     .act-name {
@@ -266,7 +269,7 @@
         <span class="model-label">Model</span>
         <select id="model-select" title="Select AI model" onchange="chatHistory = []">
           <option value="claude-sonnet-4-6" selected>Claude Sonnet 4.6</option>
-          <option value="extended-thinking">Claude — Extended Thinking</option>
+          <option value="extended-thinking">Claude — Deep Reasoning</option>
           <option value="claude-opus-4-8">Claude Opus 4.8</option>
           <option value="gpt-4o">GPT-4o</option>
           <option value="gpt-4o-mini">GPT-4o mini</option>
@@ -521,9 +524,8 @@
       <div class="activity-title">Activity Log</div>
       <div class="activity-filters" id="activity-filters">
         <button class="act-filter active" data-type="all" onclick="filterActivity('all')">All</button>
-        <button class="act-filter" data-type="chat" onclick="filterActivity('chat')">Chats</button>
-        <button class="act-filter" data-type="huddle" onclick="filterActivity('huddle')">Huddles</button>
-        <button class="act-filter" data-type="other" onclick="filterActivity('other')">Other</button>
+        <button class="act-filter" data-type="alfred" onclick="filterActivity('alfred')">Alfred</button>
+        <button class="act-filter" data-type="bloodhound" onclick="filterActivity('bloodhound')">Bloodhound</button>
       </div>
       <div style="display:flex;gap:8px;align-items:center;">
         <select id="activity-days" onchange="loadActivity()">
@@ -1051,9 +1053,9 @@ async function loadActivity() {
   }
 }
 
-function filterActivity(type) {
-  activityFilter = type;
-  document.querySelectorAll('.act-filter').forEach(b => b.classList.toggle('active', b.dataset.type === type));
+function filterActivity(agent) {
+  activityFilter = agent;
+  document.querySelectorAll('.act-filter').forEach(b => b.classList.toggle('active', b.dataset.type === agent));
   renderActivityFeed();
 }
 
@@ -1062,7 +1064,7 @@ function renderActivityFeed() {
   if (!feed) return;
   const visible = activityFilter === 'all'
     ? activityEntries
-    : activityEntries.filter(e => e.type === activityFilter);
+    : activityEntries.filter(e => (e.agent || 'alfred') === activityFilter);
   if (!visible.length) {
     feed.innerHTML = '<div style="color:var(--text-dim);font-size:11px;padding:16px 0;">No entries.</div>';
     return;
@@ -1071,17 +1073,11 @@ function renderActivityFeed() {
 }
 
 function renderActivityEntry(e) {
-  const avatarClass = e.agent === 'bloodhound' ? 'bloodhound' : e.type === 'huddle' ? 'huddle' : 'alfred';
-  const avatarLabel = e.type === 'huddle' ? '🎙' : e.agent === 'bloodhound' ? 'B' : 'A';
-  const nameDisplay = e.type === 'huddle'
-    ? (e.name || 'Huddle')
-    : e.user ? `${e.user} → ${e.agent || 'alfred'}` : (e.name || '—');
-  const msgText = e.type === 'huddle'
-    ? (e.response_summary || '')
-    : (e.message || '');
-  const timeStr  = e.type === 'huddle' && e.meeting_date
-    ? e.meeting_date
-    : formatActivityTime(e.created_time);
+  const avatarClass = e.agent === 'bloodhound' ? 'bloodhound' : 'alfred';
+  const avatarLabel = e.agent === 'bloodhound' ? 'B' : 'A';
+  const nameDisplay = e.user ? `${e.user} → ${e.agent || 'alfred'}` : (e.name || '—');
+  const msgText  = e.message || '';
+  const timeStr  = formatActivityTime(e.created_time);
   const badges = [
     ...(e.tools || []).map(t => `<span class="act-badge">${escHtml(t)}</span>`),
     e.model ? `<span class="act-badge model">${escHtml(e.model)}</span>` : '',

@@ -355,22 +355,19 @@ async def chat_with_alfred_stream(
 _ACTIVITY_ALLOWED = {"tim", "stu"}
 
 
-@router.get("/activity", summary="Get recent Comms Log activity for the Activity Log tab")
+@router.get("/activity", summary="Get recent agent chat activity for the Activity Log tab")
 async def get_activity(
     request: Request,
     days: int = 14,
     alfred_deps=Depends(get_alfred_deps),
 ) -> dict[str, Any]:
     """
-    Return recent Comms Log entries for the Activity Log tab.
+    Return recent Alfred/Bloodhound chat interactions for the Activity Log tab.
 
-    Covers all entry types: Alfred/Bloodhound chat interactions, huddle
-    imports, and other comms (emails, call notes). Sorted newest first.
-
-    Each entry includes a normalised 'type' field:
-      'chat'   — Alfred or Bloodhound conversation
-      'huddle' — Slack huddle canvas import
-      'other'  — Everything else (emails, call notes)
+    Only chat entries — who talked to which agent, what tools ran, which
+    model answered. Emails, huddle imports, and other Comms Log rows are
+    excluded at the Notion query level (the log tracks what Alfred does and
+    which user did it with him, not the firm's full comms stream).
 
     Query parameters:
       days: Look-back window (default 14, max 60).
@@ -393,7 +390,7 @@ async def get_activity(
         return {"count": 0, "entries": [], "days": days}
 
     try:
-        raw = await alfred_deps.comms_log.get_recent(days=days)
+        raw = await alfred_deps.comms_log.get_chat_activity(days=days)
     except Exception as e:
         logger.error("get_activity error: %s", e, exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
@@ -402,14 +399,6 @@ async def get_activity(
     for item in raw[:100]:
         name = item.get("Name") or ""
         notes = item.get("Notes") or ""
-        name_lower = name.lower()
-
-        if "alfred chat" in name_lower or "bloodhound chat" in name_lower:
-            entry_type = "chat"
-        elif name_lower.startswith("huddle"):
-            entry_type = "huddle"
-        else:
-            entry_type = "other"
 
         # Parse Notes: "Tools: find_matter, ... | Model: claude-sonnet-4-6 | Agent: alfred"
         tools: list[str] = []
@@ -429,13 +418,11 @@ async def get_activity(
                 agent = part[6:].strip()
 
         # Extract user from "Alfred chat — Tim" → "Tim"
-        user = ""
-        if entry_type == "chat" and "—" in name:
-            user = name.split("—")[-1].strip()
+        user = name.split("—")[-1].strip() if "—" in name else ""
 
         entries.append({
             "id": item.get("id", ""),
-            "type": entry_type,
+            "type": "chat",
             "name": name,
             "created_time": item.get("created_time", ""),
             "user": user,
@@ -444,8 +431,6 @@ async def get_activity(
             "response_summary": (item.get("Summary") or "")[:300],
             "tools": tools,
             "model": model,
-            "meeting_date": str(item.get("Comm Date") or "")[:10],
-            "actions": item.get("Actions") or "",
         })
 
     return {"count": len(entries), "entries": entries, "days": days}

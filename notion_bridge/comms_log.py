@@ -80,6 +80,37 @@ class CommsLog:
             sorts=[{"property": "Created", "direction": "descending"}],
         )
 
+    async def get_chat_activity(self, days: int = 14) -> list[dict[str, Any]]:
+        """
+        Return only Alfred/Bloodhound chat interactions from the last N days,
+        newest first.
+
+        Backs the Activity Log tab, which tracks what Alfred does and which
+        user did it with him — not emails, huddle imports, or other comms.
+        The filter runs Notion-side so the endpoint never pulls the whole
+        Comms Log.
+        """
+        if not self._db_id:
+            return []
+
+        since = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+
+        return await self._bridge.query_database(
+            database_id=self._db_id,
+            filter={
+                "and": [
+                    {"property": "Created", "created_time": {"on_or_after": since}},
+                    {
+                        "or": [
+                            {"property": "Name", "title": {"contains": "Alfred chat"}},
+                            {"property": "Name", "title": {"contains": "Bloodhound chat"}},
+                        ]
+                    },
+                ]
+            },
+            sorts=[{"property": "Created", "direction": "descending"}],
+        )
+
     async def get_for_matter(self, project_page_id: str) -> list[dict[str, Any]]:
         """
         Return all communications linked to a specific matter project page
@@ -167,7 +198,8 @@ class CommsLog:
         if not self._db_id:
             return
         tools_str = ", ".join(tools_used) if tools_used else "none"
-        title = f"Alfred chat — {user}"
+        agent_label = "Bloodhound" if agent.lower() == "bloodhound" else "Alfred"
+        title = f"{agent_label} chat — {user}"
         try:
             await self._bridge.create_page(
                 database_id=self._db_id,
