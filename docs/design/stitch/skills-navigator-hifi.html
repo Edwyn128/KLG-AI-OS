@@ -1,0 +1,477 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Skills Navigator | KLG AI OS</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "primary-fixed-dim": "#b8c8de",
+                    "on-primary": "#233143",
+                    "tertiary-fixed": "#d1e4fb",
+                    "inverse-primary": "#516073",
+                    "surface-container-high": "#262a33",
+                    "primary-fixed": "#d4e4fb",
+                    "surface-container": "#1c2028",
+                    "on-surface": "#dfe2ee",
+                    "on-primary-fixed": "#0d1d2d",
+                    "on-tertiary-fixed": "#091d2e",
+                    "on-secondary-container": "#ff9899",
+                    "error": "#ffb4ab",
+                    "surface-container-low": "#181c24",
+                    "secondary-fixed-dim": "#ffb3b3",
+                    "on-error-container": "#ffdad6",
+                    "surface-container-lowest": "#0a0e16",
+                    "surface-variant": "#31353e",
+                    "on-tertiary-fixed-variant": "#36485b",
+                    "background": "#0f131c",
+                    "secondary": "#ffb3b3",
+                    "secondary-fixed": "#ffdad9",
+                    "outline-variant": "#44474c",
+                    "on-error": "#690005",
+                    "tertiary-container": "#182a3b",
+                    "surface-dim": "#0f131c",
+                    "on-primary-container": "#8291a6",
+                    "on-tertiary-container": "#7f92a6",
+                    "error-container": "#93000a",
+                    "tertiary-fixed-dim": "#b5c8df",
+                    "on-secondary": "#680014",
+                    "primary": "#b8c8de",
+                    "on-tertiary": "#203243",
+                    "outline": "#8e9197",
+                    "on-background": "#dfe2ee",
+                    "primary-container": "#1b2a3b",
+                    "surface-tint": "#b8c8de",
+                    "secondary-container": "#920121",
+                    "on-surface-variant": "#c4c6cd",
+                    "on-secondary-fixed": "#400009",
+                    "inverse-on-surface": "#2c3039",
+                    "on-primary-fixed-variant": "#39485a",
+                    "on-secondary-fixed-variant": "#920121",
+                    "surface-container-highest": "#31353e",
+                    "surface-bright": "#353942",
+                    "surface": "#0f131c",
+                    "inverse-surface": "#dfe2ee",
+                    "tertiary": "#b5c8df"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.125rem",
+                    "lg": "0.25rem",
+                    "xl": "0.5rem",
+                    "full": "0.75rem"
+            },
+            "spacing": {
+                    "container-padding": "24px",
+                    "panel-gutter": "12px",
+                    "list-item-padding": "12px 16px",
+                    "component-gap": "8px"
+            },
+            "fontFamily": {
+                    "label-sm": ["JetBrains Mono"],
+                    "body-md": ["Inter"],
+                    "label-md": ["JetBrains Mono"],
+                    "headline-lg": ["Inter"],
+                    "headline-md": ["Inter"],
+                    "body-sm": ["Inter"]
+            },
+            "fontSize": {
+                    "label-sm": ["10px", {"lineHeight": "14px", "fontWeight": "700"}],
+                    "body-md": ["14px", {"lineHeight": "20px", "fontWeight": "400"}],
+                    "label-md": ["12px", {"lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "500"}],
+                    "headline-lg": ["24px", {"lineHeight": "32px", "letterSpacing": "-0.02em", "fontWeight": "600"}],
+                    "headline-md": ["18px", {"lineHeight": "24px", "fontWeight": "600"}],
+                    "body-sm": ["13px", {"lineHeight": "18px", "fontWeight": "400"}]
+            }
+          },
+        },
+      }
+    </script>
+<style>
+        body {
+            background-color: #0f131c;
+            color: #dfe2ee;
+            overflow: hidden;
+        }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .glass-panel {
+            background: rgba(28, 32, 40, 0.7);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(184, 200, 222, 0.1);
+        }
+        .sapphire-glow {
+            box-shadow: 0 0 20px rgba(81, 96, 115, 0.4);
+        }
+        .amber-accent {
+            border-left: 3px solid #ffb3b3; /* Using secondary as requested amber surrogate */
+            box-shadow: -4px 0 12px rgba(255, 179, 179, 0.15);
+        }
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: #0a0e16;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #31353e;
+            border-radius: 2px;
+        }
+        .active-tab-indicator {
+            position: absolute;
+            left: 0;
+            width: 4px;
+            height: 100%;
+            background-color: #b8c8de;
+        }
+    </style>
+</head>
+<body class="font-body-md text-body-md h-screen flex flex-col">
+<!-- Top AppBar -->
+<header class="fixed top-0 w-full z-50 bg-surface border-b-2 border-primary-container flex justify-between items-center px-container-padding h-16">
+<div class="flex items-center gap-4">
+<span class="font-headline-md text-headline-md font-bold text-primary">KLG AI OS</span>
+<div class="h-6 w-px bg-outline-variant mx-2"></div>
+<span class="font-label-md text-label-md text-on-surface-variant">Terminal v4.2 / Skills Navigator</span>
+</div>
+<div class="flex items-center gap-6">
+<div class="flex items-center bg-surface-container px-3 py-1.5 rounded border border-outline-variant">
+<span class="material-symbols-outlined text-on-surface-variant text-sm">search</span>
+<input class="bg-transparent border-none focus:ring-0 text-label-md w-64 placeholder-on-surface-variant" placeholder="Search system skills..." type="text"/>
+</div>
+<div class="flex items-center gap-4 text-on-surface-variant">
+<span class="material-symbols-outlined cursor-pointer hover:text-primary transition-colors">notifications</span>
+<span class="material-symbols-outlined cursor-pointer hover:text-primary transition-colors">settings</span>
+<div class="w-8 h-8 rounded-full bg-primary-container border border-primary flex items-center justify-center overflow-hidden">
+<img alt="User Profile" class="w-full h-full object-cover" data-alt="A professional high-fidelity avatar profile picture of a legal technology specialist named Edwyn. He has a clean, modern appearance with sharp features, wearing a dark navy executive suit. The background is a soft-focus digital office environment with cool blue lighting and subtle tech overlays." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCwEvY-1fpfkzVAyq2FRuEHJ6LHSz_iFcIOFN7WkcGSXTewDkuzGDJRZfS1QPQJsFZdUE13na9-r6UpNQG3LGwHg-G2cg-jhCcbRuc4jBsElQZPjozik98Lw3tqC_xZX0sPbF4G5rsgREzxwa2mOeMeL4NP3ATO-75pFTex-04hgEr-PTGE6cByP7pH7LBAzaoy5PfKvpPUknAUWbOzVGq_cayUbIStDI91EnplI1kRn4j7UiN3UzEJ3eeXti6blseUK21SNVENwpE"/>
+</div>
+</div>
+</div>
+</header>
+<!-- Main Layout Container -->
+<main class="flex flex-1 pt-16 pb-8 overflow-hidden h-full">
+<!-- Left Column: Navigation & Matter Feed -->
+<aside class="w-64 bg-surface-container-low flex flex-col border-r border-primary-container h-full">
+<nav class="flex flex-col py-panel-gutter space-y-1">
+<div class="group flex items-center gap-component-gap px-4 py-3 bg-primary-container text-on-primary-container border-l-4 border-secondary cursor-pointer">
+<span class="material-symbols-outlined">terminal</span>
+<span class="font-label-md text-label-md">Command Center</span>
+</div>
+<div class="group flex items-center gap-component-gap px-4 py-3 text-on-surface-variant hover:bg-surface-container-highest transition-all cursor-pointer">
+<span class="material-symbols-outlined">folder_special</span>
+<span class="font-label-md text-label-md">Matter Vault</span>
+</div>
+<div class="group flex items-center gap-component-gap px-4 py-3 text-on-surface-variant hover:bg-surface-container-highest transition-all cursor-pointer">
+<span class="material-symbols-outlined">saved_search</span>
+<span class="font-label-md text-label-md">Legal Research</span>
+</div>
+<div class="group flex items-center gap-component-gap px-4 py-3 text-on-surface-variant hover:bg-surface-container-highest transition-all cursor-pointer">
+<span class="material-symbols-outlined">edit_note</span>
+<span class="font-label-md text-label-md">Drafting Lab</span>
+</div>
+<div class="group flex items-center gap-component-gap px-4 py-3 text-on-surface-variant hover:bg-surface-container-highest transition-all cursor-pointer">
+<span class="material-symbols-outlined">monitoring</span>
+<span class="font-label-md text-label-md">Analytics</span>
+</div>
+</nav>
+<div class="mt-4 px-4 py-2">
+<span class="font-label-sm text-label-sm text-outline uppercase tracking-widest">Active Matters</span>
+</div>
+<div class="flex-1 overflow-y-auto custom-scrollbar px-2 space-y-2 mt-2">
+<div class="p-3 bg-surface-container border border-outline-variant rounded-lg hover:border-primary transition-colors cursor-pointer group">
+<div class="flex justify-between items-start mb-1">
+<span class="font-label-md text-label-md text-primary">KLG-2024-089</span>
+<span class="font-label-sm text-label-sm px-1.5 py-0.5 bg-secondary-container text-on-secondary-container rounded">Critical</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface line-clamp-1">In re: Tech Acquisition Corp</p>
+<p class="font-label-sm text-label-sm text-on-surface-variant mt-1">Updated 12m ago</p>
+</div>
+<div class="p-3 glass-panel border border-outline-variant rounded-lg hover:border-primary transition-colors cursor-pointer group">
+<div class="flex justify-between items-start mb-1">
+<span class="font-label-md text-label-md text-primary">KLG-2024-112</span>
+<span class="font-label-sm text-label-sm px-1.5 py-0.5 bg-tertiary-container text-on-tertiary-container rounded">Research</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface line-clamp-1">Venture Alpha Fund vs. Omega</p>
+<p class="font-label-sm text-label-sm text-on-surface-variant mt-1">Updated 2h ago</p>
+</div>
+<div class="p-3 glass-panel border border-outline-variant rounded-lg hover:border-primary transition-colors cursor-pointer group">
+<div class="flex justify-between items-start mb-1">
+<span class="font-label-md text-label-md text-primary">KLG-2023-942</span>
+<span class="font-label-sm text-label-sm px-1.5 py-0.5 bg-surface-container-highest text-on-surface-variant rounded">Archived</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface line-clamp-1">Patent Filing: Neural Core</p>
+<p class="font-label-sm text-label-sm text-on-surface-variant mt-1">Updated 1d ago</p>
+</div>
+</div>
+<div class="p-4 border-t border-primary-container">
+<button class="w-full py-2 bg-primary text-on-primary font-label-md text-label-md rounded flex items-center justify-center gap-2 hover:bg-primary-fixed-dim transition-colors">
+<span class="material-symbols-outlined text-sm">add</span>
+                    NEW MATTER
+                </button>
+</div>
+</aside>
+<!-- Center Column: Skills Grid -->
+<section class="flex-1 flex flex-col bg-background min-w-0">
+<!-- Header/Filters -->
+<div class="px-container-padding py-6 border-b border-primary-container bg-surface-container-low/50">
+<div class="flex justify-between items-end mb-6">
+<div>
+<h1 class="font-headline-lg text-headline-lg text-on-surface">Skills Navigator</h1>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-1">Deploy automated legal intelligence workflows</p>
+</div>
+<div class="flex gap-2">
+<button class="px-4 py-1.5 rounded-full border border-primary text-primary font-label-md text-label-md bg-primary/10">All</button>
+<button class="px-4 py-1.5 rounded-full border border-outline-variant text-on-surface-variant font-label-md text-label-md hover:border-primary transition-colors">Intake</button>
+<button class="px-4 py-1.5 rounded-full border border-outline-variant text-on-surface-variant font-label-md text-label-md hover:border-primary transition-colors">Research</button>
+<button class="px-4 py-1.5 rounded-full border border-outline-variant text-on-surface-variant font-label-md text-label-md hover:border-primary transition-colors">Drafting</button>
+<button class="px-4 py-1.5 rounded-full border border-outline-variant text-on-surface-variant font-label-md text-label-md hover:border-primary transition-colors">QA</button>
+<button class="px-4 py-1.5 rounded-full border border-outline-variant text-on-surface-variant font-label-md text-label-md hover:border-primary transition-colors">Argument</button>
+<button class="px-4 py-1.5 rounded-full border border-outline-variant text-on-surface-variant font-label-md text-label-md hover:border-primary transition-colors">Ops</button>
+</div>
+</div>
+<div class="flex gap-4 items-center">
+<span class="font-label-sm text-label-sm text-outline-variant">SYSTEM STATUS:</span>
+<div class="flex items-center gap-2">
+<div class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
+<span class="font-label-sm text-label-sm text-on-surface">Operational</span>
+</div>
+<div class="h-4 w-px bg-outline-variant mx-2"></div>
+<span class="font-label-sm text-label-sm text-on-surface-variant">32 ACTIVE SKILLS</span>
+</div>
+</div>
+<!-- Grid -->
+<div class="flex-1 overflow-y-auto custom-scrollbar p-container-padding">
+<div class="grid grid-cols-1 xl:grid-cols-2 2xl:grid-cols-3 gap-6">
+<!-- Skill Card 1 -->
+<div class="glass-panel p-5 rounded-lg group cursor-pointer hover:bg-surface-container-highest transition-all border-l-2 border-l-primary/30 hover:border-l-primary active:scale-[0.98]">
+<div class="flex justify-between items-start mb-4">
+<div class="w-10 h-10 bg-primary-container rounded flex items-center justify-center text-primary">
+<span class="material-symbols-outlined text-2xl">policy</span>
+</div>
+<span class="font-label-sm text-label-sm px-2 py-0.5 bg-primary/10 text-primary rounded border border-primary/20">Research</span>
+</div>
+<h3 class="font-headline-md text-headline-md text-on-surface mb-2">Case Research</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Automated jurisdictional scan for binding precedents and persuasive secondary authorities in federal circuits.</p>
+<div class="mt-4 flex items-center gap-3">
+<div class="flex -space-x-2">
+<div class="w-6 h-6 rounded-full border border-background bg-secondary flex items-center justify-center text-[10px] text-on-secondary font-bold">AL</div>
+<div class="w-6 h-6 rounded-full border border-background bg-primary-fixed flex items-center justify-center text-[10px] text-on-primary font-bold">ED</div>
+</div>
+<span class="font-label-sm text-label-sm text-on-surface-variant">Last used 4h ago</span>
+</div>
+</div>
+<!-- Skill Card 2 (Active/Selected) -->
+<div class="bg-surface-container-highest p-5 rounded-lg group cursor-pointer border-2 border-primary sapphire-glow relative">
+<div class="flex justify-between items-start mb-4">
+<div class="w-10 h-10 bg-secondary-container rounded flex items-center justify-center text-secondary">
+<span class="material-symbols-outlined text-2xl">contract_edit</span>
+</div>
+<span class="font-label-sm text-label-sm px-2 py-0.5 bg-secondary/10 text-secondary rounded border border-secondary/20">Drafting</span>
+</div>
+<h3 class="font-headline-md text-headline-md text-on-surface mb-2">Brief Elevation</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Advanced syntactic refinement and citation validation for appellate-level filings and complex motions.</p>
+<div class="mt-4 flex items-center gap-3">
+<div class="flex -space-x-2">
+<div class="w-6 h-6 rounded-full border border-background bg-primary-fixed flex items-center justify-center text-[10px] text-on-primary font-bold">ED</div>
+</div>
+<span class="font-label-sm text-label-sm text-on-surface-variant">Currently active</span>
+</div>
+<div class="absolute bottom-2 right-2 opacity-100">
+<span class="material-symbols-outlined text-primary">auto_awesome</span>
+</div>
+</div>
+<!-- Skill Card 3 -->
+<div class="glass-panel p-5 rounded-lg group cursor-pointer hover:bg-surface-container-highest transition-all border-l-2 border-l-primary/30 hover:border-l-primary">
+<div class="flex justify-between items-start mb-4">
+<div class="w-10 h-10 bg-tertiary-container rounded flex items-center justify-center text-tertiary">
+<span class="material-symbols-outlined text-2xl">balance</span>
+</div>
+<span class="font-label-sm text-label-sm px-2 py-0.5 bg-tertiary/10 text-tertiary rounded border border-tertiary/20">Argument</span>
+</div>
+<h3 class="font-headline-md text-headline-md text-on-surface mb-2">Amicus Assessment</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant">AI-driven analysis of potential amicus curiae impact and alignment with strategic litigation goals.</p>
+<div class="mt-4 flex items-center gap-3">
+<span class="font-label-sm text-label-sm text-on-surface-variant">Ready to launch</span>
+</div>
+</div>
+<!-- Skill Card 4 -->
+<div class="glass-panel p-5 rounded-lg group cursor-pointer hover:bg-surface-container-highest transition-all border-l-2 border-l-primary/30 hover:border-l-primary">
+<div class="flex justify-between items-start mb-4">
+<div class="w-10 h-10 bg-surface-container rounded flex items-center justify-center text-on-surface-variant">
+<span class="material-symbols-outlined text-2xl">verified_user</span>
+</div>
+<span class="font-label-sm text-label-sm px-2 py-0.5 bg-surface-container-highest text-on-surface-variant rounded border border-outline-variant">QA</span>
+</div>
+<h3 class="font-headline-md text-headline-md text-on-surface mb-2">Compliance Scrubber</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Deep-scan legal documents for regulatory discrepancies and internal policy deviations.</p>
+<div class="mt-4 flex items-center gap-3">
+<span class="font-label-sm text-label-sm text-on-surface-variant">System default</span>
+</div>
+</div>
+<!-- Skill Card 5 -->
+<div class="glass-panel p-5 rounded-lg group cursor-pointer hover:bg-surface-container-highest transition-all border-l-2 border-l-primary/30 hover:border-l-primary">
+<div class="flex justify-between items-start mb-4">
+<div class="w-10 h-10 bg-primary-container rounded flex items-center justify-center text-primary">
+<span class="material-symbols-outlined text-2xl">quick_reference_all</span>
+</div>
+<span class="font-label-sm text-label-sm px-2 py-0.5 bg-primary/10 text-primary rounded border border-primary/20">Intake</span>
+</div>
+<h3 class="font-headline-md text-headline-md text-on-surface mb-2">Evidence Indexer</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Massive ingestion and semantic tagging of discovery materials, emails, and deposition transcripts.</p>
+<div class="mt-4 flex items-center gap-3">
+<span class="font-label-sm text-label-sm text-on-surface-variant">Update pending</span>
+</div>
+</div>
+<!-- Skill Card 6 -->
+<div class="glass-panel p-5 rounded-lg group cursor-pointer hover:bg-surface-container-highest transition-all border-l-2 border-l-primary/30 hover:border-l-primary">
+<div class="flex justify-between items-start mb-4">
+<div class="w-10 h-10 bg-secondary-container/20 rounded flex items-center justify-center text-secondary">
+<span class="material-symbols-outlined text-2xl">hub</span>
+</div>
+<span class="font-label-sm text-label-sm px-2 py-0.5 bg-secondary/10 text-secondary rounded border border-secondary/20">Ops</span>
+</div>
+<h3 class="font-headline-md text-headline-md text-on-surface mb-2">Matter Orchestrator</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Synchronize cross-departmental tasks and resource allocation based on real-time court deadlines.</p>
+<div class="mt-4 flex items-center gap-3">
+<span class="font-label-sm text-label-sm text-on-surface-variant">High performance</span>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- Right Column: Skill Detail Panel -->
+<aside class="w-[360px] glass-panel border-l border-primary-container h-full flex flex-col">
+<!-- Skill Detail Header -->
+<div class="p-container-padding border-b border-primary-container">
+<div class="w-16 h-16 bg-primary-container rounded-lg flex items-center justify-center text-primary mb-4 sapphire-glow">
+<span class="material-symbols-outlined text-4xl">contract_edit</span>
+</div>
+<h2 class="font-headline-lg text-headline-lg text-on-surface">Brief Elevation</h2>
+<div class="flex items-center gap-2 mt-1">
+<span class="font-label-sm text-label-sm text-secondary uppercase tracking-widest">DRAFTING LAB</span>
+<span class="text-outline-variant">•</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">v2.4.1</span>
+</div>
+<div class="mt-6 flex items-center gap-3 p-3 bg-surface-container rounded border border-outline-variant">
+<img alt="Owner" class="w-10 h-10 rounded-full border border-primary" data-alt="A detailed digital close-up of a legal operations professional named Edwyn. He has short styled hair, wearing stylish modern glasses and a deep charcoal blazer. The background is a blurred high-tech control center with multiple glowing blue monitor screens and data streams." src="https://lh3.googleusercontent.com/aida-public/AB6AXuD-YwqPZB4DpGBvciqimyXEEXjV-Dm3kVRttq1_iUONfimA7XGam9j18IXPwuEU5WAjLo0k8fL3ATNABskNq0g5aBzgMwhbWt_5ym6RThr-rQtakUqMD9UcRfuR-gySuRSAjrD0fGmR3azgH0dusXcYAzUA-068uQVTP_gTduh9bQRyPW4WKWFG1rMS20UsReTsdUzSEGe6ETKa1TpJPx_Zxv8Gk-8VWBCEBICjawtyq6IQ_iGy_7vGYZ6AeB8gIjsN95zZ1SN4Zz4"/>
+<div>
+<p class="font-label-sm text-label-sm text-on-surface-variant">SKILL OWNER</p>
+<p class="font-body-md text-body-md font-bold text-on-surface">Edwyn KLG-Specialist</p>
+</div>
+</div>
+</div>
+<!-- Workflow Checklist -->
+<div class="flex-1 overflow-y-auto custom-scrollbar p-container-padding">
+<h3 class="font-label-md text-label-md text-on-surface-variant mb-4 uppercase tracking-widest flex items-center gap-2">
+<span class="material-symbols-outlined text-sm">checklist</span>
+                    Execution Protocol
+                </h3>
+<div class="space-y-4">
+<label class="flex items-start gap-3 group cursor-pointer">
+<div class="mt-0.5">
+<input checked="" class="rounded border-primary bg-transparent text-primary focus:ring-0 focus:ring-offset-0" type="checkbox"/>
+</div>
+<div class="flex flex-col">
+<span class="font-body-sm text-body-sm text-on-surface group-hover:text-primary transition-colors">Index trial court hearings</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">Scanning 14 volumes of transcripts</span>
+</div>
+</label>
+<label class="flex items-start gap-3 group cursor-pointer">
+<div class="mt-0.5">
+<input checked="" class="rounded border-primary bg-transparent text-primary focus:ring-0 focus:ring-offset-0" type="checkbox"/>
+</div>
+<div class="flex flex-col">
+<span class="font-body-sm text-body-sm text-on-surface group-hover:text-primary transition-colors">Locate challenged rulings</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">Cross-referencing notice of appeal</span>
+</div>
+</label>
+<label class="flex items-start gap-3 group cursor-pointer">
+<div class="mt-0.5">
+<input class="rounded border-outline-variant bg-transparent text-primary focus:ring-0 focus:ring-offset-0" type="checkbox"/>
+</div>
+<div class="flex flex-col">
+<span class="font-body-sm text-body-sm text-on-surface group-hover:text-primary transition-colors">Synthesize key arguments</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">Extracting core legal theories</span>
+</div>
+</label>
+<label class="flex items-start gap-3 group cursor-pointer">
+<div class="mt-0.5">
+<input class="rounded border-outline-variant bg-transparent text-primary focus:ring-0 focus:ring-offset-0" type="checkbox"/>
+</div>
+<div class="flex flex-col">
+<span class="font-body-sm text-body-sm text-on-surface group-hover:text-primary transition-colors">Apply Bluebook formatting</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">21st Edition standard validation</span>
+</div>
+</label>
+<label class="flex items-start gap-3 group cursor-pointer">
+<div class="mt-0.5">
+<input class="rounded border-outline-variant bg-transparent text-primary focus:ring-0 focus:ring-offset-0" type="checkbox"/>
+</div>
+<div class="flex flex-col">
+<span class="font-body-sm text-body-sm text-on-surface group-hover:text-primary transition-colors">Generate Table of Authorities</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">Automated page-mapping</span>
+</div>
+</label>
+<label class="flex items-start gap-3 group cursor-pointer">
+<div class="mt-0.5">
+<input class="rounded border-outline-variant bg-transparent text-primary focus:ring-0 focus:ring-offset-0" type="checkbox"/>
+</div>
+<div class="flex flex-col">
+<span class="font-body-sm text-body-sm text-on-surface group-hover:text-primary transition-colors">Final Counsel Review</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">Requiring signature from Edwyn</span>
+</div>
+</label>
+</div>
+<!-- Overdue/Alert Badge Example -->
+<div class="mt-8 amber-accent bg-surface-container p-4 rounded-r-lg">
+<div class="flex items-center gap-2 mb-1">
+<span class="material-symbols-outlined text-secondary text-sm">warning</span>
+<span class="font-label-md text-label-md text-secondary font-bold">URGENT REQUIREMENT</span>
+</div>
+<p class="font-label-sm text-label-sm text-on-surface-variant">This skill requires 'Matter Admin' permissions to access Case-882 documents.</p>
+</div>
+</div>
+<!-- Footer Action -->
+<div class="p-container-padding bg-surface-container-low border-t border-primary-container">
+<button class="w-full py-4 bg-primary text-on-primary font-headline-md text-headline-md rounded-xl sapphire-glow flex items-center justify-center gap-3 hover:scale-[1.02] active:scale-[0.98] transition-all relative overflow-hidden group">
+<span class="material-symbols-outlined group-hover:rotate-12 transition-transform">bolt</span>
+                    Launch Skill in Alfred
+                    <div class="absolute inset-0 bg-white/10 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+</button>
+</div>
+</aside>
+</main>
+<!-- Global Footer -->
+<footer class="fixed bottom-0 w-full h-8 bg-surface-container-lowest border-t border-outline-variant flex justify-between items-center px-container-padding z-50">
+<div class="flex items-center gap-4">
+<span class="font-label-sm text-label-sm text-tertiary">© 2024 KLG AI OS | System Status: Operational</span>
+</div>
+<div class="flex items-center gap-4 text-on-surface-variant">
+<a class="font-label-sm text-label-sm hover:text-primary transition-colors" href="#">Privacy Protocol</a>
+<span class="text-outline-variant text-[8px]">|</span>
+<a class="font-label-sm text-label-sm hover:text-primary transition-colors" href="#">Security Whitepaper</a>
+<div class="h-4 w-px bg-outline-variant mx-2"></div>
+<div class="flex items-center gap-1">
+<span class="font-label-sm text-label-sm text-on-surface-variant">Lat: 22ms</span>
+<span class="material-symbols-outlined text-[10px] text-emerald-500">wifi</span>
+</div>
+</div>
+</footer>
+<script>
+        // Simple Micro-interaction for skill selection
+        document.querySelectorAll('.glass-panel.group').forEach(card => {
+            card.addEventListener('click', () => {
+                // In a real app, this would update the detail panel
+                console.log('Skill selected: ' + card.querySelector('h3').innerText);
+            });
+        });
+    </script>
+</body></html>

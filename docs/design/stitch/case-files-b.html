@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Case Files - KLG AI OS</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&amp;family=JetBrains+Mono:wght@500;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "on-secondary": "#680014",
+                        "surface-tint": "#b8c8de",
+                        "surface-container-high": "#262a33",
+                        "primary-container": "#1b2a3b",
+                        "primary": "#b8c8de",
+                        "tertiary": "#b5c8df",
+                        "on-primary-container": "#8291a6",
+                        "background": "#0f131c",
+                        "inverse-primary": "#516073",
+                        "on-error-container": "#ffdad6",
+                        "surface-container": "#1c2028",
+                        "on-tertiary": "#203243",
+                        "on-primary-fixed": "#0d1d2d",
+                        "outline": "#8e9197",
+                        "surface-container-lowest": "#0a0e16",
+                        "secondary-fixed": "#ffdad9",
+                        "on-tertiary-fixed": "#091d2e",
+                        "secondary": "#ffb3b3",
+                        "surface-variant": "#31353e",
+                        "surface-container-low": "#181c24",
+                        "surface-dim": "#0f131c",
+                        "primary-fixed-dim": "#b8c8de",
+                        "secondary-container": "#920121",
+                        "surface": "#0f131c",
+                        "on-secondary-container": "#ff9899",
+                        "outline-variant": "#44474c",
+                        "secondary-fixed-dim": "#ffb3b3",
+                        "tertiary-fixed-dim": "#b5c8df",
+                        "tertiary-fixed": "#d1e4fb",
+                        "on-primary": "#233143",
+                        "on-error": "#690005",
+                        "tertiary-container": "#182a3b",
+                        "on-background": "#dfe2ee",
+                        "surface-bright": "#353942",
+                        "error-container": "#93000a",
+                        "on-secondary-fixed-variant": "#920121",
+                        "on-secondary-fixed": "#400009",
+                        "inverse-surface": "#dfe2ee",
+                        "on-surface-variant": "#c4c6cd",
+                        "on-tertiary-fixed-variant": "#36485b",
+                        "surface-container-highest": "#31353e",
+                        "on-tertiary-container": "#7f92a6",
+                        "on-primary-fixed-variant": "#39485a",
+                        "error": "#ffb4ab",
+                        "primary-fixed": "#d4e4fb",
+                        "on-surface": "#dfe2ee",
+                        "inverse-on-surface": "#2c3039"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                    "spacing": {
+                        "panel-gutter": "12px",
+                        "component-gap": "8px",
+                        "list-item-padding": "12px 16px",
+                        "container-padding": "24px"
+                    },
+                    "fontFamily": {
+                        "label-sm": ["JetBrains Mono"],
+                        "body-sm": ["Inter"],
+                        "headline-md": ["Inter"],
+                        "body-md": ["Inter"],
+                        "label-md": ["JetBrains Mono"],
+                        "headline-lg": ["Inter"]
+                    },
+                    "fontSize": {
+                        "label-sm": ["10px", {"lineHeight": "14px", "fontWeight": "700"}],
+                        "body-sm": ["13px", {"lineHeight": "18px", "fontWeight": "400"}],
+                        "headline-md": ["18px", {"lineHeight": "24px", "fontWeight": "600"}],
+                        "body-md": ["14px", {"lineHeight": "20px", "fontWeight": "400"}],
+                        "label-md": ["12px", {"lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "500"}],
+                        "headline-lg": ["24px", {"lineHeight": "32px", "letterSpacing": "-0.02em", "fontWeight": "600"}]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        /* Custom scrollbar for high-density feel */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: #0f131c; }
+        ::-webkit-scrollbar-thumb { background: #31353e; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #44474c; }
+        
+        .overdue-glow { box-shadow: 0 0 12px 0px rgba(255, 179, 179, 0.15); }
+        .gradient-separator { background: linear-gradient(90deg, #1b2a3b 0%, #920121 100%); }
+    </style>
+</head>
+<body class="bg-background text-on-surface h-screen overflow-hidden flex flex-col font-body-sm text-body-sm antialiased">
+<!-- TopAppBar -->
+<header class="bg-surface dark:bg-surface fixed top-0 w-full h-[64px] z-50 flex justify-between items-center px-container-padding w-full flat no shadows">
+<div class="flex items-center gap-4">
+<button class="text-on-surface-variant hover:text-primary transition-colors duration-200 cursor-pointer active:opacity-80">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 0;">menu</span>
+</button>
+<span class="font-headline-md text-headline-md font-bold text-primary dark:text-primary uppercase tracking-wider">KLG AI OS</span>
+</div>
+<nav class="hidden md:flex gap-6 h-full items-center">
+<a class="text-on-surface-variant hover:text-primary transition-colors duration-200 font-label-md text-label-md" href="#">MATTERS</a>
+<a class="text-on-surface-variant hover:text-primary transition-colors duration-200 font-label-md text-label-md" href="#">DEADLINES</a>
+<a class="text-on-surface-variant hover:text-primary transition-colors duration-200 font-label-md text-label-md" href="#">SKILLS NAVIGATOR</a>
+<a class="text-primary border-b-2 border-secondary pb-1 h-[62px] flex items-center font-label-md text-label-md mt-[2px]" href="#">CASE FILES</a>
+</nav>
+<div class="flex items-center gap-4">
+<div class="hidden lg:flex items-center gap-2 bg-surface-container-high px-3 py-1 rounded-full border border-outline-variant cursor-pointer active:opacity-80">
+<span class="w-2 h-2 rounded-full bg-secondary"></span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">ACTIVE ENGINE: Claude 3.5 Sonnet</span>
+<span class="material-symbols-outlined text-[16px] text-on-surface-variant">expand_more</span>
+</div>
+<div class="flex items-center gap-2 pl-4 border-l border-outline-variant cursor-pointer active:opacity-80">
+<div class="flex flex-col items-end">
+<span class="font-label-md text-label-md text-primary">Edwyn</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant font-normal">Systems Partner</span>
+</div>
+<div class="w-8 h-8 rounded-full bg-primary-container flex items-center justify-center overflow-hidden border border-outline-variant">
+<span class="material-symbols-outlined text-primary">account_circle</span>
+</div>
+</div>
+</div>
+</header>
+<!-- Horizontal Separator -->
+<div class="fixed top-[64px] left-0 w-full h-[2px] gradient-separator z-50"></div>
+<!-- Main Workspace -->
+<div class="flex flex-1 mt-[66px] overflow-hidden">
+<!-- Left Rail -->
+<aside class="w-[280px] bg-surface-container flex flex-col border-r border-outline-variant shrink-0">
+<div class="p-4 border-b border-outline-variant flex justify-between items-center bg-surface-container-low">
+<h2 class="font-label-md text-label-md text-on-surface-variant">CASE PROJECTS</h2>
+<button class="text-on-surface-variant hover:text-primary transition-colors">
+<span class="material-symbols-outlined text-[18px]">refresh</span>
+</button>
+</div>
+<div class="flex-1 overflow-y-auto p-2 space-y-2">
+<!-- Selected Card -->
+<div class="bg-primary-container rounded border border-outline-variant p-3 relative cursor-pointer">
+<div class="absolute left-0 top-0 bottom-0 w-1 bg-secondary rounded-l"></div>
+<div class="pl-2">
+<h3 class="font-body-md text-body-md text-primary font-semibold mb-1 leading-tight">Hwee v. Talley — Case Assessment</h3>
+<div class="flex items-center gap-2 mb-2">
+<span class="font-label-sm text-label-sm bg-surface-container-high text-secondary px-1.5 py-0.5 rounded border border-outline-variant">HIGH</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">47d</span>
+</div>
+<div class="font-body-sm text-body-sm text-on-primary-container truncate">In progress • Intake</div>
+</div>
+</div>
+<!-- Normal Card -->
+<div class="bg-surface-container-low hover:bg-surface-variant transition-colors rounded border border-outline-variant p-3 cursor-pointer">
+<h3 class="font-body-md text-body-md text-on-surface mb-1 leading-tight">Peck v. Grad — Petition for Review</h3>
+<div class="flex items-center gap-2 mb-2">
+<span class="font-label-sm text-label-sm bg-surface-container-high text-secondary px-1.5 py-0.5 rounded border border-outline-variant">HIGH</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">22d</span>
+</div>
+<div class="font-body-sm text-body-sm text-on-surface-variant truncate">Post-Appeal</div>
+</div>
+<!-- Overdue Card 1 -->
+<div class="bg-surface-container-low hover:bg-surface-variant transition-colors rounded border border-error p-3 cursor-pointer overdue-glow relative">
+<div class="absolute right-3 top-3 w-2 h-2 rounded-full bg-error animate-pulse"></div>
+<h3 class="font-body-md text-body-md text-on-surface mb-1 leading-tight pr-4">Ovrahim v. Union Pacific — MSJ Reply</h3>
+<div class="flex items-center gap-2 mb-2">
+<span class="font-label-sm text-label-sm bg-surface-container-high text-secondary px-1.5 py-0.5 rounded border border-outline-variant">HIGH</span>
+<span class="font-label-sm text-label-sm bg-error-container text-on-error-container px-1.5 py-0.5 rounded border border-error">OVERDUE</span>
+</div>
+</div>
+<!-- Overdue Card 2 -->
+<div class="bg-surface-container-low hover:bg-surface-variant transition-colors rounded border border-error p-3 cursor-pointer overdue-glow relative">
+<div class="absolute right-3 top-3 w-2 h-2 rounded-full bg-error animate-pulse"></div>
+<h3 class="font-body-md text-body-md text-on-surface mb-1 leading-tight pr-4">Diller v. Weiss — Writ of Mandate</h3>
+<div class="flex items-center gap-2 mb-2">
+<span class="font-label-sm text-label-sm bg-surface-container-high text-secondary px-1.5 py-0.5 rounded border border-outline-variant">HIGH</span>
+<span class="font-label-sm text-label-sm bg-error-container text-on-error-container px-1.5 py-0.5 rounded border border-error">OVERDUE</span>
+</div>
+<div class="font-body-sm text-body-sm text-on-surface-variant truncate">Briefing — AOB</div>
+</div>
+</div>
+</aside>
+<!-- Main Area -->
+<main class="flex-1 flex flex-col bg-surface-dim relative">
+<!-- Detail Header -->
+<div class="bg-surface-container border-b border-outline-variant p-6 shrink-0">
+<div class="flex justify-between items-start mb-4">
+<div>
+<h1 class="font-headline-lg text-headline-lg text-primary mb-3">Hwee v. Talley — Case Assessment</h1>
+<div class="flex gap-2">
+<span class="font-label-sm text-label-sm bg-surface-container-highest text-on-surface px-2 py-1 rounded border border-outline-variant">INTAKE</span>
+<span class="font-label-sm text-label-sm bg-surface-container-highest text-on-surface px-2 py-1 rounded border border-outline-variant">IN PROGRESS</span>
+<span class="font-label-sm text-label-sm bg-surface-container-highest text-secondary px-2 py-1 rounded border border-outline-variant">HIGH</span>
+</div>
+</div>
+<div class="flex items-center gap-2 bg-surface-container-low px-3 py-1.5 rounded-full border border-outline-variant">
+<div class="w-6 h-6 rounded-full bg-primary-container flex items-center justify-center text-primary font-label-md text-[10px]">TM</div>
+<span class="font-body-sm text-body-sm text-on-surface">Tim</span>
+</div>
+</div>
+<!-- Urgency Block -->
+<div class="bg-surface-container-low border border-outline-variant rounded p-3 flex justify-between items-center">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-secondary text-[20px]" style="font-variation-settings: 'FILL' 1;">calendar_today</span>
+<div class="font-label-md text-label-md">
+<span class="text-on-surface-variant">NEXT COURT DEADLINE: </span>
+<span class="text-secondary font-bold">JUL 27, 2026</span>
+<span class="text-on-surface-variant"> — in 47 days</span>
+</div>
+<div class="w-[2px] h-4 bg-outline-variant mx-2"></div>
+<div class="font-label-md text-label-md"><span class="text-on-surface-variant">TARGET DATE: </span><span class="text-on-surface font-bold">AUG 15, 2026</span></div>
+</div>
+<button class="font-label-sm text-label-sm text-primary hover:text-white transition-colors flex items-center gap-1 border border-transparent hover:border-outline-variant px-3 py-1 rounded">
+                        OPEN IN NOTION <span class="material-symbols-outlined text-[14px]">open_in_new</span>
+</button>
+</div>
+</div>
+<!-- Content Columns -->
+<div class="flex-1 overflow-y-auto p-6 flex gap-6 pb-24">
+<!-- Left Column (40%) -->
+<div class="w-[40%] flex flex-col gap-6">
+<!-- Properties -->
+<div class="bg-surface-container-low border border-outline-variant rounded p-4">
+<h4 class="font-label-md text-label-md text-on-surface-variant mb-4 border-b border-outline-variant pb-2">PROPERTIES</h4>
+<div class="grid grid-cols-2 gap-y-3 gap-x-4">
+<div class="font-label-sm text-label-sm text-on-surface-variant">Status</div>
+<div class="font-body-sm text-body-sm text-on-surface">In Progress</div>
+<div class="font-label-sm text-label-sm text-on-surface-variant">Priority</div>
+<div class="font-body-sm text-body-sm text-secondary">High</div>
+<div class="font-label-sm text-label-sm text-on-surface-variant">Stage</div>
+<div class="font-body-sm text-body-sm text-on-surface">Intake</div>
+<div class="font-label-sm text-label-sm text-on-surface-variant">Assignee</div>
+<div class="font-body-sm text-body-sm text-on-surface">Tim M.</div>
+<div class="font-label-sm text-label-sm text-on-surface-variant">Category</div>
+<div class="font-body-sm text-body-sm text-on-surface">Civil Litigation</div>
+<div class="font-label-sm text-label-sm text-on-surface-variant">Last Edited</div>
+<div class="font-body-sm text-body-sm text-on-surface">2 hrs ago</div>
+</div>
+</div>
+<!-- Summary -->
+<div class="bg-surface-container-low border border-outline-variant rounded p-4">
+<h4 class="font-label-md text-label-md text-on-surface-variant mb-3">SUMMARY</h4>
+<p class="font-body-sm text-body-sm text-on-surface text-opacity-90 leading-relaxed">
+                            Plaintiff alleges breach of contract regarding the commercial lease at 404 Market St. Defendant claims force majeure due to structural damage preventing occupancy. Initial discovery requests served; pending document production from plaintiff.
+                        </p>
+</div>
+<!-- Page Notes -->
+<div class="bg-surface-container-low border border-outline-variant rounded p-4 flex-1">
+<h4 class="font-label-md text-label-md text-on-surface-variant mb-3 flex justify-between">
+                            PAGE NOTES <span class="material-symbols-outlined text-[16px] cursor-pointer hover:text-primary">edit</span>
+</h4>
+<ul class="list-disc pl-4 space-y-2 font-body-sm text-body-sm text-on-surface-variant">
+<li>Need to review the structural engineer's report from 2024.</li>
+<li>Follow up with opposing counsel on interrogatory extensions.</li>
+</ul>
+</div>
+</div>
+<!-- Right Column (60%) -->
+<div class="w-[60%] flex flex-col gap-6">
+<!-- Shared Documents -->
+<div class="bg-surface-container-low border border-outline-variant rounded p-4">
+<div class="flex justify-between items-center mb-4 border-b border-outline-variant pb-2">
+<h4 class="font-label-md text-label-md text-on-surface-variant">SHARED DOCUMENTS</h4>
+<button class="font-label-sm text-label-sm text-primary hover:text-white flex items-center gap-1">VIEW ALL <span class="material-symbols-outlined text-[14px]">arrow_forward</span></button>
+</div>
+<div class="grid grid-cols-2 gap-4">
+<!-- Doc Tile 1 -->
+<div class="border border-outline-variant rounded p-3 flex items-start gap-3 bg-surface-container hover:bg-surface-variant transition-colors cursor-pointer">
+<div class="bg-error-container text-on-error-container rounded p-2 flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-[20px]">picture_as_pdf</span>
+</div>
+<div class="overflow-hidden">
+<div class="font-body-sm text-body-sm text-on-surface truncate font-semibold">Lease_Agreement_Final.pdf</div>
+<div class="font-label-sm text-label-sm text-on-surface-variant mt-1">1.2 MB • Jun 12</div>
+</div>
+</div>
+<!-- Doc Tile 2 -->
+<div class="border border-outline-variant rounded p-3 flex items-start gap-3 bg-surface-container hover:bg-surface-variant transition-colors cursor-pointer">
+<div class="bg-primary-container text-primary rounded p-2 flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-[20px]">description</span>
+</div>
+<div class="overflow-hidden">
+<div class="font-body-sm text-body-sm text-on-surface truncate font-semibold">Def_Initial_Disclosures.docx</div>
+<div class="font-label-sm text-label-sm text-on-surface-variant mt-1">45 KB • Jun 10</div>
+</div>
+</div>
+<!-- Doc Tile 3 (Image) -->
+<div class="border border-outline-variant rounded p-3 flex items-start gap-3 bg-surface-container hover:bg-surface-variant transition-colors cursor-pointer">
+<div class="bg-tertiary-container text-tertiary rounded p-2 flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-[20px]">image</span>
+</div>
+<div class="overflow-hidden">
+<div class="font-body-sm text-body-sm text-on-surface truncate font-semibold">Exhibit_A_Damage.jpg</div>
+<div class="font-label-sm text-label-sm text-on-surface-variant mt-1">3.4 MB • Jun 08</div>
+</div>
+</div>
+<!-- Doc Tile 4 (Image) -->
+<div class="border border-outline-variant rounded p-3 flex items-start gap-3 bg-surface-container hover:bg-surface-variant transition-colors cursor-pointer">
+<div class="bg-tertiary-container text-tertiary rounded p-2 flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-[20px]">image</span>
+</div>
+<div class="overflow-hidden">
+<div class="font-body-sm text-body-sm text-on-surface truncate font-semibold">Exhibit_B_Repairs.jpg</div>
+<div class="font-label-sm text-label-sm text-on-surface-variant mt-1">2.8 MB • Jun 08</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Slack Feed -->
+<div class="bg-surface-container-low border border-outline-variant rounded p-4 flex-1 flex flex-col">
+<div class="flex justify-between items-center mb-4 border-b border-outline-variant pb-2">
+<h4 class="font-label-md text-label-md text-on-surface-variant flex items-center gap-2">
+<span class="text-primary text-[16px]">#</span> CASE CHANNEL ACTIVITY
+                            </h4>
+<span class="font-label-sm text-label-sm text-on-surface-variant bg-surface-container-highest px-2 py-0.5 rounded">#hwee-v-talley</span>
+</div>
+<div class="flex-1 space-y-5 overflow-y-auto pr-2">
+<!-- Message 1 -->
+<div class="flex gap-3">
+<div class="w-8 h-8 rounded bg-primary-container text-primary flex items-center justify-center font-label-md shrink-0 border border-outline-variant">TM</div>
+<div>
+<div class="flex items-baseline gap-2 mb-1">
+<span class="font-body-sm text-body-sm font-semibold text-on-surface">Tim M.</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant opacity-60">10:42 AM</span>
+</div>
+<div class="font-body-sm text-body-sm text-on-surface opacity-90">
+                                        Just uploaded the signed fee agreement. <span class="text-primary bg-primary-container bg-opacity-30 px-1 rounded">@Edwyn</span> can we get the intake model spun up for the initial docs?
+                                    </div>
+<div class="mt-2 flex items-center gap-1 text-primary hover:underline cursor-pointer">
+<div class="flex -space-x-1">
+<div class="w-4 h-4 rounded-full bg-secondary-container border border-surface"></div>
+<div class="w-4 h-4 rounded-full bg-tertiary-container border border-surface"></div>
+</div>
+<span class="font-label-sm text-label-sm ml-1">3 replies</span>
+</div>
+</div>
+</div>
+<!-- Message 2 -->
+<div class="flex gap-3">
+<div class="w-8 h-8 rounded bg-secondary-container text-secondary flex items-center justify-center font-label-md shrink-0 border border-outline-variant">JL</div>
+<div>
+<div class="flex items-baseline gap-2 mb-1">
+<span class="font-body-sm text-body-sm font-semibold text-on-surface">Jessica L.</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant opacity-60">11:15 AM</span>
+</div>
+<div class="font-body-sm text-body-sm text-on-surface opacity-90">
+                                        Opposing counsel asked for an extension on the form interrogatories. I told them we'd agree to 14 days if they stipulate to the protective order.
+                                    </div>
+</div>
+</div>
+<!-- Message 3 -->
+<div class="flex gap-3">
+<div class="w-8 h-8 rounded bg-primary text-on-primary flex items-center justify-center font-label-md shrink-0 border border-outline-variant">
+<span class="material-symbols-outlined text-[18px]">smart_toy</span>
+</div>
+<div>
+<div class="flex items-baseline gap-2 mb-1">
+<span class="font-body-sm text-body-sm font-semibold text-on-surface">Alfred <span class="bg-surface-container-highest text-[10px] px-1 rounded border border-outline-variant font-normal">APP</span></span>
+<span class="font-label-sm text-label-sm text-on-surface-variant opacity-60">11:16 AM</span>
+</div>
+<div class="font-body-sm text-body-sm text-on-surface opacity-90">
+                                        Drafting protective order stipulation based on standard firm templates. It will be available in the <b>SHARED DOCUMENTS</b> folder momentarily.
+                                    </div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Sticky Footer Action -->
+<div class="absolute bottom-6 left-[50%] translate-x-[-50%] z-20">
+<div class="bg-primary-container border border-outline-variant rounded-full p-1 pl-4 flex items-center gap-4 shadow-lg shadow-black/50">
+<span class="font-label-md text-label-md text-primary tracking-wide">ASK ALFRED ABOUT THIS MATTER</span>
+<button class="bg-primary hover:bg-white text-on-primary rounded-full w-10 h-10 flex items-center justify-center transition-colors">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">bolt</span>
+</button>
+</div>
+<div class="text-center mt-2 font-label-sm text-label-sm text-on-surface-variant opacity-60">
+                    ⌘K to search or ask questions
+                </div>
+</div>
+</main>
+</div>
+</body></html>

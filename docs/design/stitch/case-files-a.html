@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Case Files - KLG AI OS</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&amp;family=JetBrains+Mono:wght@400;500;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "surface-container-low": "#181c24",
+                        "tertiary-fixed-dim": "#b5c8df",
+                        "on-primary": "#233143",
+                        "tertiary": "#b5c8df",
+                        "on-secondary-fixed": "#400009",
+                        "inverse-on-surface": "#2c3039",
+                        "on-tertiary-container": "#7f92a6",
+                        "surface-container-high": "#262a33",
+                        "tertiary-container": "#182a3b",
+                        "on-error": "#690005",
+                        "on-tertiary-fixed": "#091d2e",
+                        "on-secondary": "#680014",
+                        "secondary-fixed": "#ffdad9",
+                        "on-tertiary-fixed-variant": "#36485b",
+                        "surface-bright": "#353942",
+                        "tertiary-fixed": "#d1e4fb",
+                        "on-primary-fixed-variant": "#39485a",
+                        "surface-dim": "#0f131c",
+                        "background": "#0f131c",
+                        "on-background": "#dfe2ee",
+                        "inverse-surface": "#dfe2ee",
+                        "primary-fixed-dim": "#b8c8de",
+                        "on-primary-fixed": "#0d1d2d",
+                        "on-primary-container": "#8291a6",
+                        "primary": "#b8c8de",
+                        "outline-variant": "#44474c",
+                        "on-error-container": "#ffdad6",
+                        "surface-variant": "#31353e",
+                        "surface-container-highest": "#31353e",
+                        "secondary": "#ffb3b3",
+                        "secondary-container": "#920121",
+                        "surface-container": "#1c2028",
+                        "primary-container": "#1b2a3b",
+                        "outline": "#8e9197",
+                        "primary-fixed": "#d4e4fb",
+                        "on-surface": "#dfe2ee",
+                        "error": "#ffb4ab",
+                        "surface-container-lowest": "#0a0e16",
+                        "on-secondary-container": "#ff9899",
+                        "surface-tint": "#b8c8de",
+                        "on-surface-variant": "#c4c6cd",
+                        "secondary-fixed-dim": "#ffb3b3",
+                        "on-secondary-fixed-variant": "#920121",
+                        "inverse-primary": "#516073",
+                        "surface": "#0f131c",
+                        "on-tertiary": "#203243",
+                        "error-container": "#93000a",
+                        "klg-red": "#E63946",
+                        "klg-amber": "#F4A261"
+                    },
+                    borderRadius: {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                    spacing: {
+                        "panel-gutter": "12px",
+                        "list-item-padding": "12px 16px",
+                        "container-padding": "24px",
+                        "component-gap": "8px"
+                    },
+                    fontFamily: {
+                        "headline-md": ["Inter"],
+                        "body-sm": ["Inter"],
+                        "body-md": ["Inter"],
+                        "headline-lg": ["Inter"],
+                        "label-md": ["JetBrains Mono"],
+                        "label-sm": ["JetBrains Mono"]
+                    },
+                    fontSize: {
+                        "headline-md": ["18px", { "lineHeight": "24px", "fontWeight": "600" }],
+                        "body-sm": ["13px", { "lineHeight": "18px", "fontWeight": "400" }],
+                        "body-md": ["14px", { "lineHeight": "20px", "fontWeight": "400" }],
+                        "headline-lg": ["24px", { "lineHeight": "32px", "letterSpacing": "-0.02em", "fontWeight": "600" }],
+                        "label-md": ["12px", { "lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "500" }],
+                        "label-sm": ["10px", { "lineHeight": "14px", "fontWeight": "700" }]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        body { background-color: theme('colors.background'); color: theme('colors.on-background'); }
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: theme('colors.surface-variant'); border-radius: 3px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: theme('colors.outline'); }
+        
+        .overdue-glow {
+            box-shadow: 0 0 12px rgba(244, 162, 97, 0.15);
+        }
+        .overdue-glow-strong {
+            box-shadow: 0 0 16px rgba(244, 162, 97, 0.25);
+        }
+    </style>
+</head>
+<body class="h-screen flex flex-col overflow-hidden font-body-md antialiased text-body-md bg-background selection:bg-primary-container selection:text-primary">
+<!-- TopAppBar JSON Component -->
+<header class="flex justify-between items-center w-full px-container-padding h-16 bg-surface-dim border-b-2 border-primary-container bg-gradient-to-r from-primary via-secondary-container to-secondary flex-shrink-0 z-50">
+<div class="flex items-center gap-6">
+<button aria-label="Menu" class="text-on-surface-variant hover:text-primary transition-colors duration-200">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 0;">menu</span>
+</button>
+<div class="font-headline-lg text-headline-lg font-black tracking-tighter text-on-surface">
+                KLG AI OS
+            </div>
+</div>
+<nav class="hidden md:flex items-center h-full gap-8">
+<a class="text-on-surface-variant font-medium hover:text-primary transition-colors duration-200 font-label-md text-label-md flex items-center h-full pt-1" href="#">MATTERS</a>
+<a class="text-on-surface-variant font-medium hover:text-primary transition-colors duration-200 font-label-md text-label-md flex items-center h-full pt-1" href="#">DEADLINES</a>
+<a class="text-on-surface-variant font-medium hover:text-primary transition-colors duration-200 font-label-md text-label-md flex items-center h-full pt-1" href="#">SKILLS NAVIGATOR</a>
+<a class="text-primary font-bold border-b-2 border-primary pb-1 hover:text-primary transition-colors duration-200 font-label-md text-label-md flex items-center h-full pt-1" href="#">CASE FILES</a>
+</nav>
+<div class="flex items-center gap-4">
+<div class="hidden lg:flex items-center bg-surface-container-high border border-outline-variant rounded-full px-3 py-1 gap-2">
+<span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">ACTIVE ENGINE: Claude 3.5 Sonnet</span>
+<span class="material-symbols-outlined text-on-surface-variant text-[16px]">expand_more</span>
+</div>
+<div class="flex items-center bg-surface-container hover:bg-surface-container-high transition-colors border border-outline-variant rounded-full pl-1 pr-3 py-1 gap-2 cursor-pointer">
+<img alt="Edwyn" class="w-6 h-6 rounded-full object-cover border border-outline-variant" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAn7kO5eqF_m0JD2WI6yDylLbuaC65fRVlYtosFregCzCNuyV5YH6NsJk4ytSKWqCt-xFcBJMdHvz7ewjEtyh0vAc1GSCvCXzdNBZzr06-LdK_79YWIgPO9oDMOF_pjoPW4f7Rk-tNEd-et03HtlQOqYQ2aXOjogRdUNmFuBeSfk58UjctFmHIlyN1qeRHj-q_acHVlyhWkGJL6PCFp4WSYMKV4EF0Rl2KitUS42FDFbFX2RXrFMFob1ura8b6mcb3ru6NRumlAxB4"/>
+<div class="flex flex-col">
+<span class="font-label-sm text-label-sm leading-tight text-on-surface">Edwyn</span>
+<span class="text-[9px] text-on-surface-variant leading-tight">Systems Partner</span>
+</div>
+</div>
+</div>
+</header>
+<!-- Main Content Area -->
+<div class="flex flex-1 overflow-hidden">
+<!-- LEFT RAIL (Case Projects) -->
+<aside class="w-[280px] flex-shrink-0 bg-surface-container-lowest border-r border-outline-variant flex flex-col h-full z-40">
+<div class="p-panel-gutter border-b border-outline-variant flex justify-between items-center bg-surface-container-lowest sticky top-0">
+<h2 class="font-label-md text-label-md text-on-surface-variant">CASE PROJECTS</h2>
+<button class="text-on-surface-variant hover:text-primary transition-colors" title="Refresh List">
+<span class="material-symbols-outlined text-[18px]">refresh</span>
+</button>
+</div>
+<div class="flex-1 overflow-y-auto custom-scrollbar p-panel-gutter space-y-2">
+<!-- Selected Card -->
+<div class="bg-primary-container border-l-2 border-secondary rounded-DEFAULT p-3 cursor-pointer group shadow-sm">
+<div class="flex justify-between items-start mb-2">
+<div class="flex items-center gap-1.5">
+<span class="px-1.5 py-0.5 rounded-[2px] bg-secondary-container text-on-secondary font-label-sm text-label-sm">HIGH</span>
+</div>
+<span class="font-label-sm text-label-sm text-primary">47d</span>
+</div>
+<h3 class="font-headline-md text-headline-md text-primary mb-1 line-clamp-2">Hwee v. Talley — Case Assessment</h3>
+<div class="flex items-center gap-2 text-on-surface-variant font-label-sm text-label-sm">
+<span>In progress</span>
+<span class="w-1 h-1 rounded-full bg-outline-variant"></span>
+<span>Intake</span>
+</div>
+</div>
+<!-- Unselected Card 1 -->
+<div class="bg-surface-container border border-outline-variant rounded-DEFAULT p-3 cursor-pointer hover:bg-surface-container-high transition-colors">
+<div class="flex justify-between items-start mb-2">
+<div class="flex items-center gap-1.5">
+<span class="px-1.5 py-0.5 rounded-[2px] bg-secondary-container text-on-secondary font-label-sm text-label-sm">HIGH</span>
+</div>
+<span class="font-label-sm text-label-sm text-on-surface-variant">22d</span>
+</div>
+<h3 class="font-body-sm text-body-sm text-on-surface font-medium mb-1 line-clamp-2">Peck v. Grad</h3>
+<div class="flex items-center gap-2 text-on-surface-variant font-label-sm text-label-sm">
+<span>Post-Appeal</span>
+</div>
+</div>
+<!-- Overdue Card 1 -->
+<div class="bg-surface-container border border-outline-variant border-l-2 border-l-klg-amber rounded-DEFAULT p-3 cursor-pointer hover:bg-surface-container-high transition-colors overdue-glow">
+<div class="flex justify-between items-start mb-2">
+<div class="flex items-center gap-1.5">
+<span class="px-1.5 py-0.5 rounded-[2px] bg-secondary-container text-on-secondary font-label-sm text-label-sm">HIGH</span>
+<span class="px-1.5 py-0.5 rounded-[2px] bg-[#3A2A18] text-klg-amber border border-[#4A3A28] font-label-sm text-label-sm">OVERDUE</span>
+</div>
+</div>
+<h3 class="font-body-sm text-body-sm text-on-surface font-medium mb-1 line-clamp-2">Ovrahim v. Union Pacific</h3>
+</div>
+<!-- Overdue Card 2 -->
+<div class="bg-surface-container border border-outline-variant border-l-2 border-l-klg-amber rounded-DEFAULT p-3 cursor-pointer hover:bg-surface-container-high transition-colors overdue-glow">
+<div class="flex justify-between items-start mb-2">
+<div class="flex items-center gap-1.5">
+<span class="px-1.5 py-0.5 rounded-[2px] bg-secondary-container text-on-secondary font-label-sm text-label-sm">HIGH</span>
+<span class="px-1.5 py-0.5 rounded-[2px] bg-[#3A2A18] text-klg-amber border border-[#4A3A28] font-label-sm text-label-sm">OVERDUE</span>
+</div>
+</div>
+<h3 class="font-body-sm text-body-sm text-on-surface font-medium mb-1 line-clamp-2">Diller v. Weiss</h3>
+<div class="flex items-center gap-2 text-on-surface-variant font-label-sm text-label-sm">
+<span>Briefing — AOB</span>
+</div>
+</div>
+</div>
+</aside>
+<!-- MAIN WORKSPACE -->
+<main class="flex-1 flex flex-col bg-surface overflow-hidden relative">
+<!-- Workspace Header -->
+<div class="p-container-padding border-b border-outline-variant bg-surface-container-low flex-shrink-0">
+<div class="flex justify-between items-start mb-4">
+<div>
+<h1 class="font-headline-lg text-headline-lg text-on-surface mb-3">Hwee v. Talley — Case Assessment</h1>
+<div class="flex flex-wrap items-center gap-2">
+<span class="px-2 py-1 bg-surface-container-highest border border-outline-variant rounded-DEFAULT font-label-sm text-label-sm text-on-surface-variant">INTAKE</span>
+<span class="px-2 py-1 bg-primary-container border border-primary-fixed-dim rounded-DEFAULT font-label-sm text-label-sm text-primary">IN PROGRESS</span>
+<span class="px-2 py-1 bg-secondary-container border border-secondary-fixed-dim rounded-DEFAULT font-label-sm text-label-sm text-secondary">HIGH</span>
+<span class="w-px h-4 bg-outline-variant mx-1"></span>
+<div class="flex items-center gap-1.5 bg-surface-container border border-outline-variant rounded-full px-2 py-0.5">
+<img alt="Tim M." class="w-4 h-4 rounded-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAl6r5zYCmmUZ-rny5dDlh-3WaWrtfLyHorqxaqtsEBjVKlirDw4ejuk6ePgKe2nVw4CEBJJbjsEYXXG1HOmiw_VUtGQIDi2LZdyiUjJq6XxZu_bkm0MvTVpFKEvpcBP5wpa-TZfIJlJOt0Nkn5wAMdMMVcunhkY1SCyBRzg2H__8F0GZ14fC_0xeU4wTt7Nyj-EQb2OGb9VlMYFxSsy9Ryz-l14AvSQjni7yYibgrsqF3p49Jav_5aVJ7QALQQZIM3Gu-md7zjwPY"/>
+<span class="font-label-sm text-label-sm text-on-surface">Tim</span>
+</div>
+</div>
+</div>
+<a class="flex items-center gap-1.5 text-on-surface-variant hover:text-primary font-label-sm text-label-sm transition-colors px-3 py-1.5 border border-transparent hover:border-outline-variant rounded-DEFAULT" href="#">
+<span>OPEN IN NOTION</span>
+<span class="material-symbols-outlined text-[14px]">north_east</span>
+</a>
+</div>
+<!-- Urgent Deadline Block -->
+<div class="bg-[#2A1F16] border border-[#4A3A28] border-l-2 border-l-klg-amber rounded-DEFAULT p-3 flex items-center gap-3 overdue-glow-strong">
+<span class="material-symbols-outlined text-klg-amber">warning</span>
+<div class="flex flex-col">
+<span class="font-label-sm text-label-sm text-klg-amber">NEXT COURT DEADLINE: JUL 27, 2026 — in 47 days</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">Motion to Compel Discovery Responses</span>
+</div>
+</div>
+</div>
+<!-- Content Area -->
+<div class="flex-1 overflow-y-auto custom-scrollbar p-container-padding pb-32">
+<div class="flex flex-col xl:flex-row gap-6 h-full">
+<!-- Left Column (40%) -->
+<div class="w-full xl:w-[40%] flex flex-col gap-6">
+<!-- Properties Panel -->
+<div class="bg-surface-container-low border border-outline-variant rounded-lg p-4">
+<h3 class="font-label-sm text-label-sm text-on-surface-variant mb-4 border-b border-outline-variant pb-2">PROPERTIES</h3>
+<div class="grid grid-cols-2 gap-y-3 gap-x-4">
+<div>
+<span class="block font-label-sm text-label-sm text-on-surface-variant mb-1">Status</span>
+<span class="font-body-sm text-body-sm text-on-surface">In Progress</span>
+</div>
+<div>
+<span class="block font-label-sm text-label-sm text-on-surface-variant mb-1">Priority</span>
+<span class="font-body-sm text-body-sm text-on-surface">High</span>
+</div>
+<div>
+<span class="block font-label-sm text-label-sm text-on-surface-variant mb-1">Stage</span>
+<span class="font-body-sm text-body-sm text-on-surface">Intake</span>
+</div>
+<div>
+<span class="block font-label-sm text-label-sm text-on-surface-variant mb-1">Assignee</span>
+<div class="flex items-center gap-1.5">
+<img alt="Tim M." class="w-4 h-4 rounded-full" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDP3jGjuNFB2IQMp5SDaJJrlEkMFONApNdf4ofj6Y_5JTxtLpVPVYaPuigxUXlBw9AH0xI7esKkkxHUqCv16aBtmdbO1xW1tQyx7rgZlqzIADbsNzyM9uQu4kWuanQgvELfRvii2T5eqU5x6huPJ5KNymY555myva3vHh5CiFGLUMDtQMxhcqmhvYVtIlReF3_emn3P05-4-XicogIwHtEEqXNmh_RuxLChCGTKzDA14Plk14KqAOumKEtatwGy_fPLQugdIwFj89A"/>
+<span class="font-body-sm text-body-sm text-on-surface">Tim M.</span>
+</div>
+</div>
+<div>
+<span class="block font-label-sm text-label-sm text-on-surface-variant mb-1">Category</span>
+<span class="font-body-sm text-body-sm text-on-surface">Civil Litigation</span>
+</div>
+<div>
+<span class="block font-label-sm text-label-sm text-on-surface-variant mb-1">Last Edited</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">2 hrs ago</span>
+</div>
+</div>
+</div>
+<!-- Summary Panel -->
+<div class="bg-surface-container-low border border-outline-variant rounded-lg p-4 flex-1">
+<h3 class="font-label-sm text-label-sm text-on-surface-variant mb-4 border-b border-outline-variant pb-2">SUMMARY</h3>
+<div class="font-body-sm text-body-sm text-on-surface prose prose-invert prose-sm max-w-none">
+<p class="mb-2">Initial assessment indicates strong probability of liability on the part of the defendant regarding the breach of commercial lease terms.</p>
+<p>Key areas of focus for immediate drafting:</p>
+<ul class="list-disc pl-4 space-y-1 text-on-surface-variant">
+<li>Reviewing opposing counsel's assertions on force majeure.</li>
+<li>Quantifying damages related to physical property alterations.</li>
+</ul>
+</div>
+</div>
+<!-- Page Notes Panel -->
+<div class="bg-surface-container-low border border-outline-variant rounded-lg p-4">
+<h3 class="font-label-sm text-label-sm text-on-surface-variant mb-4 border-b border-outline-variant pb-2">PAGE NOTES</h3>
+<ul class="list-disc pl-4 font-body-sm text-body-sm text-on-surface-variant space-y-2">
+<li>Need to confirm exact dates of tenant departure.</li>
+<li>Follow up with expert witness regarding structural damage assessment.</li>
+</ul>
+</div>
+</div>
+<!-- Right Column (60%) -->
+<div class="w-full xl:w-[60%] flex flex-col gap-6">
+<!-- Shared Documents -->
+<div class="bg-surface-container-low border border-outline-variant rounded-lg p-4">
+<div class="flex justify-between items-center border-b border-outline-variant pb-2 mb-4">
+<h3 class="font-label-sm text-label-sm text-on-surface-variant">SHARED DOCUMENTS</h3>
+<button class="text-primary hover:text-primary-fixed font-label-sm text-label-sm flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]">add</span> ADD
+                                </button>
+</div>
+<div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+<!-- Doc 1 -->
+<div class="bg-surface-container border border-outline-variant hover:border-primary-fixed-dim rounded-DEFAULT overflow-hidden group cursor-pointer transition-colors flex flex-col h-[140px]">
+<div class="h-20 bg-surface-variant flex items-center justify-center border-b border-outline-variant">
+<span class="material-symbols-outlined text-3xl text-on-surface-variant group-hover:text-primary transition-colors">picture_as_pdf</span>
+</div>
+<div class="p-2 flex-1 flex flex-col justify-center bg-surface-container-lowest">
+<span class="font-body-sm text-body-sm text-on-surface truncate" title="Lease_Agreement_Final.pdf">Lease_Agreement_Final.pdf</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant mt-1">2.4 MB</span>
+</div>
+</div>
+<!-- Doc 2 -->
+<div class="bg-surface-container border border-outline-variant hover:border-primary-fixed-dim rounded-DEFAULT overflow-hidden group cursor-pointer transition-colors flex flex-col h-[140px]">
+<div class="h-20 bg-surface-variant flex items-center justify-center border-b border-outline-variant">
+<span class="material-symbols-outlined text-3xl text-on-surface-variant group-hover:text-primary transition-colors">description</span>
+</div>
+<div class="p-2 flex-1 flex flex-col justify-center bg-surface-container-lowest">
+<span class="font-body-sm text-body-sm text-on-surface truncate" title="Def_Initial_Disclosures.docx">Def_Initial_Disclosures.docx</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant mt-1">1.1 MB</span>
+</div>
+</div>
+<!-- Doc 3 -->
+<div class="bg-surface-container border border-outline-variant hover:border-primary-fixed-dim rounded-DEFAULT overflow-hidden group cursor-pointer transition-colors flex flex-col h-[140px]">
+<div class="h-20 bg-surface-variant border-b border-outline-variant relative">
+<div class="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0IiBoZWlnaHQ9IjQiPjxyZWN0IHdpZHRoPSI0IiBoZWlnaHQ9IjQiIGZpbGw9IiMzMTM1M2UiLz48cmVjdCB3aWR0aD0iMSIgaGVpZ2h0PSIxIiBmaWxsPSIjNDQ0NzRjIi8+PC9zdmc+')] opacity-50"></div>
+<div class="absolute inset-0 flex items-center justify-center">
+<span class="material-symbols-outlined text-3xl text-on-surface-variant group-hover:text-primary transition-colors">image</span>
+</div>
+</div>
+<div class="p-2 flex-1 flex flex-col justify-center bg-surface-container-lowest">
+<span class="font-body-sm text-body-sm text-on-surface truncate" title="Exhibit_A_Damage.jpg">Exhibit_A_Damage.jpg</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant mt-1">4.8 MB</span>
+</div>
+</div>
+<!-- Doc 4 -->
+<div class="bg-surface-container border border-outline-variant hover:border-primary-fixed-dim rounded-DEFAULT overflow-hidden group cursor-pointer transition-colors flex flex-col h-[140px]">
+<div class="h-20 bg-surface-variant border-b border-outline-variant relative">
+<div class="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0IiBoZWlnaHQ9IjQiPjxyZWN0IHdpZHRoPSI0IiBoZWlnaHQ9IjQiIGZpbGw9IiMzMTM1M2UiLz48cmVjdCB3aWR0aD0iMSIgaGVpZ2h0PSIxIiBmaWxsPSIjNDQ0NzRjIi8+PC9zdmc+')] opacity-50"></div>
+<div class="absolute inset-0 flex items-center justify-center">
+<span class="material-symbols-outlined text-3xl text-on-surface-variant group-hover:text-primary transition-colors">image</span>
+</div>
+</div>
+<div class="p-2 flex-1 flex flex-col justify-center bg-surface-container-lowest">
+<span class="font-body-sm text-body-sm text-on-surface truncate" title="Exhibit_B_Repairs.jpg">Exhibit_B_Repairs.jpg</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant mt-1">3.2 MB</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Case Channel Activity (Slack Feed) -->
+<div class="bg-surface-container-low border border-outline-variant rounded-lg flex-1 flex flex-col min-h-[300px]">
+<div class="flex justify-between items-center border-b border-outline-variant p-4 bg-surface-container-lowest rounded-t-lg">
+<div class="flex items-center gap-2">
+<h3 class="font-label-sm text-label-sm text-on-surface-variant">CASE CHANNEL ACTIVITY</h3>
+<span class="bg-surface-variant border border-outline-variant px-2 py-0.5 rounded-[2px] font-label-sm text-label-sm text-on-surface flex items-center gap-1">
+<span class="text-on-surface-variant">#</span> hwee-v-talley
+                                    </span>
+</div>
+<span class="material-symbols-outlined text-[16px] text-on-surface-variant">forum</span>
+</div>
+<div class="flex-1 p-4 space-y-5 overflow-y-auto custom-scrollbar">
+<!-- Message 1 -->
+<div class="flex gap-3">
+<div class="w-8 h-8 rounded-DEFAULT bg-[#2C3E50] border border-outline flex items-center justify-center font-label-sm text-on-surface flex-shrink-0">
+                                        TM
+                                    </div>
+<div class="flex flex-col">
+<div class="flex items-baseline gap-2 mb-1">
+<span class="font-headline-md text-body-sm font-semibold text-on-surface">Tim M.</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">10:42 AM</span>
+</div>
+<div class="font-body-sm text-body-sm text-on-surface bg-surface-container border border-outline-variant rounded-DEFAULT rounded-tl-none px-3 py-2">
+                                            Just uploaded the preliminary damage photos to the shared folder. <span class="text-primary bg-primary-container px-1 py-0.5 rounded-[2px]">@Edwyn</span>, take a look when you have a moment, they substantiate our claims well.
+                                        </div>
+</div>
+</div>
+<!-- Message 2 -->
+<div class="flex gap-3">
+<div class="w-8 h-8 rounded-DEFAULT bg-[#516073] border border-outline flex items-center justify-center font-label-sm text-on-surface flex-shrink-0">
+                                        JL
+                                    </div>
+<div class="flex flex-col">
+<div class="flex items-baseline gap-2 mb-1">
+<span class="font-headline-md text-body-sm font-semibold text-on-surface">Jessica L.</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">11:15 AM</span>
+</div>
+<div class="font-body-sm text-body-sm text-on-surface bg-surface-container border border-outline-variant rounded-DEFAULT rounded-tl-none px-3 py-2">
+                                            Opposing counsel reached out indicating they might file a motion to delay discovery. We need to prep a response ASAP.
+                                        </div>
+<div class="mt-1 flex items-center gap-1 text-primary hover:underline cursor-pointer">
+<span class="material-symbols-outlined text-[14px]">reply</span>
+<span class="font-label-sm text-label-sm">3 replies</span>
+</div>
+</div>
+</div>
+<!-- Message 3 (AI) -->
+<div class="flex gap-3">
+<div class="w-8 h-8 rounded-DEFAULT bg-primary-container border border-primary-fixed-dim flex items-center justify-center font-label-sm text-primary flex-shrink-0">
+<span class="material-symbols-outlined text-[18px]">smart_toy</span>
+</div>
+<div class="flex flex-col">
+<div class="flex items-baseline gap-2 mb-1">
+<span class="font-headline-md text-body-sm font-semibold text-primary">Alfred APP</span>
+<span class="bg-surface-variant px-1 rounded-[2px] font-label-sm text-[9px] text-on-surface-variant">BOT</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">11:20 AM</span>
+</div>
+<div class="font-body-sm text-body-sm text-on-surface bg-surface-container border border-primary-fixed-dim rounded-DEFAULT rounded-tl-none px-3 py-2 border-l-2 border-l-primary">
+                                            Drafting protective order shell based on standard local rules. Document will be available in the Shared Documents folder shortly.
+                                        </div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Sticky Footer Action -->
+<div class="absolute bottom-0 left-0 w-full p-container-padding bg-gradient-to-t from-surface via-surface to-transparent pt-12 flex justify-center pb-8 border-t border-outline-variant/30 backdrop-blur-sm">
+<div class="flex flex-col items-center gap-2">
+<button class="bg-primary-container hover:bg-tertiary-container border border-primary-fixed-dim text-primary px-6 py-3 rounded-full font-label-md text-label-md flex items-center gap-2 transition-all shadow-lg hover:shadow-primary-fixed-dim/20 transform hover:-translate-y-0.5">
+<span class="material-symbols-outlined text-[18px]" style="font-variation-settings: 'FILL' 1;">bolt</span>
+                        ASK ALFRED ABOUT THIS MATTER
+                    </button>
+<span class="font-label-sm text-label-sm text-on-surface-variant">Opens a briefing prompt in Chat</span>
+</div>
+</div>
+</main>
+</div>
+</body></html>

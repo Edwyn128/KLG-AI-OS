@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0, viewport-fit=cover" name="viewport"/>
+<title>KLG AI OS - Chat Workspace</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@500;700&amp;family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&amp;family=JetBrains+Mono:wght@100..900&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "surface-dim": "#0f131c",
+                        "on-secondary-fixed-variant": "#B22234",
+                        "primary-fixed-dim": "#b8c8de",
+                        "tertiary-fixed": "#d1e4fb",
+                        "on-error-container": "#ffdad6",
+                        "on-surface-variant": "#c4c6cd",
+                        "surface-container-highest": "#31353e",
+                        "surface-tint": "#b8c8de",
+                        "on-primary-fixed": "#0d1d2d",
+                        "on-tertiary-fixed": "#091d2e",
+                        "surface": "#0f131c",
+                        "inverse-on-surface": "#2c3039",
+                        "primary-fixed": "#d4e4fb",
+                        "error-container": "#93000a",
+                        "on-primary-fixed-variant": "#39485a",
+                        "secondary": "#B22234",
+                        "on-background": "#dfe2ee",
+                        "tertiary-container": "#182a3b",
+                        "on-primary": "#233143",
+                        "secondary-container": "#B22234",
+                        "on-surface": "#dfe2ee",
+                        "error": "#ffb4ab",
+                        "surface-bright": "#353942",
+                        "on-secondary": "#ffffff",
+                        "on-tertiary": "#203243",
+                        "secondary-fixed": "#ffdad9",
+                        "primary": "#b8c8de",
+                        "on-tertiary-fixed-variant": "#36485b",
+                        "on-tertiary-container": "#7f92a6",
+                        "on-primary-container": "#8291a6",
+                        "on-error": "#690005",
+                        "background": "#0f131c",
+                        "on-secondary-fixed": "#400009",
+                        "surface-container-high": "#262a33",
+                        "inverse-surface": "#dfe2ee",
+                        "primary-container": "#1B2A3B",
+                        "tertiary-fixed-dim": "#b5c8df",
+                        "secondary-fixed-dim": "#ffb3b3",
+                        "surface-container-lowest": "#0a0e16",
+                        "inverse-primary": "#516073",
+                        "surface-variant": "#31353e",
+                        "surface-container": "#1c2028",
+                        "on-secondary-container": "#ff9899",
+                        "outline": "#8e9197",
+                        "surface-container-low": "#181c24",
+                        "tertiary": "#b5c8df",
+                        "outline-variant": "#44474c",
+                        "klg-navy": "#1B2A3B",
+                        "klg-red": "#B22234"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                    "spacing": {
+                        "list-item-padding": "12px 16px",
+                        "container-padding": "24px",
+                        "component-gap": "8px",
+                        "panel-gutter": "12px"
+                    },
+                    "fontFamily": {
+                        "label-sm": ["JetBrains Mono"],
+                        "body-md": ["Inter"],
+                        "headline-lg": ["Inter"],
+                        "headline-md": ["Inter"],
+                        "label-md": ["JetBrains Mono"],
+                        "body-sm": ["Inter"]
+                    },
+                    "fontSize": {
+                        "label-sm": ["10px", {"lineHeight": "14px", "fontWeight": "700"}],
+                        "body-md": ["14px", {"lineHeight": "20px", "fontWeight": "400"}],
+                        "headline-lg": ["24px", {"lineHeight": "32px", "letterSpacing": "-0.02em", "fontWeight": "600"}],
+                        "headline-md": ["18px", {"lineHeight": "24px", "fontWeight": "600"}],
+                        "label-md": ["12px", {"lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "500"}],
+                        "body-sm": ["13px", {"lineHeight": "18px", "fontWeight": "400"}]
+                    }
+                },
+            },
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            display: inline-block;
+            line-height: 1;
+            text-transform: none;
+            letter-spacing: normal;
+            word-wrap: normal;
+            white-space: nowrap;
+            direction: ltr;
+        }
+
+        .cursor-blink {
+            display: inline-block;
+            width: 2px;
+            height: 1.2em;
+            background-color: var(--primary);
+            margin-left: 2px;
+            vertical-align: middle;
+            animation: blink 1s step-end infinite;
+        }
+
+        @keyframes blink {
+            50% { opacity: 0; }
+        }
+
+        .overdue-glow {
+            box-shadow: 0 0 12px rgba(178, 34, 52, 0.15);
+        }
+
+        .chat-container {
+            height: calc(100vh - 3.5rem - 4rem - 7rem - 2px); /* Adjusted for Header, Nav, and Input Area */
+            overflow-y: auto;
+            scrollbar-width: thin;
+            scrollbar-color: #44474c transparent;
+        }
+
+        .gradient-separator {
+            height: 2px;
+            background: linear-gradient(to right, #1B2A3B, #B22234);
+        }
+
+        body {
+            background-color: #080c14;
+        }
+
+        .pb-safe {
+            padding-bottom: env(safe-area-inset-bottom);
+        }
+
+        /* Mobile Native Drawer Animation */
+        .drawer-spring {
+            transition: transform 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+
+        /* Backdrop Blur for mobile overlays */
+        .backdrop-blur-overlay {
+            backdrop-filter: blur(4px);
+            -webkit-backdrop-filter: blur(4px);
+        }
+
+        /* Tab Switcher Indicator */
+        .tab-indicator {
+            position: absolute;
+            bottom: 0;
+            height: 2px;
+            background-color: #B22234;
+            transition: all 0.3s ease;
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+</head>
+<body class="text-on-surface font-body-md overflow-hidden">
+<!-- TopAppBar -->
+<header class="fixed top-0 left-0 w-full z-50 flex justify-between items-center px-4 h-14 bg-surface-dim border-b-2 border-klg-red">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 flex items-center justify-center">
+    data:image/png;base64,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
+</div>
+<span class="text-headline-md font-headline-md font-bold tracking-tight text-on-surface">KLG AI OS</span>
+</div>
+<div class="flex items-center gap-2">
+<div class="hidden sm:flex flex-col items-end">
+<span class="text-label-md font-label-md text-on-surface">Edwyn</span>
+<span class="text-[10px] text-on-surface-variant leading-none">Systems Partner</span>
+</div>
+<div class="w-11 h-11 rounded-full overflow-hidden border border-outline-variant bg-surface-container-highest flex items-center justify-center">
+<span class="material-symbols-outlined text-primary text-xl" data-icon="person">person</span>
+</div>
+</div>
+</header>
+<!-- Main Workspace Area -->
+<main class="mt-14 mb-16 pt-2 h-screen flex flex-col">
+<!-- Tab Switcher (New Native Brand Element) -->
+<div class="px-4 bg-surface-dim flex items-center gap-6 relative border-b border-outline-variant/30">
+<button class="h-11 flex items-center justify-center text-primary font-bold text-label-md relative min-w-[64px]">
+        CHAT
+        <div class="absolute bottom-0 left-0 w-full h-[2px] bg-klg-red"></div>
+</button>
+<button class="h-11 flex items-center justify-center text-on-surface-variant font-medium text-label-md min-w-[64px]">SKILLS</button>
+<button class="h-11 flex items-center justify-center text-on-surface-variant font-medium text-label-md min-w-[64px]">CASES</button>
+</div>
+<!-- Context Bar / Breadcrumbs (Mobile Optimized) -->
+<div class="px-4 h-11 flex items-center justify-between bg-surface-container-low border-b border-outline-variant">
+<div class="flex items-center gap-2 overflow-hidden">
+<span class="material-symbols-outlined text-on-tertiary-container text-sm" data-icon="folder_open">folder_open</span>
+<span class="text-label-md font-label-md text-on-surface truncate font-semibold">Matter 2023-B7: Corporate...</span>
+</div>
+<div class="flex items-center gap-3">
+<div class="relative w-11 h-11 flex items-center justify-center">
+<span class="material-symbols-outlined text-klg-red" data-icon="notifications">notifications</span>
+<span class="absolute top-2 right-2 w-2 h-2 bg-klg-red rounded-full animate-pulse"></span>
+</div>
+<button class="w-11 h-11 flex items-center justify-center">
+<span class="material-symbols-outlined text-on-surface-variant" data-icon="more_vert">more_vert</span>
+</button>
+</div>
+</div>
+<!-- Chat History -->
+<div class="chat-container px-4 py-4 flex flex-col gap-6">
+<!-- System Notice / Date -->
+<div class="flex justify-center">
+<span class="text-label-sm font-label-sm px-3 py-1 bg-surface-container rounded-full text-on-surface-variant border border-outline-variant/30 uppercase tracking-widest">October 27, 2023</span>
+</div>
+<!-- User Message -->
+<div class="flex flex-col items-end gap-1">
+<div class="max-w-[85%] bg-klg-navy text-on-surface p-3 rounded-xl rounded-tr-none border border-outline-variant/20 shadow-sm">
+<p class="text-body-md font-body-md leading-relaxed">What is the status of the financial report for Matter 2023-A4?</p>
+</div>
+<span class="text-label-sm font-label-sm text-on-surface-variant pr-1">10:42 AM</span>
+</div>
+<!-- AI Response (Alfred) -->
+<div class="flex flex-col items-start gap-1">
+<div class="flex items-center gap-2 mb-1">
+<div class="w-7 h-7 bg-klg-navy rounded flex items-center justify-center">
+<span class="material-symbols-outlined text-primary text-xs" data-icon="smart_toy">smart_toy</span>
+</div>
+<span class="text-label-md font-label-md text-primary font-bold">Alfred</span>
+</div>
+<div class="max-w-[90%] bg-surface-container-high text-on-surface p-4 rounded-xl rounded-tl-none border-l-4 border-klg-red shadow-sm">
+<p class="text-body-md font-body-md leading-relaxed">
+                        Based on the recent filings for Matter 2023-B7, I've drafted a preliminary response regarding the contract clauses. The key points are...<span class="cursor-blink">|</span>
+</p>
+<div class="mt-4 p-3 bg-surface-container-lowest rounded-lg border border-outline-variant/30 flex items-center gap-3 active:bg-surface-container-high transition-colors">
+<span class="material-symbols-outlined text-klg-red" data-icon="description">description</span>
+<div class="flex flex-col">
+<span class="text-label-md font-label-md font-semibold">Draft_Response_v1.pdf</span>
+<span class="text-[10px] text-on-surface-variant uppercase">420 KB • Ready for review</span>
+</div>
+</div>
+</div>
+<span class="text-label-sm font-label-sm text-on-surface-variant pl-1">10:43 AM</span>
+</div>
+<!-- Overdue Alert Block (Embedded for mobile density context) -->
+<div class="bg-surface-container-lowest border-l-4 border-klg-red p-3 rounded-r-lg overdue-glow">
+<div class="flex justify-between items-start mb-2">
+<span class="text-label-sm font-label-sm text-klg-red bg-klg-red/10 px-2 py-0.5 rounded font-bold">2 CRITICAL TASKS OVERDUE</span>
+<span class="material-symbols-outlined text-klg-red text-sm" data-icon="warning">warning</span>
+</div>
+<div class="space-y-3 mt-2">
+<div class="flex justify-between items-center text-on-surface">
+<span class="text-body-sm font-body-sm truncate font-semibold">Financial Report - Matter 2023-A4</span>
+<span class="text-label-md font-bold text-klg-red ml-2">OCT 26</span>
+</div>
+<div class="flex justify-between items-center text-on-surface">
+<span class="text-body-sm font-body-sm truncate font-semibold">Discovery Response - Matter 2023-C2</span>
+<span class="text-label-md font-bold text-klg-red ml-2">OCT 25</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Input Area (Mobile Native Message Dock) -->
+<div class="fixed bottom-16 left-0 w-full bg-surface-dim/95 backdrop-blur-md border-t border-outline-variant/30 px-4 pt-3 pb-safe chat-input-area">
+<div class="flex flex-col gap-3">
+<div class="flex items-center gap-1">
+<button class="w-11 h-11 flex items-center justify-center text-on-surface-variant active:text-klg-red">
+<span class="material-symbols-outlined" data-icon="attach_file">attach_file</span>
+</button>
+<button class="w-11 h-11 flex items-center justify-center text-on-surface-variant active:text-klg-red">
+<span class="material-symbols-outlined" data-icon="image">image</span>
+</button>
+<button class="w-11 h-11 flex items-center justify-center text-on-surface-variant active:text-klg-red">
+<span class="material-symbols-outlined" data-icon="mic">mic</span>
+</button>
+<div class="flex-grow"></div>
+<button class="h-11 px-3 text-label-sm font-bold text-primary flex items-center gap-1 active:bg-primary/10 rounded-lg">
+<span class="material-symbols-outlined text-xs" data-icon="history">history</span>
+                        HISTORY
+                    </button>
+</div>
+<div class="flex items-center gap-2 bg-surface-container-low border border-outline-variant rounded-2xl p-1.5 focus-within:border-klg-red transition-all shadow-inner">
+<input class="flex-grow bg-transparent border-none focus:ring-0 text-body-md font-body-md px-3 py-3 text-on-surface placeholder:text-on-surface-variant min-h-[48px]" placeholder="Ask Alfred anything..." type="text"/>
+<button class="bg-klg-red text-white h-11 px-6 rounded-full font-bold text-label-md active:scale-95 transition-all shadow-lg flex items-center justify-center">
+                        SEND
+                    </button>
+</div>
+</div>
+</div>
+</main>
+<!-- BottomNavBar -->
+<nav class="fixed bottom-0 left-0 w-full z-50 flex justify-around items-center h-16 bg-surface-container-high pb-safe border-t border-outline-variant bottom-nav">
+<!-- Chat (Active) -->
+<a class="flex flex-col items-center justify-center text-klg-red font-bold h-16 w-full active:bg-black/10" href="#">
+<span class="material-symbols-outlined mb-0.5" data-icon="forum" style="font-variation-settings: 'FILL' 1;">forum</span>
+<span class="text-[11px] font-bold uppercase tracking-wider">Chat</span>
+</a>
+<!-- Matters -->
+<a class="flex flex-col items-center justify-center text-on-surface-variant hover:text-on-surface h-16 w-full active:bg-black/10" href="#">
+<span class="material-symbols-outlined mb-0.5" data-icon="gavel">gavel</span>
+<span class="text-[11px] font-medium uppercase tracking-wider">Matters</span>
+</a>
+<!-- Deadlines -->
+<a class="flex flex-col items-center justify-center text-on-surface-variant hover:text-on-surface h-16 w-full relative active:bg-black/10" href="#">
+<span class="material-symbols-outlined mb-0.5" data-icon="notification_important">notification_important</span>
+<span class="text-[11px] font-medium uppercase tracking-wider">Deadlines</span>
+<span class="absolute top-3 right-1/3 w-2 h-2 bg-klg-red rounded-full shadow-[0_0_8px_rgba(178,34,52,0.6)]"></span>
+</a>
+<!-- Tools -->
+<a class="flex flex-col items-center justify-center text-on-surface-variant hover:text-on-surface h-16 w-full active:bg-black/10" href="#">
+<span class="material-symbols-outlined mb-0.5" data-icon="extension">extension</span>
+<span class="text-[11px] font-medium uppercase tracking-wider">Tools</span>
+</a>
+</nav>
+<script>
+        // Simple micro-interaction for the send button
+        document.querySelector('button.bg-klg-red').addEventListener('click', function() {
+            const input = this.previousElementSibling;
+            if (input.value.trim() !== "") {
+                console.log("Sending command:", input.value);
+                input.value = "";
+            }
+        });
+
+        // Auto-scroll to bottom of chat
+        const chatContainer = document.querySelector('.chat-container');
+        chatContainer.scrollTop = chatContainer.scrollHeight;
+
+        // Visual depth effect on scroll
+        chatContainer.addEventListener('scroll', () => {
+            const shadow = chatContainer.scrollTop > 10 ? '0 4px 12px rgba(0, 0, 0, 0.4)' : 'none';
+            document.querySelector('.bg-surface-container-low.border-b').style.boxShadow = shadow;
+        });
+    </script>
+</body></html>
