@@ -302,16 +302,59 @@ async def chat_with_alfred_stream(
         full_response = ""
         tools_used: list[str] = []
         try:
-            async with AlfredAgent.run_stream(
+            # Drive the run with agent.iter() and stream text from EVERY model
+            # response — not run_stream(), which locks in the FIRST text part
+            # as the final output. With run_stream, a response like
+            # "On it — pulling the matter page now." + tool call ends the run
+            # after the narration: the tool still executes (so the UI shows a
+            # tool badge) but the model is never called again and the actual
+            # answer never exists. iter() lets the graph continue through tool
+            # calls, so narration streams, tools run, and the post-tool answer
+            # streams after it.
+            from pydantic_ai.messages import (
+                PartDeltaEvent,
+                PartStartEvent,
+                TextPart,
+                TextPartDelta,
+            )
+
+            async with AlfredAgent.iter(
                 request.message,
                 deps=alfred_deps,
                 model=model_override,
                 model_settings=thinking_settings,
                 message_history=message_history,
-            ) as result:
-                async for chunk in result.stream_text(delta=True):
-                    full_response += chunk
-                    yield f"data: {json.dumps({'delta': chunk})}\n\n"
+            ) as agent_run:
+                pending_separator = False
+                async for node in agent_run:
+                    if not AlfredAgent.is_model_request_node(node):
+                        continue
+                    node_streamed_text = False
+                    async with node.stream(agent_run.ctx) as node_stream:
+                        async for event in node_stream:
+                            # Thinking parts and tool-call parts are skipped;
+                            # only visible answer text reaches the client.
+                            if isinstance(event, PartStartEvent) and isinstance(event.part, TextPart):
+                                delta = event.part.content
+                            elif isinstance(event, PartDeltaEvent) and isinstance(event.delta, TextPartDelta):
+                                delta = event.delta.content_delta
+                            else:
+                                continue
+                            if not delta:
+                                continue
+                            if pending_separator:
+                                pending_separator = False
+                                full_response += "\n\n"
+                                yield f"data: {json.dumps({'delta': chr(10) * 2})}\n\n"
+                            node_streamed_text = True
+                            full_response += delta
+                            yield f"data: {json.dumps({'delta': delta})}\n\n"
+                    # Separate this node's narration from the next response's
+                    # text so "pulling it now" and the answer don't run together.
+                    if node_streamed_text:
+                        pending_separator = True
+
+                result = agent_run.result
                 tools_used = _extract_tools_used(result)
 
             new_history: list = []
