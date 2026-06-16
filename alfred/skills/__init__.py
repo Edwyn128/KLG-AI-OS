@@ -37,17 +37,36 @@ ADDING A NEW SKILL
   1. Create a new file: alfred/skills/klg_<name>.py
   2. Define a class that inherits from Skill (alfred/skills/base.py)
   3. Implement the `execute()` method following the 5-step lifecycle
-  4. Register the skill in the SKILL_REGISTRY dict below
-  5. The skill runner will automatically find it by name
+  4. Import the class in this file and add it to SKILL_REGISTRY
 """
 
 from alfred.skills.base import Skill, SkillResult
 from alfred.skills.klg_matter_intake import KLGMatterIntake
+from alfred.skills.klg_deep_research_prompts import KLGDeepResearchPrompts
+from alfred.skills.klg_conflict_waiver import KLGConflictWaiver
+from alfred.skills.klg_podcast_guest_prep import KLGPodcastGuestPrep
+from alfred.skills.klg_style_guide_check import KLGStyleGuideCheck
+from alfred.skills.klg_cite_check import KLGCiteCheck
 
 # Registry of all available skills, keyed by name.
-# Alfred's skill runner looks skills up here by name.
+# Alfred's run_skill tool looks skills up here by name.
 SKILL_REGISTRY: dict[str, Skill] = {
-    KLGMatterIntake.name: KLGMatterIntake(),
+    KLGMatterIntake.name:            KLGMatterIntake(),
+    KLGDeepResearchPrompts.name:     KLGDeepResearchPrompts(),
+    KLGConflictWaiver.name:          KLGConflictWaiver(),
+    KLGPodcastGuestPrep.name:        KLGPodcastGuestPrep(),
+    KLGStyleGuideCheck.name:         KLGStyleGuideCheck(),
+    KLGCiteCheck.name:               KLGCiteCheck(),
 }
 
-__all__ = ["Skill", "SkillResult", "KLGMatterIntake", "SKILL_REGISTRY"]
+__all__ = [
+    "Skill",
+    "SkillResult",
+    "SKILL_REGISTRY",
+    "KLGMatterIntake",
+    "KLGDeepResearchPrompts",
+    "KLGConflictWaiver",
+    "KLGPodcastGuestPrep",
+    "KLGStyleGuideCheck",
+    "KLGCiteCheck",
+]

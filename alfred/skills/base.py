@@ -111,6 +111,12 @@ class SkillResult:
     output: str
     next_action: str = ""
     notion_updates: dict[str, Any] = field(default_factory=dict)
+    file_attachments: list[dict] = field(default_factory=list)
+    """
+    Files produced by this skill, returned as download links in the chat UI.
+    Each entry: {"filename": "Brief.docx", "content_b64": "<base64>",
+                 "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"}
+    """
     success: bool = True
 
 
@@ -152,6 +158,14 @@ class Skill(ABC):
     """
     One-sentence description of what this skill does.
     Shown in the web UI's skill picker.
+    """
+
+    long_running: bool = False
+    """
+    Set to True for skills that take longer than Railway's ~100s proxy timeout.
+    When True, run_skill dispatches this skill as a background job and returns
+    a job_id immediately. The caller polls GET /alfred/jobs/{job_id} for the result.
+    Skills that produce large documents (novella, record-digest) should set this.
     """
 
     @abstractmethod

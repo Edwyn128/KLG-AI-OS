@@ -266,6 +266,14 @@ async def lifespan(app: FastAPI):
     )
     logger.info("Alfred dependencies assembled.")
 
+    # 4b. Initialize the in-memory job store for long-running skill background tasks.
+    # Keyed by job_id (UUID); each entry: {status, result?, error?, created_at}.
+    # NOTE: This store is process-local — it does not survive Railway deploys.
+    # Long-running jobs (klg-case-novella, klg-record-digest) started just before
+    # a deploy will be lost. Phase 4 will add a persistent store.
+    app.state.job_store = {}
+    logger.info("Job store initialized.")
+
     # 5. Start the background agent scheduler.
     # In production, set DISABLE_SCHEDULER=true and use Railway Cron Jobs instead.
     # APScheduler is in-memory — it dies on every deploy and cannot be relied on

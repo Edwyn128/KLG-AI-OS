@@ -1246,3 +1246,111 @@ async def deep_research_with_chatgpt(
     except Exception as e:
         logger.error("ChatGPT deep research error: %s", e)
         return f"ChatGPT research failed: {type(e).__name__}: {e}"
+
+
+@AlfredAgent.tool
+async def run_skill(
+    ctx: RunContext[AlfredDependencies],
+    skill_name: str,
+    instruction: str = "",
+    matter_name: str = "",
+    file_tokens: list[str] = [],
+    extra: dict = {},
+) -> str:
+    """
+    Execute a named KLG skill workflow.
+
+    Use this when the user asks to run one of KLG's structured skills by name
+    or by description. Skills are multi-step workflows that read from Notion,
+    produce documents or analysis, and write results back to Notion.
+
+    Available skills:
+      klg-matter-intake          — Open a new matter project page in Notion
+      klg-deep-research-prompts  — Generate tiered ChatGPT Deep Research prompts
+                                   from case materials; deliver to Notion research page
+      klg-conflict-waiver        — Draft a joint-representation conflict waiver letter
+      klg-podcast-guest-prep     — Discover CALP podcast guests (mode=discovery) or
+                                   build a full interview prep package (mode=prep)
+      klg-style-guide-check      — Review a brief against the KLG Style Guide;
+                                   returns conformance report (requires uploaded brief)
+      klg-cite-check             — Phase A: citation format audit + Westlaw pull list;
+                                   Phase B: verify citations against Westlaw source text
+
+    Args:
+        skill_name:   The skill to run (exactly as listed above).
+        instruction:  The user's specific instruction for this skill run.
+        matter_name:  The matter name to look up in Notion (if the skill needs matter context).
+        file_tokens:  Token(s) for files the user uploaded. Obtain these from the
+                      "Attached files" note in the message, if present.
+        extra:        Additional skill-specific parameters (e.g., phase="B" for klg-cite-check,
+                      mode="discovery" for klg-podcast-guest-prep, jurisdiction="California").
+
+    Returns:
+        The skill's output as a string, including any Notion page URLs and next steps.
+    """
+    from alfred.skills import SKILL_REGISTRY
+    from alfred.skills.base import SkillContext
+
+    skill = SKILL_REGISTRY.get(skill_name)
+    if skill is None:
+        available = ", ".join(sorted(SKILL_REGISTRY.keys()))
+        return (
+            f"Unknown skill '{skill_name}'. Available skills: {available}\n\n"
+            "Check the skill name and try again."
+        )
+
+    # Resolve matter context from Notion if matter_name provided
+    matter_id = ""
+    matter_summary = ""
+    matter_props: dict = {}
+
+    if matter_name:
+        try:
+            matter = await ctx.deps.project_pages.find_matter(matter_name)
+            if matter:
+                matter_id = matter.get("id", "")
+                matter_summary = await ctx.deps.project_pages.get_matter_summary(matter_id)
+                matter_props = matter
+            else:
+                logger.info("run_skill: matter '%s' not found in Notion", matter_name)
+        except Exception as e:
+            logger.warning("run_skill: matter lookup failed for '%s': %s", matter_name, e)
+
+    # Merge file_tokens into extra so skills can access them
+    skill_extra = dict(extra)
+    if file_tokens:
+        skill_extra["file_tokens"] = file_tokens
+    if not matter_name and not matter_id:
+        skill_extra.setdefault("matter_name", "")
+
+    skill_ctx = SkillContext(
+        matter_id=matter_id,
+        matter_name=matter_name or skill_extra.get("matter_name", ""),
+        matter_summary=matter_summary,
+        matter_props=matter_props,
+        user_instruction=instruction,
+        extra=skill_extra,
+    )
+
+    if skill.long_running:
+        # Long-running skills return a job ID immediately; the caller polls
+        # GET /alfred/jobs/{job_id}. Not yet implemented for non-long-running skills.
+        return (
+            f"'{skill_name}' is a long-running skill. "
+            "Background job execution is available in Phase 3. "
+            "For now, this skill must be run directly via POST /alfred/agents/run-skill."
+        )
+
+    try:
+        result = await skill.run(skill_ctx, ctx.deps.project_pages)
+    except Exception as e:
+        logger.error("run_skill: '%s' raised an exception: %s", skill_name, e, exc_info=True)
+        return f"Skill '{skill_name}' encountered an error: {type(e).__name__}: {e}"
+
+    if result.file_attachments:
+        logger.info(
+            "run_skill: '%s' produced %d file attachment(s)",
+            skill_name, len(result.file_attachments),
+        )
+
+    return result.output

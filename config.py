@@ -298,6 +298,15 @@ class Settings(BaseSettings):
     Switch to claude-opus-4-7 for the most demanding synthesis tasks.
     """
 
+    max_upload_size_mb: int = 50
+    """
+    Maximum size for a single file upload to /alfred/upload, in megabytes.
+    Files larger than this must use the chunked upload endpoint (/alfred/upload/chunk).
+    Default 50MB keeps each request safely under Railway's 100MB proxy limit.
+    Court-filing PDFs at 100–250KB/page: ~50MB covers ~200–500 pages per chunk.
+    Multi-volume appendix records (400+ pages/volume) require multiple chunks.
+    """
+
     bloodhound_model: str = "claude-sonnet-4-6"
     """
     The Claude model Bloodhound uses for signal triage and analysis.

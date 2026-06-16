@@ -29,7 +29,7 @@ import json
 import logging
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
@@ -88,6 +88,14 @@ class ChatRequest(BaseModel):
             "Send an empty list (or omit) to start a fresh conversation."
         ),
     )
+    file_tokens: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Tokens for files uploaded via POST /alfred/upload before this message. "
+            "Alfred resolves these to temp file paths when running skills that need "
+            "uploaded documents (briefs, PDFs, CSVs). Tokens are single-use."
+        ),
+    )
 
 
 class ChatResponse(BaseModel):
@@ -115,6 +123,42 @@ class ChatResponse(BaseModel):
             "Updated conversation history. Store this client-side and send it "
             "back as ChatRequest.history on the next message to maintain context."
         ),
+    )
+    file_attachments: list[dict] = Field(
+        default_factory=list,
+        description=(
+            "Files produced by Alfred in this response (e.g., a conflict waiver letter, "
+            "a research report). Each entry: {filename, content_b64, mime_type}. "
+            "The UI renders these as download links."
+        ),
+    )
+
+
+class UploadResponse(BaseModel):
+    """Response from POST /alfred/upload."""
+    file_token: str = Field(description="Single-use token identifying the uploaded file.")
+    filename: str = Field(description="Original filename as uploaded.")
+    size_bytes: int = Field(description="File size in bytes.")
+
+
+class ChunkRequest(BaseModel):
+    """Request body for POST /alfred/upload/chunk."""
+    upload_id: str = Field(description="Session ID. Generate a UUID client-side and reuse for all chunks.")
+    filename: str = Field(description="Original filename. Must be identical across all chunks.")
+    chunk_index: int = Field(description="Zero-based chunk index. Chunks must arrive in order.")
+    total_chunks: int = Field(description="Total number of chunks for this file.")
+    data: str = Field(description="Base64-encoded chunk bytes.")
+
+
+class ChunkResponse(BaseModel):
+    """Response from POST /alfred/upload/chunk."""
+    upload_id: str
+    chunks_received: int
+    total_chunks: int
+    done: bool
+    file_token: str | None = Field(
+        default=None,
+        description="Set when done=True. Use this token in ChatRequest.file_tokens.",
     )
 
 
@@ -191,8 +235,10 @@ async def chat_with_alfred(
             except Exception:
                 message_history = []
 
+        effective_message = _inject_file_context(request.message, request.file_tokens)
+
         result = await AlfredAgent.run(
-            request.message,
+            effective_message,
             deps=alfred_deps,
             model=model_override,
             model_settings=thinking_settings,
@@ -318,8 +364,9 @@ async def chat_with_alfred_stream(
                 TextPartDelta,
             )
 
+            effective_message = _inject_file_context(request.message, request.file_tokens)
             async with AlfredAgent.iter(
-                request.message,
+                effective_message,
                 deps=alfred_deps,
                 model=model_override,
                 model_settings=thinking_settings,
@@ -717,3 +764,171 @@ def _extract_tools_used(result: Any) -> list[str]:
         pass
 
     return tools
+
+
+def _inject_file_context(message: str, file_tokens: list[str]) -> str:
+    """
+    If the request includes uploaded file tokens, prepend a one-line context
+    note so Alfred can see the filenames and pass the tokens to run_skill.
+    """
+    if not file_tokens:
+        return message
+    try:
+        from alfred.file_store import get_file_info
+        file_info = get_file_info(file_tokens)
+        if not file_info:
+            return message
+        lines = [
+            f"[Attached files — include token(s) when calling run_skill:]"
+        ]
+        for token, filename, size_bytes in file_info:
+            kb = size_bytes // 1024
+            lines.append(f"  Token {token}: {filename} ({kb} KB)")
+        attachment_note = "\n".join(lines)
+        return f"{attachment_note}\n\n{message}"
+    except Exception:
+        return message
+
+
+# =============================================================================
+# FILE UPLOAD ENDPOINTS
+# =============================================================================
+
+
+@router.post(
+    "/upload",
+    response_model=UploadResponse,
+    summary="Upload a document for use in an Alfred skill",
+)
+async def upload_file(
+    request: Request,
+    file: UploadFile = File(...),
+) -> UploadResponse:
+    """
+    Upload a single document (brief, PDF, CSV) for use in an Alfred skill.
+
+    Accepts any file type. Files are stored in a temporary directory and
+    associated with a single-use token. Include the token in
+    ChatRequest.file_tokens when sending the follow-up message to Alfred.
+
+    File size limit: MAX_UPLOAD_SIZE_MB (default 50MB).
+    For larger files, use the chunked upload endpoint (POST /alfred/upload/chunk).
+
+    Tokens expire after 1 hour and are deleted immediately after a skill
+    consumes them — they cannot be reused.
+    """
+    from config import settings as _settings
+    from alfred.file_store import register_file, _TEMP_DIR
+    import uuid
+
+    max_bytes = _settings.max_upload_size_mb * 1024 * 1024
+    filename = file.filename or "upload"
+    safe_name = "".join(c if c.isalnum() or c in "._- " else "_" for c in filename)
+    temp_path = str(_TEMP_DIR / f"{uuid.uuid4().hex}_{safe_name}")
+
+    total = 0
+    try:
+        with open(temp_path, "wb") as f:
+            while True:
+                chunk = await file.read(1024 * 1024)  # 1MB at a time
+                if not chunk:
+                    break
+                total += len(chunk)
+                if total > max_bytes:
+                    import os
+                    os.unlink(temp_path)
+                    raise HTTPException(
+                        status_code=413,
+                        detail=(
+                            f"File exceeds {_settings.max_upload_size_mb}MB limit. "
+                            "Use POST /alfred/upload/chunk for larger files."
+                        ),
+                    )
+                f.write(chunk)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("upload_file: write failed for '%s': %s", filename, e)
+        raise HTTPException(status_code=500, detail=f"Upload failed: {e}")
+
+    token = register_file(temp_path, filename)
+    logger.info("upload_file: '%s' (%d bytes) → token %.8s", filename, total, token)
+
+    return UploadResponse(file_token=token, filename=filename, size_bytes=total)
+
+
+@router.post(
+    "/upload/chunk",
+    response_model=ChunkResponse,
+    summary="Send a base64-encoded chunk for a large file upload",
+)
+async def upload_chunk(body: ChunkRequest) -> ChunkResponse:
+    """
+    Chunked upload for files larger than the single-upload limit.
+
+    Split the file into chunks of up to 40MB raw data (≈53MB base64), then
+    send each chunk sequentially with the same upload_id.
+
+    On the first chunk (chunk_index=0), the server creates an upload session.
+    On the last chunk (chunk_index == total_chunks-1), it assembles the file
+    and returns a file_token to include in ChatRequest.file_tokens.
+
+    Example flow:
+        POST /alfred/upload/chunk  {upload_id: "abc", chunk_index: 0, total_chunks: 3, ...}
+        POST /alfred/upload/chunk  {upload_id: "abc", chunk_index: 1, total_chunks: 3, ...}
+        POST /alfred/upload/chunk  {upload_id: "abc", chunk_index: 2, total_chunks: 3, ...}
+        → Response: {done: true, file_token: "xyz..."}
+    """
+    from alfred.file_store import start_chunk_session, append_chunk as _append_chunk
+
+    if body.chunk_index == 0:
+        start_chunk_session(
+            upload_id=body.upload_id,
+            filename=body.filename,
+            total_chunks=body.total_chunks,
+        )
+
+    try:
+        result = _append_chunk(
+            upload_id=body.upload_id,
+            chunk_index=body.chunk_index,
+            data_b64=body.data,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error("upload_chunk: failed on chunk %d of '%s': %s", body.chunk_index, body.filename, e)
+        raise HTTPException(status_code=500, detail=f"Chunk upload failed: {e}")
+
+    return ChunkResponse(
+        upload_id=body.upload_id,
+        chunks_received=result["chunks_received"],
+        total_chunks=result["total_chunks"],
+        done=result["done"],
+        file_token=result.get("file_token"),
+    )
+
+
+@router.get(
+    "/jobs/{job_id}",
+    summary="Poll the status of a long-running skill job",
+)
+async def get_job_status(job_id: str, request: Request) -> dict[str, Any]:
+    """
+    Poll a long-running skill job by ID.
+
+    Long-running skills (klg-case-novella, klg-record-digest, etc.) return a
+    job_id immediately and run in the background. Call this endpoint every 5–10
+    seconds until status is 'complete' or 'error'.
+
+    Returns:
+        {job_id, status: 'running'|'complete'|'error', result?, error?}
+
+    Note: the job store is in-memory and does not survive Railway deploys.
+    If a deploy happens while a job is running, the job is lost — resubmit.
+    """
+    job_store: dict = getattr(request.app.state, "job_store", {})
+    job = job_store.get(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail=f"Job '{job_id}' not found.")
+    return {"job_id": job_id, **job}
