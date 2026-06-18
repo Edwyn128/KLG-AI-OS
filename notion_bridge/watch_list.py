@@ -35,6 +35,8 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from notion_client.errors import APIResponseError
+
 from notion_bridge.client import NotionBridge
 from config import settings
 
@@ -186,15 +188,19 @@ class WatchList:
             List of Watch List rows (flat dicts) where Tier = "1".
             Sorted alphabetically by case name for readability.
         """
-        cases = await self._bridge.query_database(
-            database_id=settings.notion_watch_list_db_id,
-            filter={
-                "and": [
-                    {"property": "Tier", "select": {"equals": "1"}},
-                    {"property": "Status", "select": {"does_not_equal": "Closed"}},
-                ]
-            },
-        )
+        try:
+            cases = await self._bridge.query_database(
+                database_id=settings.notion_watch_list_db_id,
+                filter={
+                    "and": [
+                        {"property": "Tier", "select": {"equals": "1"}},
+                        {"property": "Status", "select": {"does_not_equal": "Closed"}},
+                    ]
+                },
+            )
+        except APIResponseError as e:
+            logger.warning("WatchList.get_tier_one_cases: Notion query failed (%s) — database schema may not be set up yet", e)
+            return []
         cases.sort(key=lambda c: c.get("Case Name") or "")
         return cases
 
@@ -228,10 +234,14 @@ class WatchList:
         else:
             combined_filter = base_filter
 
-        cases = await self._bridge.query_database(
-            database_id=settings.notion_watch_list_db_id,
-            filter=combined_filter,
-        )
+        try:
+            cases = await self._bridge.query_database(
+                database_id=settings.notion_watch_list_db_id,
+                filter=combined_filter,
+            )
+        except APIResponseError as e:
+            logger.warning("WatchList.get_active_cases: Notion query failed (%s) — database schema may not be set up yet", e)
+            return []
         cases.sort(key=lambda c: (c.get("Tier") or "9", c.get("Case Name") or ""))
         return cases
 

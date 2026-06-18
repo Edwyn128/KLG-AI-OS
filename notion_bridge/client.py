@@ -58,7 +58,7 @@ from notion_client import AsyncClient
 from notion_client.errors import APIResponseError
 from tenacity import (
     retry,
-    retry_if_exception_type,
+    retry_if_exception,
     stop_after_attempt,
     wait_exponential,
 )
@@ -68,22 +68,26 @@ from config import settings
 logger = logging.getLogger(__name__)
 
 
+def _is_retryable_notion_error(exc: BaseException) -> bool:
+    """Only retry on 429 (rate limit) and 5xx (server errors). Never retry 4xx client errors."""
+    if not isinstance(exc, APIResponseError):
+        return False
+    return exc.status == 429 or exc.status >= 500
+
+
 # =============================================================================
 # RETRY DECORATOR
 # =============================================================================
 #
 # This decorator is applied to every Notion API call. It:
-#   - Retries on APIResponseError (covers 429 rate limits and 5xx server errors)
+#   - Retries ONLY on 429 (rate limit) and 5xx (server errors)
+#   - Does NOT retry 400/404 client errors — those are deterministic failures
+#     that won't improve with retries and waste ~15 seconds per crash
 #   - Waits exponentially: 1s → 2s → 4s → 8s between attempts
 #   - Gives up after 5 attempts (total: ~15 seconds of waiting)
 #
-# Why exponential back-off instead of a fixed wait?
-#   If Notion is under load (causing the 429), hammering it every second makes
-#   the problem worse for everyone. Exponential back-off gives the server time
-#   to recover while still retrying automatically.
-#
 _notion_retry = retry(
-    retry=retry_if_exception_type(APIResponseError),
+    retry=retry_if_exception(_is_retryable_notion_error),
     wait=wait_exponential(multiplier=1, min=1, max=8),
     stop=stop_after_attempt(5),
     before_sleep=lambda retry_state: logger.warning(
