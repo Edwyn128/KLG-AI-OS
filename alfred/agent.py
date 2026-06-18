@@ -63,7 +63,6 @@ import re
 from dataclasses import dataclass, field
 from typing import Any
 
-import httpx
 from pydantic_ai import Agent, ModelRetry, RunContext
 from pydantic_ai.models.anthropic import AnthropicModel
 from pydantic_ai.providers.anthropic import AnthropicProvider
@@ -1277,49 +1276,30 @@ async def web_search(
         Web results with titles, URLs, and content summaries. Includes a
         synthesized answer when Tavily can generate one.
     """
-    if not settings.tavily_api_key:
+    try:
+        from duckduckgo_search import AsyncDDGS
+    except ImportError:
         return (
-            "Web search is not configured. "
-            "Set TAVILY_API_KEY in Railway env vars to enable Alfred's web search."
+            "duckduckgo-search is not installed. "
+            "Add 'duckduckgo-search>=6.0.0' to requirements.txt and redeploy."
         )
 
-    payload = {
-        "api_key": settings.tavily_api_key,
-        "query": query,
-        "search_depth": search_depth,
-        "max_results": 5,
-        "include_answer": True,
-    }
+    try:
+        async with AsyncDDGS() as ddgs:
+            raw = await ddgs.atext(query, max_results=5)
+    except Exception as e:
+        logger.error("web_search DuckDuckGo error: %s", e)
+        return f"Web search failed: {type(e).__name__}: {e}"
 
-    async with httpx.AsyncClient(timeout=20.0) as client:
-        try:
-            resp = await client.post(
-                "https://api.tavily.com/search",
-                json=payload,
-            )
-            resp.raise_for_status()
-            data = resp.json()
-        except httpx.HTTPStatusError as e:
-            logger.error("web_search Tavily error: %s", e)
-            return f"Web search failed: {e}"
-        except Exception as e:
-            logger.error("web_search error: %s", e)
-            return f"Web search error: {type(e).__name__}: {e}"
-
-    lines = [f"Web search results for: {query}\n"]
-
-    if answer := data.get("answer"):
-        lines.append(f"Summary: {answer}\n")
-
-    results = data.get("results", [])
-    if not results:
+    if not raw:
         return f"No web results found for '{query}'."
 
-    for r in results:
+    lines = [f"Web search results for: {query}\n"]
+    for r in raw:
         title = r.get("title", "")
-        url = r.get("url", "")
-        content = r.get("content", "")[:300]
-        lines.append(f"  • {title}\n    {url}\n    {content}\n")
+        url = r.get("href", "")
+        snippet = r.get("body", "")[:300]
+        lines.append(f"  • {title}\n    {url}\n    {snippet}\n")
 
     return "\n".join(lines)
 

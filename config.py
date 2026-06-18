@@ -104,15 +104,6 @@ class Settings(BaseSettings):
     Set PERPLEXITY_API_KEY in Railway env vars to activate.
     """
 
-    tavily_api_key: str = ""
-    """
-    OPTIONAL. Tavily API key (starts with tvly-).
-    Enables Alfred's web_search tool — mid-conversation web search for legal
-    news, docket lookups, current events, and public research on opposing parties
-    or judges. Free tier: 1,000 searches/month. Paid: $20/month for more.
-    Get one at: https://app.tavily.com
-    Set TAVILY_API_KEY in Railway env vars to activate.
-    """
 
     # ── Notion ────────────────────────────────────────────────────────────────
 

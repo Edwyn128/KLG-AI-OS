@@ -99,6 +99,13 @@ pydantic-settings>=2.5.0
 tenacity>=9.0.0
 
 
+# ── Web Search ───────────────────────────────────────────────────────────────
+# duckduckgo-search gives Alfred free, keyless web search — no subscription,
+# no API account. Alfred calls this when asked about legal news, case
+# developments, judges, or anything requiring current external information.
+duckduckgo-search>=6.0.0
+
+
 # ── SharePoint / Microsoft Graph ─────────────────────────────────────────────
 # msal (Microsoft Authentication Library) handles OAuth2 token acquisition
 # for the Microsoft Graph API. Used by SharePointBridge to authenticate as
