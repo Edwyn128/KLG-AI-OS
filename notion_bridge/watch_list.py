@@ -227,14 +227,16 @@ class WatchList:
         else:
             combined_filter = base_filter
 
-        return await self._bridge.query_database(
+        cases = await self._bridge.query_database(
             database_id=settings.notion_watch_list_db_id,
             filter=combined_filter,
-            sorts=[
-                {"property": "Tier", "direction": "ascending"},
-                {"property": "Case Name", "direction": "ascending"},
-            ],
+            sorts=[{"property": "Case Name", "direction": "ascending"}],
         )
+
+        # Sort by Tier client-side — Notion rejects server-side sorts on
+        # select properties in some database configurations.
+        cases.sort(key=lambda c: (c.get("Tier") or "9", c.get("Case Name") or ""))
+        return cases
 
     async def update_case_status(
         self,
