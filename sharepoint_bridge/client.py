@@ -240,21 +240,24 @@ class SharePointBridge:
                 return []
 
     async def get_file_content(
-        self, drive_id: str, item_id: str
+        self, drive_id: str, item_id: str, filename: str = ""
     ) -> str:
         """
         Download and return the text content of a SharePoint file.
 
-        Works for .txt and .docx files. For PDFs, returns a note that
-        content extraction is not yet supported (Graph doesn't return
-        raw PDF text — you'd need a separate extraction step).
+        Supports:
+          - .docx — extracts text from OOXML (ZIP + word/document.xml)
+          - .txt  — returns raw text
+          - .pdf  — returns a download link (Graph has no text extraction)
 
         Args:
             drive_id: The drive ID from a search result's driveId field.
             item_id:  The item ID from a search result's driveItemId field.
+            filename: Optional filename hint used to detect .docx by extension
+                      when the Content-Type header is ambiguous.
 
         Returns:
-            The file text content, or an explanatory string if extraction fails.
+            Extracted text (capped at 15,000 chars), or an explanatory string.
         """
         if not self._configured:
             return ""
@@ -271,19 +274,73 @@ class SharePointBridge:
                 resp.raise_for_status()
 
                 content_type = resp.headers.get("content-type", "")
-                if "text" in content_type or "plain" in content_type:
-                    return resp.text[:10000]  # cap at 10k chars for AI context
 
-                # For Word docs and other binary formats, Graph returns raw bytes.
-                # A full implementation would use python-docx or similar here.
+                # Plain text
+                if "text/plain" in content_type:
+                    return resp.text[:15000]
+
+                # DOCX detection: ZIP magic bytes (PK\x03\x04) or filename hint
+                is_docx = (
+                    resp.content[:4] == b"PK\x03\x04"
+                    and (
+                        "openxmlformats" in content_type
+                        or (filename or "").lower().endswith(".docx")
+                    )
+                )
+
+                if is_docx or (resp.content[:4] == b"PK\x03\x04" and not filename.lower().endswith(".pdf")):
+                    return self._extract_docx_text(resp.content)
+
+                # PDF — no text extraction available via Graph
+                if "pdf" in content_type or (filename or "").lower().endswith(".pdf"):
+                    return (
+                        f"[PDF — text extraction not available via Graph API. "
+                        f"Download directly to read: {url}]"
+                    )
+
                 return (
-                    f"[Binary file — content extraction not available. "
-                    f"Open directly: {url}]"
+                    f"[Unsupported file type ({content_type}) — "
+                    f"open directly: {url}]"
                 )
 
             except httpx.HTTPStatusError as e:
                 logger.error("SharePoint get_file_content error: %s", e)
                 return f"[Error fetching file: {e}]"
+
+    @staticmethod
+    def _extract_docx_text(raw_bytes: bytes) -> str:
+        """Extract plain text from a .docx (OOXML ZIP) byte string."""
+        import io
+        import zipfile
+        import xml.etree.ElementTree as ET
+
+        WORD_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+
+        try:
+            with zipfile.ZipFile(io.BytesIO(raw_bytes)) as zf:
+                if "word/document.xml" not in zf.namelist():
+                    return "[DOCX has no word/document.xml — file may be corrupt]"
+
+                with zf.open("word/document.xml") as xml_file:
+                    tree = ET.parse(xml_file)
+                    root = tree.getroot()
+
+                paragraphs = []
+                for para in root.findall(f".//{{{WORD_NS}}}p"):
+                    parts = []
+                    for t in para.findall(f".//{{{WORD_NS}}}t"):
+                        if t.text:
+                            parts.append(t.text)
+                    if parts:
+                        paragraphs.append("".join(parts))
+
+                text = "\n".join(paragraphs)
+                if len(text) > 15000:
+                    text = text[:15000] + "\n\n[… document truncated at 15,000 characters]"
+                return text or "[Document appears empty]"
+
+        except Exception as e:
+            return f"[DOCX extraction failed: {e}]"
 
     # ─────────────────────────────────────────────────────────────────────────
     # INTERNAL HELPERS

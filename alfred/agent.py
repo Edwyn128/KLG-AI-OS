@@ -63,6 +63,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Any
 
+import httpx
 from pydantic_ai import Agent, ModelRetry, RunContext
 from pydantic_ai.models.anthropic import AnthropicModel
 from pydantic_ai.providers.anthropic import AnthropicProvider
@@ -1246,6 +1247,124 @@ async def deep_research_with_chatgpt(
     except Exception as e:
         logger.error("ChatGPT deep research error: %s", e)
         return f"ChatGPT research failed: {type(e).__name__}: {e}"
+
+
+@AlfredAgent.tool
+async def web_search(
+    ctx: RunContext[AlfredDependencies],
+    query: str,
+    search_depth: str = "basic",
+) -> str:
+    """
+    Search the web for current information not found in Notion or SharePoint.
+
+    Use this when the user asks about:
+      - Recent case decisions, legal news, or appellate docket developments
+      - Public information about opposing parties, judges, or organizations
+      - Any question requiring up-to-date external information
+      - Current events relevant to a matter or doctrine KLG tracks
+
+    Do NOT use for matter state, project status, or anything in Notion — use
+    find_and_summarize_matter or search_notion for internal firm knowledge.
+
+    Args:
+        query:        The search query. Be specific — include case names,
+                      court names, or statute numbers when relevant.
+        search_depth: "basic" (fast, most queries) or "advanced" (slower,
+                      deeper results for complex legal research). Default: "basic".
+
+    Returns:
+        Web results with titles, URLs, and content summaries. Includes a
+        synthesized answer when Tavily can generate one.
+    """
+    if not settings.tavily_api_key:
+        return (
+            "Web search is not configured. "
+            "Set TAVILY_API_KEY in Railway env vars to enable Alfred's web search."
+        )
+
+    payload = {
+        "api_key": settings.tavily_api_key,
+        "query": query,
+        "search_depth": search_depth,
+        "max_results": 5,
+        "include_answer": True,
+    }
+
+    async with httpx.AsyncClient(timeout=20.0) as client:
+        try:
+            resp = await client.post(
+                "https://api.tavily.com/search",
+                json=payload,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+        except httpx.HTTPStatusError as e:
+            logger.error("web_search Tavily error: %s", e)
+            return f"Web search failed: {e}"
+        except Exception as e:
+            logger.error("web_search error: %s", e)
+            return f"Web search error: {type(e).__name__}: {e}"
+
+    lines = [f"Web search results for: {query}\n"]
+
+    if answer := data.get("answer"):
+        lines.append(f"Summary: {answer}\n")
+
+    results = data.get("results", [])
+    if not results:
+        return f"No web results found for '{query}'."
+
+    for r in results:
+        title = r.get("title", "")
+        url = r.get("url", "")
+        content = r.get("content", "")[:300]
+        lines.append(f"  • {title}\n    {url}\n    {content}\n")
+
+    return "\n".join(lines)
+
+
+@AlfredAgent.tool
+async def read_sharepoint_file(
+    ctx: RunContext[AlfredDependencies],
+    drive_id: str,
+    item_id: str,
+    file_name: str = "",
+) -> str:
+    """
+    Read and return the text content of a SharePoint document.
+
+    Use this AFTER search_sharepoint() has returned a file — call this with
+    the driveId and driveItemId from the search result to read the actual
+    document text. Works for .docx and .txt files. PDFs return a download link.
+
+    Typical pattern:
+      1. search_sharepoint("Petersen respondent brief") → returns file list with driveId + driveItemId
+      2. read_sharepoint_file(drive_id=..., item_id=..., file_name="brief.docx") → returns text
+
+    Args:
+        drive_id:  driveId from a search_sharepoint() result.
+        item_id:   driveItemId from a search_sharepoint() result.
+        file_name: Filename for display and format detection (e.g. "brief.docx").
+
+    Returns:
+        Extracted document text (up to 15,000 characters), or a download link
+        for formats that can't be extracted (PDF).
+    """
+    if not ctx.deps.sharepoint:
+        return (
+            "SharePoint is not configured. Set SHAREPOINT_TENANT_ID, "
+            "SHAREPOINT_CLIENT_ID, SHAREPOINT_CLIENT_SECRET, and "
+            "SHAREPOINT_SITE_URL in .env to enable document reading."
+        )
+
+    content = await ctx.deps.sharepoint.get_file_content(drive_id, item_id, file_name)
+
+    if not content:
+        return f"No content returned for file '{file_name}' (driveId={drive_id}, itemId={item_id})."
+
+    label = f"Content of '{file_name}'" if file_name else "Document content"
+    return f"{label}:\n\n{content}"
 
 
 @AlfredAgent.tool
