@@ -186,7 +186,7 @@ class WatchList:
             List of Watch List rows (flat dicts) where Tier = "1".
             Sorted alphabetically by case name for readability.
         """
-        return await self._bridge.query_database(
+        cases = await self._bridge.query_database(
             database_id=settings.notion_watch_list_db_id,
             filter={
                 "and": [
@@ -194,8 +194,9 @@ class WatchList:
                     {"property": "Status", "select": {"does_not_equal": "Closed"}},
                 ]
             },
-            sorts=[{"property": "Case Name", "direction": "ascending"}],
         )
+        cases.sort(key=lambda c: c.get("Case Name") or "")
+        return cases
 
     async def get_active_cases(self, tier: str | None = None) -> list[dict[str, Any]]:
         """
@@ -230,11 +231,7 @@ class WatchList:
         cases = await self._bridge.query_database(
             database_id=settings.notion_watch_list_db_id,
             filter=combined_filter,
-            sorts=[{"property": "Case Name", "direction": "ascending"}],
         )
-
-        # Sort by Tier client-side — Notion rejects server-side sorts on
-        # select properties in some database configurations.
         cases.sort(key=lambda c: (c.get("Tier") or "9", c.get("Case Name") or ""))
         return cases
 
