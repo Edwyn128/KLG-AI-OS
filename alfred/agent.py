@@ -1276,29 +1276,48 @@ async def web_search(
         Web results with titles, URLs, and content summaries. Includes a
         synthesized answer when Tavily can generate one.
     """
-    try:
-        from duckduckgo_search import AsyncDDGS
-    except ImportError:
+    if not settings.tavily_api_key:
         return (
-            "duckduckgo-search is not installed. "
-            "Add 'duckduckgo-search>=6.0.0' to requirements.txt and redeploy."
+            "Web search is not configured. "
+            "Set TAVILY_API_KEY in Railway env vars to enable Alfred's web search. "
+            "Get a free key (1,000 searches/month) at https://app.tavily.com"
         )
 
-    try:
-        async with AsyncDDGS() as ddgs:
-            raw = await ddgs.atext(query, max_results=5)
-    except Exception as e:
-        logger.error("web_search DuckDuckGo error: %s", e)
-        return f"Web search failed: {type(e).__name__}: {e}"
+    import httpx as _httpx
 
-    if not raw:
-        return f"No web results found for '{query}'."
+    payload = {
+        "api_key": settings.tavily_api_key,
+        "query": query,
+        "search_depth": search_depth,
+        "max_results": 5,
+        "include_answer": True,
+    }
+
+    async with _httpx.AsyncClient(timeout=20.0) as client:
+        try:
+            resp = await client.post("https://api.tavily.com/search", json=payload)
+            resp.raise_for_status()
+            data = resp.json()
+        except _httpx.HTTPStatusError as e:
+            logger.error("web_search Tavily error: %s", e)
+            return f"Web search failed: {e}"
+        except Exception as e:
+            logger.error("web_search error: %s", e)
+            return f"Web search error: {type(e).__name__}: {e}"
 
     lines = [f"Web search results for: {query}\n"]
-    for r in raw:
+
+    if answer := data.get("answer"):
+        lines.append(f"Summary: {answer}\n")
+
+    results = data.get("results", [])
+    if not results:
+        return f"No web results found for '{query}'."
+
+    for r in results:
         title = r.get("title", "")
-        url = r.get("href", "")
-        snippet = r.get("body", "")[:300]
+        url = r.get("url", "")
+        snippet = r.get("content", "")[:300]
         lines.append(f"  • {title}\n    {url}\n    {snippet}\n")
 
     return "\n".join(lines)
