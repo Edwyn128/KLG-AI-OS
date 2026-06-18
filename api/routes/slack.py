@@ -103,6 +103,7 @@ async def receive_event(request: Request) -> JSONResponse:
 
         # Get the user's Slack display name for logging
         user_id = event.get("user", "unknown")
+        event_ts = event.get("ts", "")
 
         logger.info(
             "Slack → Alfred: user=%s channel=%s message=%s",
@@ -117,6 +118,7 @@ async def receive_event(request: Request) -> JSONResponse:
                 message=clean_text,
                 channel=channel,
                 thread_ts=thread_ts,
+                event_ts=event_ts,
                 slack_client=request.app.state.slack_client,
                 alfred_deps=request.app.state.alfred_deps,
                 user_id=user_id,
@@ -130,6 +132,7 @@ async def _run_alfred_and_reply(
     message: str,
     channel: str,
     thread_ts: str,
+    event_ts: str,
     slack_client,
     alfred_deps,
     user_id: str,
@@ -150,7 +153,13 @@ async def _run_alfred_and_reply(
     from alfred.agent import AlfredAgent
 
     try:
-        result = await AlfredAgent.run(message, deps=alfred_deps)
+        history = await _fetch_conversation_history(
+            slack_client=slack_client,
+            channel=channel,
+            thread_ts=thread_ts,
+            event_ts=event_ts,
+        )
+        result = await AlfredAgent.run(message, message_history=history or None, deps=alfred_deps)
         response_text = result.output
 
         if slack_client:
@@ -208,6 +217,64 @@ async def _run_alfred_and_reply(
                 )
             except Exception:
                 pass
+
+
+async def _fetch_conversation_history(
+    slack_client,
+    channel: str,
+    thread_ts: str,
+    event_ts: str,
+) -> list:
+    """
+    Fetch prior Slack messages and return them as pydantic-ai message history.
+
+    DMs: fetch recent channel history (last 20 messages).
+    Threads: fetch thread replies if the current message is a reply in an
+             existing thread (thread_ts differs from event_ts).
+    Top-level channel messages: return [] — no prior context to thread over.
+
+    Degrades gracefully to [] if the Slack client is unavailable or lacks scopes.
+    """
+    if not slack_client:
+        return []
+
+    from pydantic_ai.messages import ModelRequest, ModelResponse, UserPromptPart, TextPart
+
+    try:
+        is_dm = channel.startswith("D")
+        is_thread_reply = thread_ts and thread_ts != event_ts
+
+        if is_dm:
+            resp = await slack_client.conversations_history(channel=channel, limit=20)
+            raw_messages = list(reversed(resp.get("messages", [])))
+        elif is_thread_reply:
+            resp = await slack_client.conversations_replies(
+                channel=channel, ts=thread_ts, limit=20
+            )
+            raw_messages = resp.get("messages", [])
+        else:
+            return []
+
+        history = []
+        for msg in raw_messages:
+            if msg.get("ts") == event_ts:
+                continue  # Skip the current message — it's passed separately
+            text = (msg.get("text") or "").strip()
+            if not text:
+                continue
+            clean = _strip_mention(text)
+            if not clean:
+                continue
+            if msg.get("bot_id"):
+                history.append(ModelResponse(parts=[TextPart(content=clean)]))
+            else:
+                history.append(ModelRequest(parts=[UserPromptPart(content=clean)]))
+
+        return history
+
+    except Exception as e:
+        logger.debug("Could not fetch Slack history (continuing without): %s", e)
+        return []
 
 
 def _verify_slack_signature(request: Request, body: bytes) -> None:
