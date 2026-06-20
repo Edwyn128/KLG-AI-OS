@@ -1383,6 +1383,9 @@ async def run_skill(
     produce documents or analysis, and write results back to Notion.
 
     Available skills:
+      klg-case-assessment        — Assess a client inquiry against full matter context
+                                   (Notion, Comms Log, SharePoint, web research) and
+                                   draft a recommended reply for attorney review
       klg-matter-intake          — Open a new matter project page in Notion
       klg-deep-research-prompts  — Generate tiered ChatGPT Deep Research prompts
                                    from case materials; deliver to Notion research page
@@ -1440,6 +1443,9 @@ async def run_skill(
         skill_extra["file_tokens"] = file_tokens
     if not matter_name and not matter_id:
         skill_extra.setdefault("matter_name", "")
+
+    # Pass full deps so skills that need Comms Log, SharePoint, etc. can access them
+    skill_extra["deps"] = ctx.deps
 
     skill_ctx = SkillContext(
         matter_id=matter_id,

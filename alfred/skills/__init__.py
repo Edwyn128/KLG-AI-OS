@@ -41,6 +41,7 @@ ADDING A NEW SKILL
 """
 
 from alfred.skills.base import Skill, SkillResult
+from alfred.skills.klg_case_assessment import KLGCaseAssessment
 from alfred.skills.klg_matter_intake import KLGMatterIntake
 from alfred.skills.klg_deep_research_prompts import KLGDeepResearchPrompts
 from alfred.skills.klg_conflict_waiver import KLGConflictWaiver
@@ -51,6 +52,7 @@ from alfred.skills.klg_cite_check import KLGCiteCheck
 # Registry of all available skills, keyed by name.
 # Alfred's run_skill tool looks skills up here by name.
 SKILL_REGISTRY: dict[str, Skill] = {
+    KLGCaseAssessment.name:          KLGCaseAssessment(),
     KLGMatterIntake.name:            KLGMatterIntake(),
     KLGDeepResearchPrompts.name:     KLGDeepResearchPrompts(),
     KLGConflictWaiver.name:          KLGConflictWaiver(),
@@ -63,6 +65,7 @@ __all__ = [
     "Skill",
     "SkillResult",
     "SKILL_REGISTRY",
+    "KLGCaseAssessment",
     "KLGMatterIntake",
     "KLGDeepResearchPrompts",
     "KLGConflictWaiver",
