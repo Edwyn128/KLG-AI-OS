@@ -314,6 +314,14 @@ class Settings(BaseSettings):
       gemini-1.5-pro     → Google Gemini Pro
     """
 
+    alfred_model_fallbacks: str = "claude-sonnet-4-6,gemini-1.5-pro"
+    """
+    Comma-separated list of fallback models to try if alfred_model hits a
+    billing/quota error. Alfred walks this list in order until one succeeds.
+    Example: ALFRED_MODEL_FALLBACKS=claude-sonnet-4-6,gemini-1.5-pro
+    Leave empty to disable automatic fallback.
+    """
+
     max_upload_size_mb: int = 50
     """
     Maximum size for a single file upload to /alfred/upload, in megabytes.

@@ -150,7 +150,7 @@ async def _run_alfred_and_reply(
     the original message is also logged to that matter's Notion page so the team
     has a record of Slack activity alongside case notes.
     """
-    from alfred.agent import AlfredAgent
+    from alfred.agent import run_with_fallback
 
     try:
         history = await _fetch_conversation_history(
@@ -159,7 +159,7 @@ async def _run_alfred_and_reply(
             thread_ts=thread_ts,
             event_ts=event_ts,
         )
-        result = await AlfredAgent.run(message, message_history=history or None, deps=alfred_deps)
+        result = await run_with_fallback(message, message_history=history or None, deps=alfred_deps)
         response_text = result.output
 
         if slack_client:

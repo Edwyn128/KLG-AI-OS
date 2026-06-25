@@ -349,6 +349,95 @@ AlfredAgent: Agent[AlfredDependencies, str] = Agent(
 )
 
 
+# ── Provider fallback ────────────────────────────────────────────────────────
+
+def _is_billing_error(exc: BaseException) -> bool:
+    """Return True if the error is a billing or quota exhaustion from any provider."""
+    msg = str(exc).lower()
+    return any(phrase in msg for phrase in (
+        "credit balance",
+        "insufficient_quota",
+        "billing",
+        "quota exceeded",
+        "rate limit",          # treat hard rate limits as exhaustion too
+        "credits",
+        "payment",
+    )) and getattr(exc, "status_code", None) in (400, 429, None)
+
+
+async def run_with_fallback(
+    message: str,
+    *,
+    deps: AlfredDependencies,
+    message_history=None,
+    model_override=None,
+    model_settings=None,
+):
+    """
+    Run AlfredAgent with automatic provider fallback on billing/quota errors.
+
+    Tries alfred_model first, then each model in alfred_model_fallbacks in order.
+    Non-billing errors are re-raised immediately without trying fallbacks.
+
+    Args:
+        message:          The user message to run.
+        deps:             AlfredDependencies for this request.
+        message_history:  Optional prior conversation messages.
+        model_override:   Explicit model override (from ChatRequest.model). When
+                          set, this takes precedence and fallbacks are still applied
+                          if that override also exhausts.
+        model_settings:   Optional pydantic-ai ModelSettings (e.g. thinking config).
+    """
+    fallback_names = [
+        m.strip()
+        for m in settings.alfred_model_fallbacks.split(",")
+        if m.strip() and m.strip() != settings.alfred_model
+    ]
+
+    # Build the ordered list of models to try: primary first, then fallbacks.
+    # model_override (user-selected) replaces the primary slot.
+    candidates: list = [model_override]  # None = AlfredAgent's configured default
+    for name in fallback_names:
+        try:
+            candidates.append(build_model(name))
+        except (ValueError, ImportError) as e:
+            logger.debug("Fallback model '%s' skipped: %s", name, e)
+
+    last_exc: BaseException | None = None
+    for i, candidate in enumerate(candidates):
+        label = settings.alfred_model if candidate is None else getattr(candidate, "model_name", str(candidate))
+        try:
+            kwargs: dict = {"deps": deps}
+            if message_history:
+                kwargs["message_history"] = message_history
+            if candidate is not None:
+                kwargs["model"] = candidate
+            if model_settings is not None:
+                kwargs["model_settings"] = model_settings
+
+            result = await AlfredAgent.run(message, **kwargs)
+            if i > 0:
+                logger.info("run_with_fallback: succeeded on fallback model '%s'", label)
+            return result
+
+        except Exception as exc:
+            if _is_billing_error(exc):
+                logger.warning(
+                    "run_with_fallback: model '%s' hit billing/quota error — trying next fallback",
+                    label,
+                )
+                last_exc = exc
+                continue
+            raise  # non-billing errors propagate immediately
+
+    # All candidates exhausted
+    raise RuntimeError(
+        f"All configured models exhausted their credits/quota. "
+        f"Tried: {settings.alfred_model}, {', '.join(fallback_names)}. "
+        f"Last error: {last_exc}"
+    ) from last_exc
+
+
 # ── Stalled-promise guard ─────────────────────────────────────────────────────
 #
 # A plain-text model response ENDS a pydantic-ai run. When the model answers

@@ -237,10 +237,11 @@ async def chat_with_alfred(
 
         effective_message = _inject_file_context(request.message, request.file_tokens)
 
-        result = await AlfredAgent.run(
+        from alfred.agent import run_with_fallback
+        result = await run_with_fallback(
             effective_message,
             deps=alfred_deps,
-            model=model_override,
+            model_override=model_override,
             model_settings=thinking_settings,
             message_history=message_history,
         )
