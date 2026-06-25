@@ -119,14 +119,9 @@ class KLGStyleGuideCheck(Skill):
 
         from config import settings
         from pydantic_ai import Agent
-        from pydantic_ai.models.anthropic import AnthropicModel
-        from pydantic_ai.providers.anthropic import AnthropicProvider
+        from alfred.model_factory import build_model
 
-        model = AnthropicModel(
-            settings.alfred_model,
-            provider=AnthropicProvider(api_key=settings.anthropic_api_key),
-        )
-        agent: Agent[None, str] = Agent(model=model, output_type=str)
+        agent: Agent[None, str] = Agent(model=build_model(settings.alfred_model), output_type=str)
 
         prompt = _REVIEW_PROMPT.format(
             style_guide=style_guide[:12000],

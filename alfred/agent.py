@@ -64,9 +64,8 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from pydantic_ai import Agent, ModelRetry, RunContext
-from pydantic_ai.models.anthropic import AnthropicModel
-from pydantic_ai.providers.anthropic import AnthropicProvider
 
+from alfred.model_factory import build_model
 from config import settings
 from notion_bridge.client import NotionBridge
 from notion_bridge.comms_log import CommsLog
@@ -340,10 +339,7 @@ team coordination). They share Notion as the source-of-truth substrate.
 # =============================================================================
 
 AlfredAgent: Agent[AlfredDependencies, str] = Agent(
-    model=AnthropicModel(
-        settings.alfred_model,
-        provider=AnthropicProvider(api_key=settings.anthropic_api_key),
-    ),
+    model=build_model(settings.alfred_model),
     system_prompt=_ALFRED_SYSTEM_PROMPT,
     deps_type=AlfredDependencies,
     output_type=str,
@@ -435,43 +431,15 @@ def resolve_alfred_model(model_str: str):
 
     Raises ValueError if the requested model's API key is not configured.
     """
-    if not model_str or model_str.lower().startswith("claude"):
-        if model_str and model_str != settings.alfred_model:
-            return AnthropicModel(
-                model_str,
-                provider=AnthropicProvider(api_key=settings.anthropic_api_key),
-            )
-        return None  # Use AlfredAgent's configured default
-
-    # Extended thinking uses the default Claude model — just signals thinking mode.
-    if model_str.lower() == "extended-thinking":
+    # No override — use AlfredAgent's configured default
+    if not model_str or model_str.lower() == "extended-thinking":
         return None
 
-    if model_str.lower().startswith("gpt"):
-        if not settings.openai_api_key:
-            raise ValueError(
-                "OpenAI API key not configured. Set OPENAI_API_KEY in Railway "
-                "env vars to enable GPT models."
-            )
-        from pydantic_ai.models.openai import OpenAIModel
-        from pydantic_ai.providers.openai import OpenAIProvider
-        return OpenAIModel(
-            model_str,
-            provider=OpenAIProvider(api_key=settings.openai_api_key),
-        )
+    # If it matches the current default exactly, no override needed
+    if model_str == settings.alfred_model:
+        return None
 
-    if model_str.lower().startswith("gemini"):
-        if not settings.google_api_key:
-            raise ValueError(
-                "Google API key not configured. Set GOOGLE_API_KEY in Railway "
-                "env vars to enable Gemini models."
-            )
-        from pydantic_ai.models.gemini import GeminiModel
-        from pydantic_ai.providers.google import GoogleProvider
-        return GeminiModel(
-            model_str,
-            provider=GoogleProvider(api_key=settings.google_api_key),
-        )
+    return build_model(model_str)
 
     if model_str.lower().startswith("sonar"):
         if not settings.perplexity_api_key:

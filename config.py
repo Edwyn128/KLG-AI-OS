@@ -302,12 +302,16 @@ class Settings(BaseSettings):
     # You don't have to hunt through multiple files to swap claude-sonnet-4-6
     # for claude-opus-4-7 when you want more reasoning power.
 
-    alfred_model: str = "claude-sonnet-4-6"
+    alfred_model: str = "gpt-4o"
     """
-    The Claude model Alfred uses for skill execution and conversation.
-    claude-sonnet-4-6 is the recommended default — fast, highly capable,
-    cost-effective for the volume of daily queries Alfred handles.
-    Switch to claude-opus-4-7 for the most demanding synthesis tasks.
+    The model Alfred uses for skill execution and conversation.
+    Defaults to gpt-4o (OpenAI). Switch providers via ALFRED_MODEL in Railway
+    env vars — no code change needed:
+      gpt-4o             → OpenAI GPT-4o (default)
+      gpt-4o-mini        → OpenAI GPT-4o-mini (cheaper, lighter tasks)
+      claude-sonnet-4-6  → Anthropic Claude Sonnet
+      claude-opus-4-8    → Anthropic Claude Opus (most capable)
+      gemini-1.5-pro     → Google Gemini Pro
     """
 
     max_upload_size_mb: int = 50

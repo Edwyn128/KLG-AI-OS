@@ -75,8 +75,7 @@ class KLGDeepResearchPrompts(Skill):
     async def execute(self, ctx: SkillContext) -> SkillResult:
         from config import settings
         from pydantic_ai import Agent
-        from pydantic_ai.models.anthropic import AnthropicModel
-        from pydantic_ai.providers.anthropic import AnthropicProvider
+        from alfred.model_factory import build_model
 
         matter_name = ctx.matter_name or ctx.extra.get("matter_name", "Matter")
         jurisdiction = ctx.extra.get("jurisdiction", "California")
@@ -90,12 +89,7 @@ class KLGDeepResearchPrompts(Skill):
         if ctx.user_instruction and ctx.matter_summary:
             context = f"{ctx.matter_summary}\n\nAdditional instruction: {ctx.user_instruction}"
 
-        # Generate prompts with Claude
-        model = AnthropicModel(
-            settings.alfred_model,
-            provider=AnthropicProvider(api_key=settings.anthropic_api_key),
-        )
-        agent: Agent[None, str] = Agent(model=model, output_type=str)
+        agent: Agent[None, str] = Agent(model=build_model(settings.alfred_model), output_type=str)
 
         prompt = _PROMPT_TEMPLATE.format(
             context=context[:8000],
