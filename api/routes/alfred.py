@@ -311,9 +311,8 @@ async def chat_with_alfred_stream(
     The frontend reads these with a fetch + ReadableStream (not EventSource,
     since EventSource does not support POST or Authorization headers).
     """
-    from alfred.agent import get_alfred_agent, resolve_alfred_model, resolve_thinking_settings
+    from alfred.agent import AlfredAgent, resolve_alfred_model, resolve_thinking_settings
     from config import settings as _settings
-    _agent = get_alfred_agent()
 
     logger.info(
         "Alfred stream from '%s' [model=%s]: %s",
@@ -367,7 +366,7 @@ async def chat_with_alfred_stream(
             )
 
             effective_message = _inject_file_context(request.message, request.file_tokens)
-            async with _agent.iter(
+            async with AlfredAgent.iter(
                 effective_message,
                 deps=alfred_deps,
                 model=model_override,
@@ -376,7 +375,7 @@ async def chat_with_alfred_stream(
             ) as agent_run:
                 pending_separator = False
                 async for node in agent_run:
-                    if not _agent.is_model_request_node(node):
+                    if not AlfredAgent.is_model_request_node(node):
                         continue
                     node_streamed_text = False
                     async with node.stream(agent_run.ctx) as node_stream:
