@@ -61,6 +61,10 @@ notion-client>=2.2.1,<3.0.0
 # modify Notion directly — this is a core architectural constraint.
 slack-sdk>=3.33.0
 
+# aiohttp is required by slack_sdk's AsyncWebClient. Without it the app
+# crashes on startup when the Slack client is initialized.
+aiohttp>=3.9.0
+
 
 # ── Scheduling (Background Agents) ────────────────────────────────────────────
 # APScheduler runs the Layer 3 background agents on a cron schedule:
