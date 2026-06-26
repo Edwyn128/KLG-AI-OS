@@ -13,9 +13,8 @@ from __future__ import annotations
 import logging
 from pydantic import BaseModel, Field
 from pydantic_ai import Agent
-from pydantic_ai.models.anthropic import AnthropicModel
-from pydantic_ai.providers.anthropic import AnthropicProvider
 
+from alfred.model_factory import build_model
 from config import settings
 from bloodhound.signals import WatchSignal
 
@@ -129,10 +128,7 @@ METADATA STANDARDIZATION GUIDELINES
 # =============================================================================
 
 BloodhoundTriageAgent: Agent[None, TriageDecision] = Agent(
-    model=AnthropicModel(
-        settings.bloodhound_model,
-        provider=AnthropicProvider(api_key=settings.anthropic_api_key),
-    ),
+    model=build_model(settings.bloodhound_model),
     system_prompt=_BLOODHOUND_SYSTEM_PROMPT,
     output_type=TriageDecision,
 )

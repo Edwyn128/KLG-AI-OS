@@ -32,7 +32,7 @@ python-multipart>=0.0.9
 # ── AI / LLM ──────────────────────────────────────────────────────────────────
 # Anthropic SDK — the official Python client for the Claude API.
 # Alfred uses Claude as its reasoning and language engine.
-anthropic>=0.40.0
+anthropic>=0.52.0
 
 # OpenAI SDK — GPT-4o model routing in Alfred + ChatGPT Deep Research tool.
 openai>=1.50.0
