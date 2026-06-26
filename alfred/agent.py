@@ -338,12 +338,26 @@ team coordination). They share Notion as the source-of-truth substrate.
 # ALFRED AGENT DEFINITION
 # =============================================================================
 
-AlfredAgent: Agent[AlfredDependencies, str] = Agent(
-    model=build_model(settings.alfred_model),
-    system_prompt=_ALFRED_SYSTEM_PROMPT,
-    deps_type=AlfredDependencies,
-    output_type=str,
-)
+_alfred_agent: "Agent[AlfredDependencies, str] | None" = None
+
+
+def get_alfred_agent() -> "Agent[AlfredDependencies, str]":
+    """
+    Returns the Alfred agent, creating it on first call.
+    Lazy so importing alfred.agent at startup doesn't trigger build_model()
+    (and thus AnthropicModel) before the app is ready.
+    """
+    global _alfred_agent
+    if _alfred_agent is None:
+        _alfred_agent = Agent(
+            model=build_model(settings.alfred_model),
+            system_prompt=_ALFRED_SYSTEM_PROMPT,
+            deps_type=AlfredDependencies,
+            output_type=str,
+        )
+    return _alfred_agent
+
+
 
 
 # ── Provider fallback ────────────────────────────────────────────────────────
@@ -412,7 +426,7 @@ async def run_with_fallback(
             if model_settings is not None:
                 kwargs["model_settings"] = model_settings
 
-            result = await AlfredAgent.run(message, **kwargs)
+            result = await get_alfred_agent().run(message, **kwargs)
             if i > 0:
                 logger.info("run_with_fallback: succeeded on fallback model '%s'", label)
             return result
