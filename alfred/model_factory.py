@@ -52,9 +52,25 @@ def build_model(model_name: str):
         raise ValueError(
             f"ALFRED_MODEL is set to '{model_name}' but ANTHROPIC_API_KEY is not configured."
         )
-    from pydantic_ai.models.anthropic import AnthropicModel
-    from pydantic_ai.providers.anthropic import AnthropicProvider
-    return AnthropicModel(
-        model_name,
-        provider=AnthropicProvider(api_key=settings.anthropic_api_key),
-    )
+    # pydantic-ai's AnthropicModel requires a newer anthropic SDK (>=0.65).
+    # If the installed version is too old, fall back to gpt-4o rather than
+    # crashing the server. Set ALFRED_MODEL=gpt-4o in Railway to avoid this path.
+    try:
+        from pydantic_ai.models.anthropic import AnthropicModel
+        from pydantic_ai.providers.anthropic import AnthropicProvider
+        return AnthropicModel(
+            model_name,
+            provider=AnthropicProvider(api_key=settings.anthropic_api_key),
+        )
+    except ImportError:
+        import logging
+        logging.getLogger(__name__).warning(
+            "AnthropicModel unavailable (anthropic SDK too old for this pydantic-ai version). "
+            "Falling back to gpt-4o. Set ALFRED_MODEL=gpt-4o in Railway to silence this warning."
+        )
+        from pydantic_ai.models.openai import OpenAIModel
+        from pydantic_ai.providers.openai import OpenAIProvider
+        return OpenAIModel(
+            "gpt-4o",
+            provider=OpenAIProvider(api_key=settings.openai_api_key),
+        )

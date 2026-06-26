@@ -314,7 +314,7 @@ class Settings(BaseSettings):
       gemini-1.5-pro     → Google Gemini Pro
     """
 
-    alfred_model_fallbacks: str = "claude-sonnet-4-6,gemini-1.5-pro"
+    alfred_model_fallbacks: str = "gemini-1.5-pro"
     """
     Comma-separated list of fallback models to try if alfred_model hits a
     billing/quota error. Alfred walks this list in order until one succeeds.
@@ -331,11 +331,11 @@ class Settings(BaseSettings):
     Multi-volume appendix records (400+ pages/volume) require multiple chunks.
     """
 
-    bloodhound_model: str = "claude-sonnet-4-6"
+    bloodhound_model: str = "gpt-4o"
     """
-    The Claude model Bloodhound uses for signal triage and analysis.
-    Bloodhound runs daily/weekly, so cost per run matters.
-    Sonnet is the right balance; upgrade to Opus only if triage quality suffers.
+    The model Bloodhound uses for signal triage and analysis.
+    Defaults to gpt-4o. Set BLOODHOUND_MODEL=claude-sonnet-4-6 in Railway once
+    the anthropic SDK version compatibility issue with pydantic-ai is resolved.
     """
 
 
