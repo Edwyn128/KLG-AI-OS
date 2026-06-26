@@ -18,7 +18,7 @@ from pydantic import BaseModel, Field
 
 from config import settings
 from bloodhound.feed_ingestor import FeedIngestor
-from bloodhound.agent import BloodhoundTriageAgent
+from bloodhound.agent import get_triage_agent
 
 logger = logging.getLogger(__name__)
 
@@ -112,7 +112,7 @@ async def run_surveillance_scan(
 
             try:
                 # Run through the Pydantic AI agent
-                result = await BloodhoundTriageAgent.run(prompt)
+                result = await get_triage_agent().run(prompt)
                 decision = result.data
 
                 if decision.is_relevant:
@@ -198,7 +198,7 @@ async def run_bloodhound_scan(watch_list: Any, slack_client: Any | None = None) 
     directly so the scheduler doesn't need a FastAPI Request object.
     """
     from bloodhound.feed_ingestor import FeedIngestor
-    from bloodhound.agent import BloodhoundTriageAgent
+    from bloodhound.agent import get_triage_agent
 
     logger.info("Bloodhound scheduled scan starting...")
 
@@ -218,7 +218,7 @@ async def run_bloodhound_scan(watch_list: Any, slack_client: Any | None = None) 
         added: list[dict] = []
         for signal in new_signals:
             try:
-                result = await BloodhoundTriageAgent.run(signal.to_triage_prompt())
+                result = await get_triage_agent().run(signal.to_triage_prompt())
                 decision = result.data
                 if not decision.is_relevant:
                     continue

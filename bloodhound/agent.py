@@ -127,16 +127,24 @@ METADATA STANDARDIZATION GUIDELINES
 # BLOODHOUND AGENT DEFINITION
 # =============================================================================
 
-BloodhoundTriageAgent: Agent[None, TriageDecision] = Agent(
-    model=build_model(settings.bloodhound_model),
-    system_prompt=_BLOODHOUND_SYSTEM_PROMPT,
-    output_type=TriageDecision,
-)
-"""
-The Bloodhound triage agent.
-Takes a raw feed signal string (or WatchSignal) and returns a structured TriageDecision.
+_triage_agent: "Agent[None, TriageDecision] | None" = None
 
-Usage:
-    result = await BloodhoundTriageAgent.run("Raw text from RSS feed...")
-    triage = result.data  # TriageDecision object
-"""
+
+def get_triage_agent() -> "Agent[None, TriageDecision]":
+    """
+    Returns the Bloodhound triage agent, creating it on first call.
+    Lazy so importing this module at startup doesn't trigger the
+    AnthropicModel import (which requires a newer anthropic SDK).
+
+    Usage:
+        result = await get_triage_agent().run("Raw text from RSS feed...")
+        triage = result.data  # TriageDecision object
+    """
+    global _triage_agent
+    if _triage_agent is None:
+        _triage_agent = Agent(
+            model=build_model(settings.bloodhound_model),
+            system_prompt=_BLOODHOUND_SYSTEM_PROMPT,
+            output_type=TriageDecision,
+        )
+    return _triage_agent
