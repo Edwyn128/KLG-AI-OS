@@ -23,6 +23,15 @@
   <title>KLG · Skills OS · V2.4 — California Appellate Workflow Navigator</title>
   <meta name="description" content="KLG AI Operating System — Alfred executive assistant and Bloodhound surveillance engine for Kowal Law Group appellate practice.">
   <link rel="stylesheet" href="/static/style.css">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet">
+  <style>
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+      display: inline-block;
+      vertical-align: middle;
+      line-height: 1;
+    }
+  </style>
   <style>
     /* ── Activity Log workspace ───────────────────────────────────────── */
     /* No bare display rule here: an ID selector outranks .workspace
@@ -113,35 +122,34 @@
   <div class="header-left">
     <div class="status-dot" id="status-dot" title="Backend connected"></div>
     <div class="header-brand">
-      <div class="brand-main">KLG &bull; SKILLS OS &bull; <span>V2.4</span></div>
-      <div class="brand-sub">California Appellate Workflow Navigator</div>
+      <span class="brand-main">KLG AI OS</span>
     </div>
   </div>
 
-  <div class="workspace-tabs" id="workspace-tabs">
+  <nav class="workspace-tabs" id="workspace-tabs">
     <button class="workspace-tab active" id="tab-chat" onclick="switchWorkspace('chat')">
-      <span class="tab-long">Chat Workspace</span><span class="tab-short">Chat</span>
+      MATTERS
     </button>
     <button class="workspace-tab" id="tab-skills" onclick="switchWorkspace('skills')">
-      <span class="tab-long">Skills Navigator</span><span class="tab-short">Skills</span>
+      SKILLS NAVIGATOR
     </button>
     <button class="workspace-tab" id="tab-casefile" onclick="switchWorkspace('casefile')">
-      <span class="tab-long">Case Files</span><span class="tab-short">Cases</span>
+      CASE FILES
     </button>
     <button class="workspace-tab" id="tab-activity" onclick="switchWorkspace('activity')" style="display:none">
-      <span class="tab-long">Activity Log</span><span class="tab-short">Log</span>
+      ACTIVITY LOG
     </button>
-  </div>
+  </nav>
 
   <div class="header-right">
-    <div class="header-meta" id="header-clock">KLG Internal — Restricted</div>
+    <div class="header-meta" id="header-clock"></div>
     <div class="header-user" id="header-user" title="">
       <span class="header-user-avatar" id="header-user-avatar">?</span>
-      <span class="header-user-name" id="header-user-name">Select user</span>
+      <span class="header-user-name" id="header-user-name">Sign in</span>
     </div>
-    <div class="header-badge">Alfred + Bloodhound</div>
   </div>
 </header>
+<div class="gradient-separator"></div>
 
 <!-- ════════════════════════════════════════════════════════════════════════
      USER PICKER MODAL
@@ -382,56 +390,86 @@
      WORKSPACE 2 — SKILLS NAVIGATOR
 ════════════════════════════════════════════════════════════════════════ -->
 <div class="workspace" id="workspace-skills">
-  <div class="skills-page">
+  <div class="skills-layout">
 
-    <!-- Page Header -->
-    <div class="skills-page-header">
-      <div class="skills-page-title">
-        <span class="skills-page-title-text">Skill Library</span>
+    <!-- Left Rail: Nav + Matters -->
+    <aside class="skills-rail">
+      <div class="skills-rail-section-label">Navigation</div>
+      <nav class="skills-rail-nav">
+        <div class="skills-rail-nav-item active">
+          <span class="material-symbols-outlined">terminal</span>
+          <span>Skills Navigator</span>
+        </div>
+        <div class="skills-rail-nav-item" onclick="switchWorkspace('casefile')">
+          <span class="material-symbols-outlined">folder_special</span>
+          <span>Matter Vault</span>
+        </div>
+        <div class="skills-rail-nav-item" onclick="switchWorkspace('chat')">
+          <span class="material-symbols-outlined">forum</span>
+          <span>Alfred Chat</span>
+        </div>
+      </nav>
+      <div class="skills-rail-section-label" style="margin-top:20px;">Active Matters</div>
+      <div class="matter-list skills-rail-matters" id="skills-rail-matters">
+        <div class="loading-pulse" style="width:85%;margin:8px 0 0;"></div>
+        <div class="loading-pulse" style="width:70%;margin:4px 0;"></div>
+        <div class="loading-pulse" style="width:90%;margin:4px 0;"></div>
+      </div>
+    </aside>
+
+    <!-- Center: Header + Filter + Grid -->
+    <section class="skills-main">
+
+      <div class="skills-header-block">
+        <div>
+          <h1 class="skills-headline">Skills Navigator</h1>
+          <p class="skills-subhead">Deploy automated legal intelligence workflows</p>
+        </div>
+        <div class="skills-search-wrap">
+          <span class="material-symbols-outlined skills-search-icon-ms">search</span>
+          <input class="skills-search-input" id="skills-search" type="text" placeholder="Search system skills..." oninput="filterSkillsBySearch(this.value)">
+        </div>
+      </div>
+
+      <div class="skills-status-bar">
+        <span class="skills-status-label">SYSTEM STATUS:</span>
+        <div class="skills-status-dot-wrap">
+          <div class="skills-status-live"></div>
+          <span class="skills-status-text">Operational</span>
+        </div>
+        <div class="skills-status-sep"></div>
         <span class="skills-count-badge" id="skills-count-badge"></span>
       </div>
-      <div class="skills-search-wrap">
-        <span class="skills-search-icon">⌕</span>
-        <input class="skills-search-input" id="skills-search" type="text" placeholder="Search skills…" oninput="filterSkillsBySearch(this.value)">
+
+      <div class="skills-filter-bar" id="skills-filter-bar">
+        <button class="filter-tab active" data-category="ALL"      onclick="filterSkills('ALL')">All</button>
+        <button class="filter-tab" data-category="INTAKE"          onclick="filterSkills('INTAKE')">Intake</button>
+        <button class="filter-tab" data-category="RESEARCH"        onclick="filterSkills('RESEARCH')">Research</button>
+        <button class="filter-tab" data-category="DRAFTING"        onclick="filterSkills('DRAFTING')">Drafting</button>
+        <button class="filter-tab" data-category="QA"              onclick="filterSkills('QA')">QA</button>
+        <button class="filter-tab" data-category="ARGUMENT"        onclick="filterSkills('ARGUMENT')">Argument</button>
+        <button class="filter-tab" data-category="OPS"             onclick="filterSkills('OPS')">Ops</button>
       </div>
-    </div>
 
-    <!-- Category Filter Bar -->
-    <div class="skills-filter-bar" id="skills-filter-bar">
-      <button class="filter-tab active" data-category="ALL"      onclick="filterSkills('ALL')">All</button>
-      <button class="filter-tab" data-category="INTAKE"          onclick="filterSkills('INTAKE')">Intake</button>
-      <button class="filter-tab" data-category="RESEARCH"        onclick="filterSkills('RESEARCH')">Research</button>
-      <button class="filter-tab" data-category="DRAFTING"        onclick="filterSkills('DRAFTING')">Drafting</button>
-      <button class="filter-tab" data-category="QA"              onclick="filterSkills('QA')">QA</button>
-      <button class="filter-tab" data-category="ARGUMENT"        onclick="filterSkills('ARGUMENT')">Argument</button>
-      <button class="filter-tab" data-category="OPS"             onclick="filterSkills('OPS')">Ops</button>
-    </div>
+      <div class="skills-grid" id="skills-grid"></div>
 
-    <!-- Skills Grid — full width, no side panel -->
-    <div class="skills-grid" id="skills-grid"></div>
+    </section>
 
-  </div>
-</div>
-
-<!-- ════════════════════════════════════════════════════════════════════════
-     SKILL DETAIL MODAL — Opened by clicking any skill card
-════════════════════════════════════════════════════════════════════════ -->
-<div class="skill-modal-backdrop" id="skill-modal-backdrop" onclick="closeSkillModal()">
-  <div class="skill-modal" id="skill-modal" role="dialog" aria-modal="true" onclick="event.stopPropagation()">
-    <div class="skill-modal-header" id="skill-modal-header">
-      <div class="skill-modal-icon-wrap">
-        <div class="skill-modal-icon" id="skill-modal-icon"></div>
+    <!-- Right: Skill Detail Panel -->
+    <aside class="skill-detail-panel">
+      <div class="skill-detail-placeholder" id="skill-detail-placeholder">
+        <span class="material-symbols-outlined" style="font-size:42px;opacity:0.18;">terminal</span>
+        <p>Select a skill to view its workflow, checklist, and launch prompt.</p>
       </div>
-      <div class="skill-modal-title-block">
-        <div class="skill-modal-name" id="skill-modal-name"></div>
-        <div class="skill-modal-badges" id="skill-modal-badges"></div>
+      <div class="skill-detail-content" id="skill-detail-content"></div>
+      <div class="skill-detail-footer" id="skill-detail-footer" style="display:none;">
+        <button class="launch-skill-btn" onclick="launchSelectedSkill()">
+          <span class="material-symbols-outlined">bolt</span>
+          Launch Skill in Alfred
+        </button>
       </div>
-      <button class="skill-modal-close" onclick="closeSkillModal()" aria-label="Close">✕</button>
-    </div>
-    <div class="skill-modal-body" id="skill-modal-body"></div>
-    <div class="skill-modal-footer">
-      <button class="launch-skill-btn" onclick="launchSelectedSkill()">⚡ Launch in Alfred</button>
-    </div>
+    </aside>
+
   </div>
 </div>
 
@@ -1529,7 +1567,7 @@ async function loadMatters(category) {
       return;
     }
 
-    list.innerHTML = data.matters.map(matter => {
+    const cardsHTML = data.matters.map(matter => {
       const name     = matter['Project name'] || 'Untitled';
       const status   = matter['Status'] || '';
       const priority = matter['Priority'] || '';
@@ -1557,6 +1595,12 @@ async function loadMatters(category) {
         </div>
       `;
     }).join('');
+
+    list.innerHTML = cardsHTML;
+
+    // Mirror to skills rail
+    const railMatters = document.getElementById('skills-rail-matters');
+    if (railMatters) railMatters.innerHTML = cardsHTML;
 
   } catch (err) {
     list.innerHTML = `<div class="empty-state" style="color:var(--urgent);">Error loading matters:<br>${err.message}</div>`;
@@ -1720,7 +1764,7 @@ function renderSkillsGrid() {
     );
   }
 
-  if (badge) badge.textContent = `${visible.length} skill${visible.length !== 1 ? 's' : ''}`;
+  if (badge) badge.textContent = `${visible.length} ACTIVE SKILL${visible.length !== 1 ? 'S' : ''}`;
 
   grid.innerHTML = visible.length === 0
     ? `<div class="empty-state" style="grid-column:1/-1">No skills match your search.</div>`
@@ -1757,58 +1801,62 @@ function selectSkill(id) {
   selectedSkill = KLG_SKILLS.find(s => s.id === id);
   if (!selectedSkill) return;
 
+  // Update selected state on cards
+  document.querySelectorAll('.skill-card').forEach(c => c.classList.remove('selected'));
+  const card = document.getElementById('skill-card-' + id);
+  if (card) card.classList.add('selected');
+
   const s = selectedSkill;
-  document.getElementById('skill-modal-icon').textContent = s.icon;
-  document.getElementById('skill-modal-name').textContent = s.name;
-  document.getElementById('skill-modal-badges').innerHTML = `
-    <span class="skill-category-tag">${s.category}</span>
-    <span class="skill-mode-badge ${s.mode}">${s.mode}</span>
-    <span class="skill-time">⏱ ${s.time}</span>
-  `;
-
-  const checklistHTML = s.checklist.map(item => `<li>${item}</li>`).join('');
-
-  document.getElementById('skill-modal-body').innerHTML = `
-    <div>
-      <p style="font-size:13px;color:var(--text-secondary);line-height:1.65;">${s.desc}</p>
+  const checklistHTML = s.checklist.map(item => `
+    <div class="skill-checklist-item">
+      <span class="skill-checkbox material-symbols-outlined">check_circle</span>
+      <span>${item}</span>
     </div>
+  `).join('');
 
-    <div>
-      <div class="skill-owner-row">
-        <div class="skill-owner-item">
-          <div class="skill-owner-label">Owner</div>
-          <div class="skill-owner-value">${s.owner}</div>
-        </div>
-        <div class="skill-owner-item">
-          <div class="skill-owner-label">Time Est.</div>
-          <div class="skill-owner-value">${s.time}</div>
+  document.getElementById('skill-detail-content').innerHTML = `
+    <div class="skill-detail-header-block">
+      <div class="skill-detail-icon">${s.icon}</div>
+      <div>
+        <div class="skill-detail-name">${s.name}</div>
+        <div class="skill-detail-meta">
+          <span class="skill-category-tag">${s.category}</span>
+          <span class="skill-mode-badge ${s.mode}">${s.mode}</span>
         </div>
       </div>
     </div>
 
-    <div>
-      <div class="skill-modal-section-title">Workflow Checklist</div>
-      <ul class="skill-checklist">${checklistHTML}</ul>
+    <p class="skill-detail-desc">${s.desc}</p>
+
+    <div class="skill-owner-block">
+      <div class="skill-owner-item">
+        <div class="skill-owner-label">Owner</div>
+        <div class="skill-owner-value">${s.owner}</div>
+      </div>
+      <div class="skill-owner-item">
+        <div class="skill-owner-label">Est. Time</div>
+        <div class="skill-owner-value">${s.time}</div>
+      </div>
     </div>
 
-    <div>
-      <div class="skill-modal-section-title">Launch Prompt</div>
-      <div style="background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);padding:14px;font-size:11px;color:var(--text-secondary);line-height:1.65;font-family:var(--font-mono);">${s.prompt}</div>
-    </div>
+    <div class="skill-detail-section-title">Workflow Checklist</div>
+    <div class="skill-checklist">${checklistHTML}</div>
+
+    <div class="skill-detail-section-title">Launch Prompt</div>
+    <div class="skill-prompt-block">${s.prompt}</div>
   `;
 
-  document.getElementById('skill-modal-backdrop').classList.add('open');
-  document.body.style.overflow = 'hidden';
+  document.getElementById('skill-detail-placeholder').style.display = 'none';
+  document.getElementById('skill-detail-content').style.display = 'block';
+  document.getElementById('skill-detail-footer').style.display = 'flex';
 }
 
 function closeSkillModal() {
-  document.getElementById('skill-modal-backdrop').classList.remove('open');
-  document.body.style.overflow = '';
+  // no-op — skills now use the side detail panel, not a modal
 }
 
 function launchSelectedSkill() {
   if (!selectedSkill) return;
-  closeSkillModal();
   switchWorkspace('chat');
   selectAgent('alfred');
   const input = document.getElementById('chat-input');
@@ -2160,6 +2208,12 @@ document.addEventListener('keydown', e => {
   }
 });
 
+function setMobileNavActive(workspace) {
+  document.querySelectorAll('.mobile-nav-item').forEach(el => el.classList.remove('active'));
+  const item = document.getElementById(`mobile-nav-${workspace}`);
+  if (item) item.classList.add('active');
+}
+
 // Override switchWorkspace:
 // - Load case list on first visit to Case Files
 // - Reset case detail to blank placeholder every time Case Files is entered
@@ -2182,5 +2236,28 @@ document.addEventListener('keydown', e => {
 })();
 
 </script>
+
+<!-- ════════════════════════════════════════════════════════════════════════
+     MOBILE BOTTOM NAVIGATION
+════════════════════════════════════════════════════════════════════════ -->
+<nav class="mobile-bottom-nav" id="mobile-bottom-nav">
+  <a class="mobile-nav-item active" id="mobile-nav-chat" onclick="switchWorkspace('chat');setMobileNavActive('chat')">
+    <span class="material-symbols-outlined mobile-nav-icon">forum</span>
+    <span class="mobile-nav-label">Chat</span>
+  </a>
+  <a class="mobile-nav-item" id="mobile-nav-skills" onclick="switchWorkspace('skills');setMobileNavActive('skills')">
+    <span class="material-symbols-outlined mobile-nav-icon">terminal</span>
+    <span class="mobile-nav-label">Skills</span>
+  </a>
+  <a class="mobile-nav-item" id="mobile-nav-casefile" onclick="switchWorkspace('casefile');setMobileNavActive('casefile')">
+    <span class="material-symbols-outlined mobile-nav-icon">gavel</span>
+    <span class="mobile-nav-label">Cases</span>
+  </a>
+  <a class="mobile-nav-item" id="mobile-nav-activity" onclick="switchWorkspace('activity');setMobileNavActive('activity')">
+    <span class="material-symbols-outlined mobile-nav-icon">monitoring</span>
+    <span class="mobile-nav-label">Activity</span>
+  </a>
+</nav>
+
 </body>
 </html>
