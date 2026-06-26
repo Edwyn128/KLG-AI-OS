@@ -382,40 +382,56 @@
      WORKSPACE 2 — SKILLS NAVIGATOR
 ════════════════════════════════════════════════════════════════════════ -->
 <div class="workspace" id="workspace-skills">
-  <div class="skills-layout">
+  <div class="skills-page">
 
-    <!-- Skills Main -->
-    <div class="skills-main">
-
-      <!-- Category Filter Bar -->
-      <div class="skills-filter-bar" id="skills-filter-bar">
-        <button class="filter-tab active" data-category="ALL" onclick="filterSkills('ALL')">All</button>
-        <button class="filter-tab" data-category="INTAKE"    onclick="filterSkills('INTAKE')">Intake</button>
-        <button class="filter-tab" data-category="RESEARCH"  onclick="filterSkills('RESEARCH')">Research</button>
-        <button class="filter-tab" data-category="DRAFTING"  onclick="filterSkills('DRAFTING')">Drafting</button>
-        <button class="filter-tab" data-category="QA"        onclick="filterSkills('QA')">QA</button>
-        <button class="filter-tab" data-category="ARGUMENT"  onclick="filterSkills('ARGUMENT')">Argument</button>
-        <button class="filter-tab" data-category="OPS"       onclick="filterSkills('OPS')">Ops</button>
+    <!-- Page Header -->
+    <div class="skills-page-header">
+      <div class="skills-page-title">
+        <span class="skills-page-title-text">Skill Library</span>
+        <span class="skills-count-badge" id="skills-count-badge"></span>
       </div>
-
-      <!-- Skills Grid -->
-      <div class="skills-grid" id="skills-grid"></div>
-    </div>
-
-    <!-- Skill Detail Panel -->
-    <div class="skill-detail-panel">
-      <div class="skill-detail-placeholder" id="skill-detail-placeholder">
-        <div class="skill-detail-placeholder-icon">⚖️</div>
-        <p>Select a skill to view its workflow, checklist, and launch prompt.</p>
-      </div>
-      <div class="skill-detail-content" id="skill-detail-content"></div>
-      <div class="skill-detail-footer" id="skill-detail-footer" style="display:none;">
-        <button class="launch-skill-btn" id="launch-skill-btn" onclick="launchSelectedSkill()">
-          ⚡ Launch Skill in Alfred
-        </button>
+      <div class="skills-search-wrap">
+        <span class="skills-search-icon">⌕</span>
+        <input class="skills-search-input" id="skills-search" type="text" placeholder="Search skills…" oninput="filterSkillsBySearch(this.value)">
       </div>
     </div>
 
+    <!-- Category Filter Bar -->
+    <div class="skills-filter-bar" id="skills-filter-bar">
+      <button class="filter-tab active" data-category="ALL"      onclick="filterSkills('ALL')">All</button>
+      <button class="filter-tab" data-category="INTAKE"          onclick="filterSkills('INTAKE')">Intake</button>
+      <button class="filter-tab" data-category="RESEARCH"        onclick="filterSkills('RESEARCH')">Research</button>
+      <button class="filter-tab" data-category="DRAFTING"        onclick="filterSkills('DRAFTING')">Drafting</button>
+      <button class="filter-tab" data-category="QA"              onclick="filterSkills('QA')">QA</button>
+      <button class="filter-tab" data-category="ARGUMENT"        onclick="filterSkills('ARGUMENT')">Argument</button>
+      <button class="filter-tab" data-category="OPS"             onclick="filterSkills('OPS')">Ops</button>
+    </div>
+
+    <!-- Skills Grid — full width, no side panel -->
+    <div class="skills-grid" id="skills-grid"></div>
+
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════════════════════
+     SKILL DETAIL MODAL — Opened by clicking any skill card
+════════════════════════════════════════════════════════════════════════ -->
+<div class="skill-modal-backdrop" id="skill-modal-backdrop" onclick="closeSkillModal()">
+  <div class="skill-modal" id="skill-modal" role="dialog" aria-modal="true" onclick="event.stopPropagation()">
+    <div class="skill-modal-header" id="skill-modal-header">
+      <div class="skill-modal-icon-wrap">
+        <div class="skill-modal-icon" id="skill-modal-icon"></div>
+      </div>
+      <div class="skill-modal-title-block">
+        <div class="skill-modal-name" id="skill-modal-name"></div>
+        <div class="skill-modal-badges" id="skill-modal-badges"></div>
+      </div>
+      <button class="skill-modal-close" onclick="closeSkillModal()" aria-label="Close">✕</button>
+    </div>
+    <div class="skill-modal-body" id="skill-modal-body"></div>
+    <div class="skill-modal-footer">
+      <button class="launch-skill-btn" onclick="launchSelectedSkill()">⚡ Launch in Alfred</button>
+    </div>
   </div>
 </div>
 
@@ -770,6 +786,7 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 let selectedSkill  = null;
 let activeCategory = 'ALL';
+let activeSearch   = '';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // SKILLS REGISTRY — KLG Skill Library
@@ -1687,42 +1704,52 @@ async function triggerDeadlineWatch() {
 // ═══════════════════════════════════════════════════════════════════════════
 
 function renderSkillsGrid() {
-  const grid    = document.getElementById('skills-grid');
-  const visible = activeCategory === 'ALL'
+  const grid  = document.getElementById('skills-grid');
+  const badge = document.getElementById('skills-count-badge');
+
+  let visible = activeCategory === 'ALL'
     ? KLG_SKILLS
     : KLG_SKILLS.filter(s => s.category === activeCategory);
 
-  grid.innerHTML = visible.map(skill => `
-    <div class="skill-card" id="skill-card-${skill.id}" onclick="selectSkill('${skill.id}')">
-      <div class="skill-card-header">
-        <div class="skill-icon">${skill.icon}</div>
-        <span class="skill-category-tag">${skill.category}</span>
-      </div>
-      <div class="skill-name">${skill.name}</div>
-      <div class="skill-desc">${skill.desc}</div>
-      <div class="skill-meta">
-        <span class="skill-time">⏱ ${skill.time}</span>
-        <span class="skill-mode-badge ${skill.mode}">${skill.mode}</span>
-      </div>
-    </div>
-  `).join('');
+  if (activeSearch) {
+    const q = activeSearch.toLowerCase();
+    visible = visible.filter(s =>
+      s.name.toLowerCase().includes(q) ||
+      s.desc.toLowerCase().includes(q) ||
+      s.category.toLowerCase().includes(q)
+    );
+  }
+
+  if (badge) badge.textContent = `${visible.length} skill${visible.length !== 1 ? 's' : ''}`;
+
+  grid.innerHTML = visible.length === 0
+    ? `<div class="empty-state" style="grid-column:1/-1">No skills match your search.</div>`
+    : visible.map(skill => `
+        <div class="skill-card" id="skill-card-${skill.id}" onclick="selectSkill('${skill.id}')">
+          <div class="skill-card-header">
+            <div class="skill-icon">${skill.icon}</div>
+            <span class="skill-category-tag">${skill.category}</span>
+          </div>
+          <div class="skill-name">${skill.name}</div>
+          <div class="skill-desc">${skill.desc}</div>
+          <div class="skill-meta">
+            <span class="skill-time">⏱ ${skill.time}</span>
+            <span class="skill-mode-badge ${skill.mode}">${skill.mode}</span>
+          </div>
+        </div>
+      `).join('');
 }
 
 function filterSkills(category) {
   activeCategory = category;
-
   document.querySelectorAll('.filter-tab').forEach(t => {
     t.classList.toggle('active', t.dataset.category === category);
   });
+  renderSkillsGrid();
+}
 
-  // Deselect current skill if it's no longer visible
-  if (selectedSkill && category !== 'ALL' && selectedSkill.category !== category) {
-    selectedSkill = null;
-    document.getElementById('skill-detail-placeholder').style.display = 'flex';
-    document.getElementById('skill-detail-content').classList.remove('visible');
-    document.getElementById('skill-detail-footer').style.display = 'none';
-  }
-
+function filterSkillsBySearch(query) {
+  activeSearch = query.trim();
   renderSkillsGrid();
 }
 
@@ -1730,72 +1757,60 @@ function selectSkill(id) {
   selectedSkill = KLG_SKILLS.find(s => s.id === id);
   if (!selectedSkill) return;
 
-  // Highlight selected card
-  document.querySelectorAll('.skill-card').forEach(c => c.classList.remove('selected'));
-  const card = document.getElementById(`skill-card-${id}`);
-  if (card) card.classList.add('selected');
+  const s = selectedSkill;
+  document.getElementById('skill-modal-icon').textContent = s.icon;
+  document.getElementById('skill-modal-name').textContent = s.name;
+  document.getElementById('skill-modal-badges').innerHTML = `
+    <span class="skill-category-tag">${s.category}</span>
+    <span class="skill-mode-badge ${s.mode}">${s.mode}</span>
+    <span class="skill-time">⏱ ${s.time}</span>
+  `;
 
-  // Build detail panel
-  const placeholder = document.getElementById('skill-detail-placeholder');
-  const content     = document.getElementById('skill-detail-content');
-  const footer      = document.getElementById('skill-detail-footer');
+  const checklistHTML = s.checklist.map(item => `<li>${item}</li>`).join('');
 
-  placeholder.style.display = 'none';
-  content.classList.add('visible');
-  footer.style.display = 'block';
-
-  const checklistHTML = selectedSkill.checklist.map(item => `<li>${item}</li>`).join('');
-
-  content.innerHTML = `
+  document.getElementById('skill-modal-body').innerHTML = `
     <div>
-      <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px;">
-        <div class="skill-icon" style="width:44px;height:44px;font-size:20px;">${selectedSkill.icon}</div>
-        <div>
-          <div class="skill-detail-name">${selectedSkill.name}</div>
-          <div class="skill-detail-meta-row">
-            <span class="skill-category-tag">${selectedSkill.category}</span>
-            <span class="skill-mode-badge ${selectedSkill.mode}">${selectedSkill.mode}</span>
-            <span class="skill-time" style="font-size:11px;color:var(--text-muted);">⏱ ${selectedSkill.time}</span>
-          </div>
-        </div>
-      </div>
-      <p style="font-size:12px;color:var(--text-secondary);line-height:1.6;">${selectedSkill.desc}</p>
+      <p style="font-size:13px;color:var(--text-secondary);line-height:1.65;">${s.desc}</p>
     </div>
 
     <div>
       <div class="skill-owner-row">
         <div class="skill-owner-item">
           <div class="skill-owner-label">Owner</div>
-          <div class="skill-owner-value">${selectedSkill.owner}</div>
+          <div class="skill-owner-value">${s.owner}</div>
         </div>
         <div class="skill-owner-item">
           <div class="skill-owner-label">Time Est.</div>
-          <div class="skill-owner-value">${selectedSkill.time}</div>
+          <div class="skill-owner-value">${s.time}</div>
         </div>
       </div>
     </div>
 
     <div>
-      <div class="skill-detail-section-title">Workflow Checklist</div>
+      <div class="skill-modal-section-title">Workflow Checklist</div>
       <ul class="skill-checklist">${checklistHTML}</ul>
     </div>
 
     <div>
-      <div class="skill-detail-section-title">Launch Prompt</div>
-      <div style="background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);padding:12px;font-size:11px;color:var(--text-secondary);line-height:1.6;font-family:var(--font-mono);">
-        ${selectedSkill.prompt}
-      </div>
+      <div class="skill-modal-section-title">Launch Prompt</div>
+      <div style="background:var(--bg-input);border:1px solid var(--border);border-radius:var(--radius);padding:14px;font-size:11px;color:var(--text-secondary);line-height:1.65;font-family:var(--font-mono);">${s.prompt}</div>
     </div>
   `;
+
+  document.getElementById('skill-modal-backdrop').classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+
+function closeSkillModal() {
+  document.getElementById('skill-modal-backdrop').classList.remove('open');
+  document.body.style.overflow = '';
 }
 
 function launchSelectedSkill() {
   if (!selectedSkill) return;
-
-  // Switch to Chat, select Alfred, and send the launch prompt
+  closeSkillModal();
   switchWorkspace('chat');
   selectAgent('alfred');
-
   const input = document.getElementById('chat-input');
   input.value = selectedSkill.prompt;
   sendMessage();
@@ -2139,7 +2154,10 @@ function closeLightbox() {
 }
 
 document.addEventListener('keydown', e => {
-  if (e.key === 'Escape') closeLightbox();
+  if (e.key === 'Escape') {
+    closeLightbox();
+    closeSkillModal();
+  }
 });
 
 // Override switchWorkspace:
