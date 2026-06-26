@@ -45,7 +45,7 @@ google-generativeai>=0.8.0
 # It gives us type-safe tool definitions, dependency injection, and a clean
 # agent loop without reinventing the wheel. (It's also what Code Puppy uses
 # internally — we're just using it directly without the wrapper.)
-pydantic-ai>=0.0.14
+pydantic-ai>=0.0.14,<1.0.0
 
 
 # ── Notion ────────────────────────────────────────────────────────────────────

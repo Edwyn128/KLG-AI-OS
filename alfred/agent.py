@@ -343,9 +343,6 @@ AlfredAgent: Agent[AlfredDependencies, str] = Agent(
     system_prompt=_ALFRED_SYSTEM_PROMPT,
     deps_type=AlfredDependencies,
     output_type=str,
-    # Allow the stalled-promise validator below to force up to two
-    # continuations before giving up and returning the text as-is.
-    output_retries=2,
 )
 
 
