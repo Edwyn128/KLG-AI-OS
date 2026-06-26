@@ -13,6 +13,4 @@ Modules:
   skills/        — Individual skill implementations (brief, intake, etc.)
 """
 
-from alfred.agent import AlfredAgent, AlfredDependencies
-
 __all__ = ["AlfredAgent", "AlfredDependencies"]
