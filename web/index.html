@@ -128,13 +128,13 @@
 
   <nav class="workspace-tabs" id="workspace-tabs">
     <button class="workspace-tab active" id="tab-chat" onclick="switchWorkspace('chat')">
-      MATTERS
+      <span class="tab-long">MATTERS</span><span class="tab-short">MTR</span>
     </button>
     <button class="workspace-tab" id="tab-skills" onclick="switchWorkspace('skills')">
-      SKILLS NAVIGATOR
+      <span class="tab-long">SKILLS NAVIGATOR</span><span class="tab-short">SKILLS</span>
     </button>
     <button class="workspace-tab" id="tab-casefile" onclick="switchWorkspace('casefile')">
-      CASE FILES
+      <span class="tab-long">CASE FILES</span><span class="tab-short">CASES</span>
     </button>
     <button class="workspace-tab" id="tab-activity" onclick="switchWorkspace('activity')" style="display:none">
       ACTIVITY LOG
@@ -1846,9 +1846,16 @@ function selectSkill(id) {
     <div class="skill-prompt-block">${s.prompt}</div>
   `;
 
-  document.getElementById('skill-detail-placeholder').style.display = 'none';
-  document.getElementById('skill-detail-content').style.display = 'block';
-  document.getElementById('skill-detail-footer').style.display = 'flex';
+  const placeholder = document.getElementById('skill-detail-placeholder');
+  const content     = document.getElementById('skill-detail-content');
+  const footer      = document.getElementById('skill-detail-footer');
+
+  placeholder.style.display = 'none';
+  footer.style.display = 'flex';
+
+  // Reset then animate in
+  content.classList.remove('visible');
+  requestAnimationFrame(() => requestAnimationFrame(() => content.classList.add('visible')));
 }
 
 function closeSkillModal() {
