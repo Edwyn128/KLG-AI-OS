@@ -1452,6 +1452,9 @@ async def run_skill(
                                    returns conformance report (requires uploaded brief)
       klg-cite-check             — Phase A: citation format audit + Westlaw pull list;
                                    Phase B: verify citations against Westlaw source text
+      klg-response-plan          — Draft a response brief strategy memo from the appellant's
+                                   opening brief (upload required): argument map, counter-
+                                   positions, record strategy, research priorities
 
     Args:
         skill_name:   The skill to run (exactly as listed above).

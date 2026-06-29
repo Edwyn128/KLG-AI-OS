@@ -325,8 +325,13 @@
     </div>
 
     <!-- Input area -->
+    <input type="file" id="file-upload-input" accept=".txt,.doc,.docx,.pdf" style="display:none" onchange="handleFileSelect(event)">
     <div class="chat-input-area">
+      <div class="attachment-pills" id="attachment-pills" style="display:none;"></div>
       <div class="chat-input-row">
+        <button class="attach-btn" id="attach-btn" onclick="document.getElementById('file-upload-input').click()" title="Attach document">
+          <span class="material-symbols-outlined">attach_file</span>
+        </button>
         <textarea
           id="chat-input"
           placeholder="Ask Alfred… (Enter to send, Shift+Enter for new line)"
@@ -1051,6 +1056,25 @@ const KLG_SKILLS = [
     ],
     prompt: 'Alfred, pull up the Bloodhound Watch List and let\'s do a triage review. Show me all Tier 1 cases first, then Tier 2. For each, I\'ll decide if we need immediate action.',
   },
+  {
+    id: 'response-plan',
+    name: 'Response Brief Strategy',
+    category: 'DRAFTING',
+    icon: '🎯',
+    mode: 'drafting',
+    time: '30–60 min',
+    owner: 'Tim / Edwyn',
+    desc: 'Draft a full response brief strategy from the appellant\'s opening brief — argument map, counter-positions, record strategy, and research priorities.',
+    checklist: [
+      'Upload the appellant\'s opening brief (.docx, .pdf, or .txt)',
+      'Alfred maps each argument and rates its strength',
+      'Review counter-positions and sharpen our theory',
+      'Work through the Record Strategy section — locate each item',
+      'Assign research priorities to William before drafting',
+      'Use the proposed structure as the brief outline',
+    ],
+    prompt: 'Alfred, I\'d like to run klg-response-plan. I\'ll attach the opening brief now. Once uploaded, run the skill on [Matter Name].',
+  },
 ];
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -1216,15 +1240,87 @@ function autoResizeTextarea(el) {
   el.style.height = Math.min(el.scrollHeight, 120) + 'px';
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// FILE UPLOAD
+// ═══════════════════════════════════════════════════════════════════════════
+
+let pendingFileTokens = [];
+
+async function handleFileSelect(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  event.target.value = '';
+  await uploadFile(file);
+}
+
+async function uploadFile(file) {
+  const btn = document.getElementById('attach-btn');
+  if (btn) btn.classList.add('uploading');
+
+  try {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const response = await apiFetch('/alfred/upload', { method: 'POST', body: formData });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({ detail: 'Upload failed' }));
+      alert(`Upload failed: ${err.detail || response.statusText}`);
+      return;
+    }
+
+    const data = await response.json();
+    pendingFileTokens.push({ token: data.file_token, filename: data.filename });
+    renderAttachmentPills();
+  } catch (err) {
+    alert(`Upload error: ${err.message}`);
+  } finally {
+    if (btn) btn.classList.remove('uploading');
+  }
+}
+
+function removeAttachment(index) {
+  pendingFileTokens.splice(index, 1);
+  renderAttachmentPills();
+}
+
+function renderAttachmentPills() {
+  const container = document.getElementById('attachment-pills');
+  if (!container) return;
+  if (pendingFileTokens.length === 0) {
+    container.innerHTML = '';
+    container.style.display = 'none';
+    return;
+  }
+  container.style.display = 'flex';
+  container.innerHTML = pendingFileTokens.map((f, i) => `
+    <div class="attachment-pill">
+      <span class="material-symbols-outlined attachment-pill-icon">description</span>
+      <span class="attachment-pill-name">${f.filename}</span>
+      <button class="attachment-pill-remove" onclick="removeAttachment(${i})" title="Remove">
+        <span class="material-symbols-outlined">close</span>
+      </button>
+    </div>
+  `).join('');
+}
+
 async function sendMessage() {
   const input = document.getElementById('chat-input');
   const message = input.value.trim();
   if (!message || isLoading) return;
 
+  const tokens    = pendingFileTokens.map(f => f.token);
+  const fileNames = pendingFileTokens.map(f => f.filename);
+  pendingFileTokens = [];
+  renderAttachmentPills();
+
   input.value = '';
   input.style.height = 'auto';
-  appendMessage('user', message, getUser());
-  await callAgent(message);
+
+  const displayMsg = fileNames.length > 0
+    ? `${message}\n\n📎 ${fileNames.join(', ')}`
+    : message;
+  appendMessage('user', displayMsg, getUser());
+  await callAgent(message, tokens);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -1281,7 +1377,7 @@ function askAlfred(message) {
 // CHAT — API CALL
 // ═══════════════════════════════════════════════════════════════════════════
 
-async function callAgent(message) {
+async function callAgent(message, fileTokens = []) {
   setLoading(true);
   const typingId = showTypingIndicator();
   const model    = document.getElementById('model-select').value;
@@ -1293,6 +1389,7 @@ async function callAgent(message) {
 
   try {
     const body = { message, user: getUser(), model, history: chatHistory };
+    if (fileTokens.length > 0) body.file_tokens = fileTokens;
     const response = await apiFetch(endpoint, {
       method: 'POST',
       body: JSON.stringify(body),

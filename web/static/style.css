@@ -644,6 +644,76 @@ header::after {
   letter-spacing: 0.02em;
 }
 
+/* ── File attach button ──────────────────────────────────────────────────── */
+
+.attach-btn {
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: color 0.15s var(--ease), border-color 0.15s var(--ease), background 0.15s var(--ease);
+}
+.attach-btn:hover {
+  color: var(--accent);
+  border-color: var(--border-accent);
+  background: var(--accent-dim);
+}
+.attach-btn .material-symbols-outlined { font-size: 18px; }
+.attach-btn.uploading { opacity: 0.5; pointer-events: none; }
+
+/* ── Attachment pills ────────────────────────────────────────────────────── */
+
+.attachment-pills {
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 0 0 8px;
+}
+
+.attachment-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 8px 4px 6px;
+  background: var(--accent-dim);
+  border: 1px solid var(--border-accent);
+  border-radius: 999px;
+  font-size: 11px;
+  color: var(--accent-bright);
+  max-width: 260px;
+}
+
+.attachment-pill-icon { font-size: 14px; flex-shrink: 0; }
+
+.attachment-pill-name {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 180px;
+}
+
+.attachment-pill-remove {
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  transition: color 0.15s;
+  flex-shrink: 0;
+}
+.attachment-pill-remove:hover { color: var(--urgent); }
+.attachment-pill-remove .material-symbols-outlined { font-size: 13px; }
+
 /* ── Right Panel: Deadlines + Controls ──────────────────────────────────── */
 
 .right-panel {
