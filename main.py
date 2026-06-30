@@ -279,7 +279,23 @@ async def lifespan(app: FastAPI):
     # APScheduler is in-memory — it dies on every deploy and cannot be relied on
     # for production scheduling. Railway Cron Jobs call the trigger endpoints on
     # a durable schedule that survives deploys.
-    if settings.disable_scheduler:
+    #
+    # Read the flag from os.environ directly in addition to settings — the .env
+    # file is baked into the Docker image via COPY, so pydantic-settings may read
+    # the on-disk file before Railway's runtime env var is visible. os.environ
+    # always reflects the live process environment.
+    import os as _os
+    _scheduler_disabled = (
+        settings.disable_scheduler
+        or _os.environ.get("DISABLE_SCHEDULER", "").lower() in ("true", "1", "yes")
+    )
+    logger.info(
+        "Scheduler flag: settings=%s env=%s → disabled=%s",
+        settings.disable_scheduler,
+        _os.environ.get("DISABLE_SCHEDULER", "(not set)"),
+        _scheduler_disabled,
+    )
+    if _scheduler_disabled:
         app.state.scheduler = None
         logger.info("Background agent scheduler disabled (DISABLE_SCHEDULER=true). Using Railway Cron Jobs.")
     else:
