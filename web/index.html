@@ -294,7 +294,7 @@
       <div class="message">
         <div class="message-avatar">A</div>
         <div class="message-content">
-          <div class="message-bubble">
+          <div class="message-bubble" id="alfred-welcome-bubble">
             <strong>Good morning.</strong> I'm Alfred, the KLG AI Operating System's executive assistant.<br><br>
             I have access to all active matters in Notion, the Bloodhound Watch List, and KLG's skill library. The team's institutional memory lives in Notion — I read and write to it on your behalf.<br><br>
             <em>Try asking:</em><br>
@@ -738,6 +738,7 @@ async function confirmPassword() {
       document.getElementById('password-error').style.display = 'none';
       input.value = '';
       document.getElementById('user-modal').classList.remove('visible');
+      refreshWelcomeMessage();
       loadMatters();
       loadDeadlines();
     } else {
@@ -757,6 +758,7 @@ function updateHeaderUser(name) {
   if (label)  label.textContent  = name || 'Select user';
 
   refreshActivityTab();
+  refreshWelcomeMessage();
 
   // Only admins can switch users — lock the chip for everyone else.
   if (chip) {
@@ -771,6 +773,58 @@ function updateHeaderUser(name) {
       chip.onclick = null;
     }
   }
+}
+
+function refreshWelcomeMessage() {
+  const bubble = document.getElementById('alfred-welcome-bubble');
+  if (!bubble) return;
+
+  const user     = getUser();
+  const name     = (user && user !== 'Team') ? user : null;
+  const userInfo = KLG_USERS.find(u => u.name === user);
+  const role     = userInfo ? userInfo.role : null;
+
+  const h = new Date().getHours();
+  const tod = h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
+  const greeting = name ? `${tod}, ${name}.` : `${tod}.`;
+
+  let examples;
+  if (role === 'Managing Attorney') {
+    examples = [
+      '• "What deadlines do we have this week?"',
+      '• "What\'s pending on Petersen?"',
+      '• "Move Smith to the Briefing — RB stage."',
+      '• "Run klg-case-assessment on Rivera."',
+    ];
+  } else if (role === 'Research') {
+    examples = [
+      '• "Run deep research prompts on First Amendment retaliation."',
+      '• "What cases has Bloodhound flagged this week?"',
+      '• "Cite-check the Smith brief — I\'ll attach the draft."',
+      '• "What\'s the current status on Rivera?"',
+    ];
+  } else if (role === 'Paralegal') {
+    examples = [
+      '• "What deadlines do we have this week?"',
+      '• "Log that I uploaded the record for Smith today."',
+      '• "What\'s the next step on Petersen?"',
+      '• "Run klg-matter-intake on a new client: [name]."',
+    ];
+  } else {
+    examples = [
+      '• "What\'s pending on Petersen?"',
+      '• "What deadlines do we have this week?"',
+      '• "What has Bloodhound flagged on First Amendment issues?"',
+      '• "Log that I filed the brief in Smith today."',
+    ];
+  }
+
+  bubble.innerHTML =
+    `<strong>${greeting}</strong> I'm Alfred, the KLG AI Operating System's executive assistant.<br><br>` +
+    `I have access to all active matters in Notion, the Bloodhound Watch List, and KLG's skill library. ` +
+    `The team's institutional memory lives in Notion — I read and write to it on your behalf.<br><br>` +
+    `<em>Try asking:</em><br>` +
+    examples.join('<br>');
 }
 
 function switchUser() {

@@ -1028,12 +1028,27 @@ async def update_matter(
     stage, update priority, or add a note — without changing the matter status.
     Combine with update_matter_status when both a status and other fields change.
 
+    NATURAL LANGUAGE HANDLING — always attempt reasonable interpretation:
+      - Relative dates: convert "next Thursday", "in two weeks", "end of month"
+        to ISO YYYY-MM-DD using today's date. Never refuse because the date is
+        relative — compute it.
+      - Partial matter names: pass whatever the user said to matter_name; the
+        search layer handles fuzzy matching ("Petersen" finds "Petersen v. City
+        of LA"). Never refuse because the name is partial.
+      - Vague stage names: map colloquial phrases to the nearest valid stage
+        ("move to briefing" → "Briefing — RB"; "we're in oral arg" →
+        "Oral Argument"; "close it out" → "Closed"). When ambiguous between
+        AOB/RB/ARB, check matter context or ask one clarifying question.
+      - Confirm what you set: after calling the tool, tell the user exactly
+        what changed, so they can catch any misinterpretation.
+
     Examples of when to use this:
-      - "Alfred, set the deadline on Petersen to July 15th"
-      - "The next court deadline on Smith is August 3rd — opening brief due"
-      - "Move Diller to the Briefing — RB stage"
-      - "Mark the Williams matter as High priority"
-      - "Add a note to Portero: co-counsel confirmed filing"
+      - "Set the deadline on Petersen to July 15th"
+      - "Next court deadline for Smith is next Thursday, opening brief due"
+      - "Move Diller to briefing"
+      - "Mark Williams as high priority"
+      - "Note on Portero: co-counsel confirmed filing"
+      - "Petersen's oral argument is August 3rd"
 
     Args:
         matter_name:          The matter to update.
