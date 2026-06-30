@@ -49,6 +49,7 @@ from alfred.skills.klg_podcast_guest_prep import KLGPodcastGuestPrep
 from alfred.skills.klg_style_guide_check import KLGStyleGuideCheck
 from alfred.skills.klg_cite_check import KLGCiteCheck
 from alfred.skills.klg_response_plan import KLGResponsePlan
+from alfred.skills.klg_appendix_audit import KLGAppendixAudit
 
 # Registry of all available skills, keyed by name.
 # Alfred's run_skill tool looks skills up here by name.
@@ -61,6 +62,7 @@ SKILL_REGISTRY: dict[str, Skill] = {
     KLGStyleGuideCheck.name:         KLGStyleGuideCheck(),
     KLGCiteCheck.name:               KLGCiteCheck(),
     KLGResponsePlan.name:            KLGResponsePlan(),
+    KLGAppendixAudit.name:           KLGAppendixAudit(),
 }
 
 __all__ = [
@@ -75,4 +77,5 @@ __all__ = [
     "KLGStyleGuideCheck",
     "KLGCiteCheck",
     "KLGResponsePlan",
+    "KLGAppendixAudit",
 ]

@@ -1075,6 +1075,25 @@ const KLG_SKILLS = [
     ],
     prompt: 'Alfred, I\'d like to run klg-response-plan. I\'ll attach the opening brief now. Once uploaded, run the skill on [Matter Name].',
   },
+  {
+    id: 'appendix-audit',
+    name: 'Appendix Audit',
+    category: 'RECORD',
+    icon: '🗂️',
+    mode: 'analysis',
+    time: '15–30 min',
+    owner: 'Tim / Edwyn',
+    desc: 'Audit a proposed appendix compile folder for underinclusivity — compare the full docket against proposed inclusions and flag documents left out that may be important.',
+    checklist: [
+      'Upload the full docket list (all documents in the record)',
+      'Upload the proposed compile folder list (documents selected for appendix)',
+      'Alfred flags excluded documents by risk level (HIGH / MEDIUM / LOW)',
+      'Review HIGH-risk excluded items and decide whether to add each',
+      'Update the compile folder with any additions',
+      'Re-run if the compile folder changes significantly',
+    ],
+    prompt: 'Alfred, run klg-appendix-audit on [Matter Name]. I\'ll attach the full docket as the first file and the proposed compile folder as the second.',
+  },
 ];
 
 // ═══════════════════════════════════════════════════════════════════════════

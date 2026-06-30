@@ -406,3 +406,71 @@ class ProjectPages:
 
         await self._bridge.append_block(page_id, note)
         logger.info("Logged skill action to matter %s: %s", page_id[:8], note)
+
+    async def update_matter_properties(
+        self,
+        page_id: str,
+        target_date: str | None = None,
+        next_court_deadline: str | None = None,
+        next_deadline_info: str | None = None,
+        case_stage: str | None = None,
+        priority: str | None = None,
+        notes: str | None = None,
+    ) -> None:
+        """
+        Update one or more structured properties on a matter project page.
+
+        Handles the Notion API property formats for each supported field.
+        Only fields with a non-None value are sent — unspecified fields are
+        left unchanged. Pass an empty string "" to clear a field.
+
+        Args:
+            page_id:              The matter's Notion page ID.
+            target_date:          ISO date string "YYYY-MM-DD", or "" to clear.
+            next_court_deadline:  ISO date string "YYYY-MM-DD", or "" to clear.
+            next_deadline_info:   Plain text description of the deadline, or "" to clear.
+            case_stage:           Select value matching a valid Case Stage option.
+            priority:             Select value: "Urgent", "High", "Medium", "Low".
+            notes:                Free-form note appended to the page body.
+        """
+        properties: dict = {}
+
+        if target_date is not None:
+            properties["Target Date"] = (
+                {"date": {"start": target_date}} if target_date else {"date": None}
+            )
+
+        if next_court_deadline is not None:
+            properties["Next Court Deadline"] = (
+                {"date": {"start": next_court_deadline}}
+                if next_court_deadline
+                else {"date": None}
+            )
+
+        if next_deadline_info is not None:
+            properties["Next Deadline Info"] = {
+                "rich_text": [{"text": {"content": next_deadline_info}}]
+                if next_deadline_info
+                else []
+            }
+
+        if case_stage is not None:
+            properties["Case Stage"] = (
+                {"select": {"name": case_stage}} if case_stage else {"select": None}
+            )
+
+        if priority is not None:
+            properties["Priority"] = (
+                {"select": {"name": priority}} if priority else {"select": None}
+            )
+
+        if properties:
+            await self._bridge.update_page(page_id=page_id, properties=properties)
+            logger.info(
+                "Matter %s properties updated: %s",
+                page_id[:8],
+                ", ".join(properties.keys()),
+            )
+
+        if notes:
+            await self._bridge.append_block(page_id, notes)

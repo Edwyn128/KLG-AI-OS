@@ -1011,6 +1011,95 @@ async def update_matter_status(
 
 
 @AlfredAgent.tool
+async def update_matter(
+    ctx: RunContext[AlfredDependencies],
+    matter_name: str,
+    target_date: str = "",
+    next_court_deadline: str = "",
+    next_deadline_info: str = "",
+    case_stage: str = "",
+    priority: str = "",
+    notes: str = "",
+) -> str:
+    """
+    Update structured fields on a KLG matter project page in Notion.
+
+    Use this when the team asks Alfred to record a deadline, change a case
+    stage, update priority, or add a note — without changing the matter status.
+    Combine with update_matter_status when both a status and other fields change.
+
+    Examples of when to use this:
+      - "Alfred, set the deadline on Petersen to July 15th"
+      - "The next court deadline on Smith is August 3rd — opening brief due"
+      - "Move Diller to the Briefing — RB stage"
+      - "Mark the Williams matter as High priority"
+      - "Add a note to Portero: co-counsel confirmed filing"
+
+    Args:
+        matter_name:          The matter to update.
+        target_date:          ISO date "YYYY-MM-DD". The primary matter deadline.
+                              Pass "" to leave unchanged.
+        next_court_deadline:  ISO date "YYYY-MM-DD". The next court-facing deadline.
+        next_deadline_info:   Plain text description of what the deadline is
+                              (e.g., "Respondent's Brief due", "Oral argument").
+        case_stage:           One of: "Intake", "Evaluation", "Consulting and Special
+                              Projects", "Trial Court", "Prepare Record",
+                              "Briefing — AOB", "Briefing — RB", "Briefing — ARB",
+                              "Oral Argument", "Post-Argument", "Closed".
+        priority:             "Urgent", "High", "Medium", or "Low".
+        notes:                A note appended to the matter page body with a timestamp.
+
+    Returns:
+        Confirmation of all changes made, with the matter's Notion URL.
+    """
+    matter = await ctx.deps.project_pages.find_matter(matter_name)
+
+    if not matter:
+        return (
+            f"Could not find matter '{matter_name}' in Notion. "
+            f"Check the name and try again."
+        )
+
+    page_id = matter["id"]
+    matter_label = matter.get("Project name", matter_name)
+    url = matter.get("url", "N/A")
+
+    await ctx.deps.project_pages.update_matter_properties(
+        page_id=page_id,
+        target_date=target_date or None,
+        next_court_deadline=next_court_deadline or None,
+        next_deadline_info=next_deadline_info or None,
+        case_stage=case_stage or None,
+        priority=priority or None,
+        notes=notes or None,
+    )
+
+    changes = []
+    if target_date:      changes.append(f"Target Date → {target_date}")
+    if next_court_deadline: changes.append(f"Next Court Deadline → {next_court_deadline}")
+    if next_deadline_info:  changes.append(f"Deadline Info → {next_deadline_info}")
+    if case_stage:       changes.append(f"Case Stage → {case_stage}")
+    if priority:         changes.append(f"Priority → {priority}")
+    if notes:            changes.append(f"Note appended")
+
+    if not changes:
+        return f"No changes specified for '{matter_label}'."
+
+    change_log = "\n  ".join(changes)
+    await ctx.deps.project_pages.log_skill_action(
+        page_id=page_id,
+        skill_name="alfred-matter-update",
+        action_summary="; ".join(changes),
+    )
+
+    return (
+        f"Updated {matter_label}:\n"
+        f"  {change_log}\n"
+        f"Notion: {url}"
+    )
+
+
+@AlfredAgent.tool
 async def create_new_matter(
     ctx: RunContext[AlfredDependencies],
     matter_name: str,
@@ -1455,6 +1544,10 @@ async def run_skill(
       klg-response-plan          — Draft a response brief strategy memo from the appellant's
                                    opening brief (upload required): argument map, counter-
                                    positions, record strategy, research priorities
+      klg-appendix-audit         — Audit a proposed appendix compile folder for
+                                   underinclusivity: compare full docket against proposed
+                                   inclusions, flag HIGH/MEDIUM/LOW risk excluded documents
+                                   (upload docket first, compile folder second)
 
     Args:
         skill_name:   The skill to run (exactly as listed above).
