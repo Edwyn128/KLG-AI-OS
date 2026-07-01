@@ -50,6 +50,13 @@ from alfred.skills.klg_style_guide_check import KLGStyleGuideCheck
 from alfred.skills.klg_cite_check import KLGCiteCheck
 from alfred.skills.klg_response_plan import KLGResponsePlan
 from alfred.skills.klg_appendix_audit import KLGAppendixAudit
+from alfred.skills.klg_brief_elevation import KLGBriefElevation
+from alfred.skills.klg_authority_map import KLGAuthorityMap
+from alfred.skills.klg_issue_framing import KLGIssueFraming
+from alfred.skills.klg_standard_of_review import KLGStandardOfReview
+from alfred.skills.klg_oral_argument_prep import KLGOralArgumentPrep
+from alfred.skills.klg_amicus_assessment import KLGAmicusAssessment
+from alfred.skills.klg_record_navigator import KLGRecordNavigator
 
 # Registry of all available skills, keyed by name.
 # Alfred's run_skill tool looks skills up here by name.
@@ -63,6 +70,13 @@ SKILL_REGISTRY: dict[str, Skill] = {
     KLGCiteCheck.name:               KLGCiteCheck(),
     KLGResponsePlan.name:            KLGResponsePlan(),
     KLGAppendixAudit.name:           KLGAppendixAudit(),
+    KLGBriefElevation.name:          KLGBriefElevation(),
+    KLGAuthorityMap.name:            KLGAuthorityMap(),
+    KLGIssueFraming.name:            KLGIssueFraming(),
+    KLGStandardOfReview.name:        KLGStandardOfReview(),
+    KLGOralArgumentPrep.name:        KLGOralArgumentPrep(),
+    KLGAmicusAssessment.name:        KLGAmicusAssessment(),
+    KLGRecordNavigator.name:         KLGRecordNavigator(),
 }
 
 __all__ = [
@@ -78,4 +92,11 @@ __all__ = [
     "KLGCiteCheck",
     "KLGResponsePlan",
     "KLGAppendixAudit",
+    "KLGBriefElevation",
+    "KLGAuthorityMap",
+    "KLGIssueFraming",
+    "KLGStandardOfReview",
+    "KLGOralArgumentPrep",
+    "KLGAmicusAssessment",
+    "KLGRecordNavigator",
 ]

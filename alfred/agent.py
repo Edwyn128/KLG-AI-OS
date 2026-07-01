@@ -1563,6 +1563,27 @@ async def run_skill(
                                    underinclusivity: compare full docket against proposed
                                    inclusions, flag HIGH/MEDIUM/LOW risk excluded documents
                                    (upload docket first, compile folder second)
+      klg-brief-elevation        — Elevate a draft brief: theory critique, structure audit,
+                                   argument-by-argument feedback, KLG style violations,
+                                   and persuasion score (upload draft brief)
+      klg-authority-map          — Build a hierarchical authority map for a doctrine:
+                                   SCOTUS → 9th Circuit → Cal. courts, with tensions,
+                                   brief citation outline, and Westlaw pull list
+      klg-issue-framing          — Draft the issue presented in three versions (narrow /
+                                   mid / broad), test each against standard of review,
+                                   recommend the most persuasive framing
+      klg-standard-of-review     — Identify the applicable standard, draft the SOR
+                                   statement, analyze preservation, and anticipate
+                                   opponent SOR arguments
+      klg-oral-argument-prep     — Full oral argument prep: 60-second opener, 10 hardest
+                                   questions with answers, record citations, and the one
+                                   concession to offer (optionally upload brief)
+      klg-amicus-assessment      — Evaluate whether a case warrants a KLG amicus brief:
+                                   interest assessment, unique angle, coalition map,
+                                   and file/pass recommendation
+      klg-record-navigator       — Map the trial record for appellate issues: document
+                                   index, preserved issues, harmless error risks, and
+                                   a record pull list (upload record docs or describe)
 
     Args:
         skill_name:   The skill to run (exactly as listed above).

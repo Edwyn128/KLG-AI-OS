@@ -123,6 +123,12 @@ mcp>=1.0.0
 slowapi>=0.1.9
 
 
+# ── Document Processing ───────────────────────────────────────────────────────
+# pdfplumber extracts text from PDF files uploaded to Alfred skills.
+# Used by skill_read_file_text() in alfred/skills/base.py.
+pdfplumber>=0.11.0
+
+
 # ── Developer Experience ──────────────────────────────────────────────────────
 # rich formats terminal output (tables, progress bars, colored logs).
 # Useful during development and for reading scheduler output in the console.

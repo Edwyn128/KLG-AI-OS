@@ -286,7 +286,7 @@ async def skill_generate(prompt: str) -> str:
 
 
 def skill_read_file_text(path: str) -> str:
-    """Read text from .txt, .docx, or any plain-text file. Returns empty string on failure."""
+    """Read text from .txt, .docx, .pdf, or any plain-text file. Returns empty string on failure."""
     import zipfile
     import xml.etree.ElementTree as ET
     from pathlib import Path
@@ -294,6 +294,19 @@ def skill_read_file_text(path: str) -> str:
     p = Path(path)
     if p.suffix.lower() == ".txt":
         return p.read_text(encoding="utf-8", errors="replace")
+    if p.suffix.lower() == ".pdf":
+        try:
+            import pdfplumber
+            pages: list[str] = []
+            with pdfplumber.open(path) as pdf:
+                for page in pdf.pages:
+                    text = page.extract_text()
+                    if text:
+                        pages.append(text)
+            return "\n\n".join(pages)
+        except Exception as e:
+            logger.warning("skill_read_file_text: PDF extraction failed: %s", e)
+            return ""
     if p.suffix.lower() in (".doc", ".docx"):
         try:
             texts: list[str] = []
