@@ -237,6 +237,18 @@ async def chat_with_alfred(
 
         effective_message = _inject_file_context(request.message, request.file_tokens)
 
+        # Inject Alfred Notes persistent memory as context prefix.
+        if alfred_deps.alfred_notes:
+            try:
+                notes_ctx = await alfred_deps.alfred_notes.recall_for_context(limit=12)
+                if notes_ctx:
+                    effective_message = f"{notes_ctx}\n\n---\n\n{effective_message}"
+            except Exception:
+                pass
+
+        # Store user identity on deps so save_note can attribute the note correctly.
+        alfred_deps._current_user = request.user  # type: ignore[attr-defined]
+
         from alfred.agent import run_with_fallback
         result = await run_with_fallback(
             effective_message,
@@ -443,7 +455,7 @@ async def chat_with_alfred_stream(
     )
 
 
-_ACTIVITY_ALLOWED = {"tim", "stu"}
+_ACTIVITY_ALLOWED = {"tim", "stu", "edwyn"}
 
 
 @router.get("/activity", summary="Get recent agent chat activity for the Activity Log tab")

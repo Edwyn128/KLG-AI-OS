@@ -174,6 +174,22 @@ class Settings(BaseSettings):
     matter-specific email threads, and pinned items needing attention.
     """
 
+    notion_alfred_notes_db_id: str = ""
+    """
+    Alfred Notes database ID — Alfred's persistent cross-session memory layer.
+
+    Create a Notion database called "Alfred Notes" with these properties:
+      Name (title)        — short label, e.g. "Tim: prefers firm deadlines"
+      Category (select)   — Preference | Matter | OppCounsel | Deadline | FirmKnowledge | Other
+      Matter (text)       — matter name this note relates to (blank = firm-wide)
+      Body (rich_text)    — full note content
+      Recorded By (text)  — who triggered the save
+      Active (checkbox)   — true by default; set false to retire without deleting
+
+    Set NOTION_ALFRED_NOTES_DB_ID in Railway env vars after creating the database.
+    Leave empty to disable Alfred Notes (Alfred will operate without persistent memory).
+    """
+
     # ── Slack ─────────────────────────────────────────────────────────────────
 
     slack_bot_token: str = ""

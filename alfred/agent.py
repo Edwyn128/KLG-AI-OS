@@ -68,6 +68,7 @@ from pydantic_ai import Agent, ModelRetry, RunContext
 from alfred.model_factory import build_model
 from config import settings
 from notion_bridge.client import NotionBridge
+from notion_bridge.alfred_notes import AlfredNotes
 from notion_bridge.comms_log import CommsLog
 from notion_bridge.project_pages import ProjectPages
 from notion_bridge.watch_list import WatchList
@@ -130,6 +131,14 @@ class AlfredDependencies:
     Interface to the KLG Comms Log database. Alfred logs every chat
     interaction here so Tim can see what the team has been asking.
     Optional — gracefully absent if NOTION_COMMS_LOG_DB_ID is not set.
+    """
+
+    alfred_notes: AlfredNotes | None = None
+    """
+    Alfred's persistent cross-session memory layer.
+    Alfred saves facts here (attorney preferences, matter observations,
+    opposing counsel patterns) and recalls them in future conversations.
+    Optional — gracefully absent if NOTION_ALFRED_NOTES_DB_ID is not set.
     """
 
     slack_client: Any | None = None
@@ -1112,6 +1121,103 @@ async def update_matter(
         f"  {change_log}\n"
         f"Notion: {url}"
     )
+
+
+@AlfredAgent.tool
+async def save_note(
+    ctx: RunContext[AlfredDependencies],
+    label: str,
+    body: str,
+    category: str = "Other",
+    matter: str = "",
+) -> str:
+    """
+    Save a persistent note to Alfred's memory layer (Alfred Notes in Notion).
+
+    Use this proactively when you learn something worth remembering across
+    future conversations:
+      - Attorney preferences: "Tim prefers 2-week lead time before oral argument"
+      - Matter-specific observations: "Petersen: judge unusually hostile to cert petitions"
+      - Opposing counsel patterns: "Garcia firm always files on Friday at 4:58 PM"
+      - Firm knowledge: "Brittney handles all CALP scheduling directly"
+      - Deadlines that recur: "Court of Appeal requires 5 courtesy copies"
+
+    You do NOT need to be explicitly asked — save notes when you encounter
+    facts that would genuinely help you serve the team better in the future.
+    Confirm to the user that you saved the note.
+
+    Args:
+        label:    Short identifier, e.g. "Tim: prefers firm deadlines" (max 200 chars)
+        body:     Full note content. Be specific — vague notes are useless (max 2000 chars)
+        category: One of: Preference | Matter | OppCounsel | Deadline | FirmKnowledge | Other
+        matter:   Matter name this applies to, or "" for firm-wide notes
+
+    Returns:
+        Confirmation that the note was saved, or an error if Alfred Notes is not configured.
+    """
+    if not ctx.deps.alfred_notes:
+        return (
+            "Alfred Notes is not configured. "
+            "Set NOTION_ALFRED_NOTES_DB_ID in Railway env vars to enable persistent memory. "
+            "Instructions: create a Notion database called 'Alfred Notes' with properties "
+            "Name (title), Category (select), Matter (text), Body (rich_text), "
+            "Recorded By (text), Active (checkbox)."
+        )
+
+    user = getattr(ctx.deps, "_current_user", "Alfred")
+    page_id = await ctx.deps.alfred_notes.save(
+        label=label,
+        body=body,
+        category=category,
+        matter=matter,
+        recorded_by=user,
+    )
+
+    if not page_id:
+        return f"Failed to save note '{label}'. Check Alfred Notes Notion DB configuration."
+
+    scope = f" for {matter}" if matter else " (firm-wide)"
+    return f"Note saved{scope}: [{category}] {label}"
+
+
+@AlfredAgent.tool
+async def recall_notes(
+    ctx: RunContext[AlfredDependencies],
+    matter: str = "",
+    category: str = "",
+) -> str:
+    """
+    Recall notes from Alfred's persistent memory layer.
+
+    Use this when:
+      - Starting a session about a specific matter — recall what Alfred knows about it
+      - A user asks "what do you remember about X?"
+      - Context from prior sessions would improve your answer
+
+    Args:
+        matter:   Matter name to recall notes for, or "" for all firm-wide notes
+        category: Filter by category (Preference / Matter / OppCounsel /
+                  Deadline / FirmKnowledge / Other), or "" for all categories
+
+    Returns:
+        Formatted list of matching notes, or a message if none are found.
+    """
+    if not ctx.deps.alfred_notes:
+        return "Alfred Notes is not configured (NOTION_ALFRED_NOTES_DB_ID not set)."
+
+    notes = await ctx.deps.alfred_notes.recall(matter=matter, category=category, limit=20)
+
+    if not notes:
+        scope = f" for '{matter}'" if matter else ""
+        cat_str = f" in category '{category}'" if category else ""
+        return f"No notes found{scope}{cat_str}."
+
+    lines = [f"**Alfred Notes ({len(notes)} found):**"]
+    for n in notes:
+        scope = f" [{n['matter']}]" if n["matter"] else " [firm-wide]"
+        lines.append(f"• [{n['category']}{scope}] **{n['label']}**: {n['body']}")
+
+    return "\n".join(lines)
 
 
 @AlfredAgent.tool

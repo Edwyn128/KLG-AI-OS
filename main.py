@@ -240,6 +240,12 @@ async def lifespan(app: FastAPI):
     if comms_log:
         logger.info("Comms Log initialized.")
 
+    # 2c. Initialize Alfred Notes — persistent cross-session memory layer.
+    from notion_bridge.alfred_notes import AlfredNotes
+    alfred_notes = AlfredNotes(bridge) if settings.notion_alfred_notes_db_id else None
+    if alfred_notes:
+        logger.info("Alfred Notes initialized.")
+
     # 3. Initialize Slack client (if configured) — must happen before Alfred deps
     #    so the slack_client reference is available when AlfredDependencies is built.
     app.state.slack_client = None
@@ -262,6 +268,7 @@ async def lifespan(app: FastAPI):
         watch_list=watch_list,
         sharepoint=sharepoint,
         comms_log=comms_log,
+        alfred_notes=alfred_notes,
         slack_client=app.state.slack_client,
     )
     logger.info("Alfred dependencies assembled.")
