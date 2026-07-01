@@ -113,10 +113,12 @@ def cleanup_expired(max_age_seconds: int = 3600) -> int:
     Returns count of files cleaned up.
     """
     now = time.time()
-    expired = [t for t, e in _FILE_STORE.items() if now - e.created_at > max_age_seconds]
+    expired = [t for t, e in list(_FILE_STORE.items()) if now - e.created_at > max_age_seconds]
     count = 0
     for token in expired:
-        entry = _FILE_STORE.pop(token)
+        entry = _FILE_STORE.pop(token, None)
+        if entry is None:
+            continue
         delete_file(entry.path)
         count += 1
         logger.info("FileStore: expired '%s' (age %.0fs)", entry.filename, now - entry.created_at)

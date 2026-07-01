@@ -297,6 +297,14 @@ class Settings(BaseSettings):
     NEVER set to True in production — detailed tracebacks can expose secrets.
     """
 
+    app_public_url: str = ""
+    """
+    The public-facing URL of this deployment (e.g. https://klg-ai-os.up.railway.app).
+    Set APP_PUBLIC_URL in Railway environment variables.
+    Used to restrict CORS to only this origin in production.
+    Leave blank to allow only localhost (correct for local dev).
+    """
+
     # ── Model Selection ───────────────────────────────────────────────────────
     # Centralizing model IDs here means a model upgrade is a one-line .env change.
     # You don't have to hunt through multiple files to swap claude-sonnet-4-6

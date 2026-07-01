@@ -267,3 +267,66 @@ class Skill(ABC):
         # Step 5 is handled by the caller (SkillRunner / Alfred) surfacing
         # result.next_action to the user.
         return result
+
+
+# =============================================================================
+# SHARED SKILL UTILITIES
+# Imported by individual skills — do not duplicate these in skill files.
+# =============================================================================
+
+async def skill_generate(prompt: str) -> str:
+    """Run a prompt through the configured Alfred model and return the output."""
+    from pydantic_ai import Agent
+    from alfred.model_factory import build_model
+    from config import settings
+
+    agent: Agent[None, str] = Agent(model=build_model(settings.alfred_model), output_type=str)
+    result = await agent.run(prompt)
+    return result.output
+
+
+def skill_read_file_text(path: str) -> str:
+    """Read text from .txt, .docx, or any plain-text file. Returns empty string on failure."""
+    import zipfile
+    import xml.etree.ElementTree as ET
+    from pathlib import Path
+
+    p = Path(path)
+    if p.suffix.lower() == ".txt":
+        return p.read_text(encoding="utf-8", errors="replace")
+    if p.suffix.lower() in (".doc", ".docx"):
+        try:
+            texts: list[str] = []
+            with zipfile.ZipFile(path) as z:
+                with z.open("word/document.xml") as f:
+                    tree = ET.parse(f)
+                    ns = {"w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"}
+                    for t in tree.findall(".//w:t", ns):
+                        if t.text:
+                            texts.append(t.text)
+            return " ".join(texts)
+        except Exception:
+            pass
+    try:
+        return p.read_text(encoding="utf-8", errors="replace")
+    except Exception:
+        return ""
+
+
+async def skill_fetch_sharepoint(deps: Any, matter_name: str, skill_label: str = "skill") -> str:
+    """Search SharePoint for documents related to a matter. Returns formatted list or fallback message."""
+    if not deps or not getattr(deps, "sharepoint", None) or not matter_name:
+        return "(SharePoint not configured.)"
+    try:
+        results = await deps.sharepoint.search_files(matter_name, top=5)
+        if not results:
+            return f"(No SharePoint documents found for '{matter_name}'.)"
+        lines = [
+            f"  • {r.get('name', '')} — {r.get('lastModifiedDateTime', '')[:10]}\n"
+            f"    {r.get('webUrl', '')}"
+            for r in results
+        ]
+        return "Documents found:\n" + "\n".join(lines)
+    except Exception as e:
+        logger.warning("%s: SharePoint search failed: %s", skill_label, e)
+        return "(SharePoint search failed — continuing without document list.)"

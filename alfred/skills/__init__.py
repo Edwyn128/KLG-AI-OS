@@ -40,7 +40,7 @@ ADDING A NEW SKILL
   4. Import the class in this file and add it to SKILL_REGISTRY
 """
 
-from alfred.skills.base import Skill, SkillResult
+from alfred.skills.base import Skill, SkillResult, skill_generate, skill_read_file_text, skill_fetch_sharepoint
 from alfred.skills.klg_case_assessment import KLGCaseAssessment
 from alfred.skills.klg_matter_intake import KLGMatterIntake
 from alfred.skills.klg_deep_research_prompts import KLGDeepResearchPrompts

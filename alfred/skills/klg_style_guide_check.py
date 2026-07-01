@@ -15,7 +15,7 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
-from alfred.skills.base import Skill, SkillContext, SkillResult
+from alfred.skills.base import Skill, SkillContext, SkillResult, skill_read_file_text
 
 logger = logging.getLogger(__name__)
 
@@ -179,7 +179,7 @@ async def _extract_brief_text(ctx: SkillContext) -> str:
         if not path:
             return ctx.user_instruction or ""
 
-        text = _read_file_text(path)
+        text = skill_read_file_text(path)
         delete_file(path)
         return text
     except Exception as e:
@@ -187,30 +187,3 @@ async def _extract_brief_text(ctx: SkillContext) -> str:
         return ctx.user_instruction or ""
 
 
-def _read_file_text(path: str) -> str:
-    """Read text from a file. Handles .txt and basic .docx (Phase 1)."""
-    p = Path(path)
-    if p.suffix.lower() == ".txt":
-        return p.read_text(encoding="utf-8", errors="replace")
-
-    if p.suffix.lower() == ".docx":
-        try:
-            import zipfile
-            import xml.etree.ElementTree as ET
-            texts = []
-            with zipfile.ZipFile(path) as z:
-                with z.open("word/document.xml") as f:
-                    tree = ET.parse(f)
-                    ns = {"w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"}
-                    for t in tree.findall(".//w:t", ns):
-                        if t.text:
-                            texts.append(t.text)
-            return " ".join(texts)
-        except Exception as e:
-            logger.warning("klg-style-guide-check: .docx text extraction failed: %s", e)
-
-    # Fall back to reading as text
-    try:
-        return Path(path).read_text(encoding="utf-8", errors="replace")
-    except Exception:
-        return ""

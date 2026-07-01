@@ -10,9 +10,8 @@ CONFIDENTIALITY RULE: never echo client names or case facts into web searches.
 from __future__ import annotations
 
 import logging
-from pathlib import Path
 
-from alfred.skills.base import Skill, SkillContext, SkillResult
+from alfred.skills.base import Skill, SkillContext, SkillResult, skill_generate, skill_read_file_text, skill_fetch_sharepoint
 
 logger = logging.getLogger(__name__)
 
@@ -130,7 +129,7 @@ class KLGResponsePlan(Skill):
         matter_label = ctx.matter_name or "this matter"
         matter_text = ctx.matter_summary or "(No Notion project page found for this matter.)"
 
-        sp_text = await _fetch_sharepoint(ctx)
+        sp_text = await skill_fetch_sharepoint(ctx.extra.get("deps"), ctx.matter_name, "klg-response-plan")
 
         prompt = _RESPONSE_PLAN_PROMPT.format(
             matter_summary=matter_text[:5000],
@@ -139,7 +138,7 @@ class KLGResponsePlan(Skill):
             instruction=instruction[:1000],
         )
 
-        output_text = await _generate(prompt)
+        output_text = await skill_generate(prompt)
 
         return SkillResult(
             summary=(
@@ -169,7 +168,7 @@ async def _extract_brief_text(file_tokens: list[str], fallback: str) -> str:
             from alfred.file_store import consume_token, delete_file
             path = consume_token(file_tokens[0])
             if path:
-                text = _read_file_text(path)
+                text = skill_read_file_text(path)
                 delete_file(path)
                 if text:
                     return text
@@ -178,56 +177,3 @@ async def _extract_brief_text(file_tokens: list[str], fallback: str) -> str:
     return fallback
 
 
-def _read_file_text(path: str) -> str:
-    p = Path(path)
-    if p.suffix.lower() == ".txt":
-        return p.read_text(encoding="utf-8", errors="replace")
-    if p.suffix.lower() in (".doc", ".docx"):
-        try:
-            import zipfile
-            import xml.etree.ElementTree as ET
-            texts: list[str] = []
-            with zipfile.ZipFile(path) as z:
-                with z.open("word/document.xml") as f:
-                    tree = ET.parse(f)
-                    ns = {"w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"}
-                    for t in tree.findall(".//w:t", ns):
-                        if t.text:
-                            texts.append(t.text)
-            return " ".join(texts)
-        except Exception:
-            pass
-    try:
-        return p.read_text(encoding="utf-8", errors="replace")
-    except Exception:
-        return ""
-
-
-async def _fetch_sharepoint(ctx: SkillContext) -> str:
-    deps = ctx.extra.get("deps")
-    if not deps or not deps.sharepoint or not ctx.matter_name:
-        return "(SharePoint not configured.)"
-    try:
-        results = await deps.sharepoint.search_files(ctx.matter_name, top=5)
-        if not results:
-            return f"(No SharePoint documents found for '{ctx.matter_name}'.)"
-        lines = []
-        for r in results:
-            lines.append(
-                f"  • {r.get('name', '')} — {r.get('lastModifiedDateTime', '')[:10]}\n"
-                f"    {r.get('webUrl', '')}"
-            )
-        return "Documents found:\n" + "\n".join(lines)
-    except Exception as e:
-        logger.warning("klg-response-plan: SharePoint search failed: %s", e)
-        return "(SharePoint search failed — continuing without document list.)"
-
-
-async def _generate(prompt: str) -> str:
-    from pydantic_ai import Agent
-    from alfred.model_factory import build_model
-    from config import settings
-
-    agent: Agent[None, str] = Agent(model=build_model(settings.alfred_model), output_type=str)
-    result = await agent.run(prompt)
-    return result.output

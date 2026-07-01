@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import logging
 
-from alfred.skills.base import Skill, SkillContext, SkillResult
+from alfred.skills.base import Skill, SkillContext, SkillResult, skill_generate, skill_fetch_sharepoint
 
 logger = logging.getLogger(__name__)
 
@@ -127,7 +127,7 @@ class KLGCaseAssessment(Skill):
         comms_text = await _fetch_comms(deps, ctx.matter_id)
 
         # ── Step 2: SharePoint documents ──────────────────────────────────────
-        sp_text = await _fetch_sharepoint(deps, ctx.matter_name)
+        sp_text = await skill_fetch_sharepoint(deps, ctx.matter_name, "klg-case-assessment")
 
         # ── Step 3: Web search (doctrinal query only) ─────────────────────────
         web_text = await _fetch_web_research(inquiry)
@@ -145,7 +145,7 @@ class KLGCaseAssessment(Skill):
             inquiry=inquiry[:2000],
         )
 
-        output_text = await _generate(prompt)
+        output_text = await skill_generate(prompt)
 
         return SkillResult(
             summary=(
@@ -190,23 +190,6 @@ async def _fetch_comms(deps, matter_id: str) -> str:
         return "(Comms Log fetch failed — continuing without communication history.)"
 
 
-async def _fetch_sharepoint(deps, matter_name: str) -> str:
-    if not deps or not deps.sharepoint or not matter_name:
-        return "(SharePoint not configured.)"
-    try:
-        results = await deps.sharepoint.search_files(matter_name, top=5)
-        if not results:
-            return f"(No SharePoint documents found for '{matter_name}'.)"
-        lines = []
-        for r in results:
-            lines.append(
-                f"  • {r.get('name', '')} — {r.get('lastModifiedDateTime', '')[:10]}\n"
-                f"    {r.get('webUrl', '')}"
-            )
-        return "Documents found:\n" + "\n".join(lines)
-    except Exception as e:
-        logger.warning("klg-case-assessment: SharePoint search failed: %s", e)
-        return "(SharePoint search failed — continuing without document list.)"
 
 
 async def _fetch_web_research(inquiry: str) -> str:
@@ -216,7 +199,7 @@ async def _fetch_web_research(inquiry: str) -> str:
 
     # Extract a doctrinal search query—never use client facts or names
     try:
-        search_query = await _generate(_SEARCH_QUERY_PROMPT.format(inquiry=inquiry[:1000]))
+        search_query = await skill_generate(_SEARCH_QUERY_PROMPT.format(inquiry=inquiry[:1000]))
         search_query = search_query.strip().strip('"').strip("'")[:120]
     except Exception:
         return "(Could not extract search query.)"
@@ -254,11 +237,3 @@ async def _fetch_web_research(inquiry: str) -> str:
         return "(Web search failed — continuing without live legal research.)"
 
 
-async def _generate(prompt: str) -> str:
-    from pydantic_ai import Agent
-    from alfred.model_factory import build_model
-    from config import settings
-
-    agent: Agent[None, str] = Agent(model=build_model(settings.alfred_model), output_type=str)
-    result = await agent.run(prompt)
-    return result.output

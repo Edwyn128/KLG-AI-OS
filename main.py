@@ -363,10 +363,8 @@ app.add_middleware(_BasicAuthMiddleware)
 # for dev and the Railway domain for prod. The "*" wildcard is intentionally
 # absent — it would allow any site to call Alfred with a victim's credentials.
 _cors_origins = ["http://localhost:8000", "http://127.0.0.1:8000"]
-if not settings.debug:
-    # Add the Railway domain if APP_HOST is set to something meaningful.
-    # Update this when the Railway URL is known after first deployment.
-    _cors_origins = ["*"]  # same-origin in prod; update after Railway URL is known
+if settings.app_public_url:
+    _cors_origins.append(settings.app_public_url.rstrip("/"))
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_cors_origins,

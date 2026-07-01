@@ -40,7 +40,7 @@ SIGNAL FLOW
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any
 
@@ -121,7 +121,7 @@ class WatchSignal:
     title: str
     source_url: str
     source_name: str
-    detected_at: datetime = field(default_factory=datetime.utcnow)
+    detected_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     content: str = ""
     suggested_tier: SignalTier = SignalTier.TIER_3
     issue_keywords: list[str] = field(default_factory=list)

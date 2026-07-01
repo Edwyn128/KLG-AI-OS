@@ -13,9 +13,8 @@ CONFIDENTIALITY RULE: never echo client names or case facts into web searches.
 from __future__ import annotations
 
 import logging
-from pathlib import Path
 
-from alfred.skills.base import Skill, SkillContext, SkillResult
+from alfred.skills.base import Skill, SkillContext, SkillResult, skill_generate, skill_read_file_text
 
 logger = logging.getLogger(__name__)
 
@@ -174,7 +173,7 @@ class KLGAppendixAudit(Skill):
             instruction=instruction[:1000],
         )
 
-        output_text = await _generate(prompt)
+        output_text = await skill_generate(prompt)
 
         return SkillResult(
             summary=(
@@ -208,7 +207,7 @@ async def _extract_document_lists(
             from alfred.file_store import consume_token, delete_file
             path = consume_token(token)
             if path:
-                text = _read_file_text(path)
+                text = skill_read_file_text(path)
                 delete_file(path)
                 if text:
                     texts.append(text)
@@ -242,36 +241,3 @@ def _parse_section(text: str, label: str) -> str:
     return ""
 
 
-def _read_file_text(path: str) -> str:
-    p = Path(path)
-    if p.suffix.lower() == ".txt":
-        return p.read_text(encoding="utf-8", errors="replace")
-    if p.suffix.lower() in (".doc", ".docx"):
-        try:
-            import zipfile
-            import xml.etree.ElementTree as ET
-            texts: list[str] = []
-            with zipfile.ZipFile(path) as z:
-                with z.open("word/document.xml") as f:
-                    tree = ET.parse(f)
-                    ns = {"w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"}
-                    for t in tree.findall(".//w:t", ns):
-                        if t.text:
-                            texts.append(t.text)
-            return " ".join(texts)
-        except Exception:
-            pass
-    try:
-        return p.read_text(encoding="utf-8", errors="replace")
-    except Exception:
-        return ""
-
-
-async def _generate(prompt: str) -> str:
-    from pydantic_ai import Agent
-    from alfred.model_factory import build_model
-    from config import settings
-
-    agent: Agent[None, str] = Agent(model=build_model(settings.alfred_model), output_type=str)
-    result = await agent.run(prompt)
-    return result.output
