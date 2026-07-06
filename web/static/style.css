@@ -576,6 +576,53 @@ header::after {
   font-weight: 500;
   font-family: var(--font-mono);
 }
+.skill-badge {
+  background: rgba(130,90,200,0.12);
+  border: 1px solid rgba(130,90,200,0.3);
+  color: #a678e8;
+  padding: 1px 7px;
+  border-radius: 3px;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin-right: 4px;
+}
+
+/* Skill output message */
+.message-bubble.skill-output {
+  border-color: rgba(130,90,200,0.25);
+  background: rgba(130,90,200,0.03);
+}
+.skill-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 6px;
+}
+.skill-action-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  padding: 3px 10px;
+  border-radius: 4px;
+  font-size: 11px;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+}
+.skill-action-btn:hover { border-color: var(--border-accent); color: var(--text-primary); }
+.skill-action-btn .material-symbols-outlined { font-size: 13px; }
+
+/* Markdown rendering in message bubbles */
+.message-bubble h3 { font-size: 14px; font-weight: 600; margin: 12px 0 3px; color: var(--text-primary); border-bottom: 1px solid var(--border); padding-bottom: 3px; }
+.message-bubble h4 { font-size: 13px; font-weight: 600; margin: 10px 0 2px; color: var(--text-primary); }
+.message-bubble h5 { font-size: 11px; font-weight: 600; margin: 8px 0 2px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; }
+.message-bubble ul, .message-bubble ol { margin: 3px 0 3px 18px; padding: 0; }
+.message-bubble li { margin: 2px 0; line-height: 1.55; }
+.message-bubble hr { border: none; border-top: 1px solid var(--border); margin: 10px 0; }
+.message-bubble code { background: var(--bg-input); border: 1px solid var(--border); padding: 1px 4px; border-radius: 3px; font-family: var(--font-mono); font-size: 11px; }
 
 /* Chat input */
 .chat-input-area {

@@ -431,6 +431,16 @@ said, even if partial ("Petersen" is fine, not just "Petersen v. City").
 
 INSTRUCTION: Pass the user's stated detail as instruction — the court,
 the ruling, the doctrine name, whatever they specified.
+
+AFTER A SKILL COMPLETES SUCCESSFULLY: If save_note is available in your
+tool list, call it with:
+  label: "[skill name] — [one-sentence summary of the key finding]"
+  body: the top 3 most important findings (keep under 800 chars)
+  category: "Matter"
+  matter: the matter name
+This persists the key output across sessions so you can recall it next
+time someone asks about this matter. Skip for failed runs or trivial
+lookups (e.g., case-assessment returning "insufficient facts").
 """.strip()
 
 

@@ -1653,15 +1653,34 @@ function updateStreamingMessage(id, text) {
 function finalizeStreamingMessage(id, text, toolsUsed) {
   const bubble = document.getElementById(`${id}-bubble`);
   if (!bubble) return;
-  // Apply full markdown formatting on the completed response
   bubble.innerHTML = formatMessageText(text);
 
+  const msgContent = bubble.closest('.message-content');
+  const isSkillOutput = toolsUsed && toolsUsed.includes('run_skill');
+
+  if (isSkillOutput) bubble.classList.add('skill-output');
+
   if (toolsUsed && toolsUsed.length > 0) {
-    const badges  = toolsUsed.map(t => `<span>${t.replace(/_/g,' ')}</span>`).join('');
+    const otherTools = toolsUsed.filter(t => t !== 'run_skill');
+    const skillBadge = isSkillOutput ? '<span class="skill-badge">SKILL REPORT</span>' : '';
+    const toolBadges = otherTools.map(t => `<span>${t.replace(/_/g,' ')}</span>`).join('');
     const toolsEl = document.createElement('div');
     toolsEl.className = 'tools-used';
-    toolsEl.innerHTML = `<span class="tools-used-label">via </span>${badges}`;
-    bubble.closest('.message-content').appendChild(toolsEl);
+    toolsEl.innerHTML = `${skillBadge}${otherTools.length ? `<span class="tools-used-label">via </span>${toolBadges}` : ''}`;
+    msgContent.appendChild(toolsEl);
+  }
+
+  if (isSkillOutput) {
+    const actionsEl = document.createElement('div');
+    actionsEl.className = 'skill-actions';
+    actionsEl.innerHTML = `
+      <button class="skill-action-btn" onclick="copySkillOutput(this)">
+        <span class="material-symbols-outlined">content_copy</span> Copy
+      </button>
+      <button class="skill-action-btn" onclick="downloadSkillOutput(this)">
+        <span class="material-symbols-outlined">download</span> Download .md
+      </button>`;
+    msgContent.appendChild(actionsEl);
   }
 }
 
@@ -1704,23 +1723,108 @@ function appendMessage(role, text, name, toolsUsed = []) {
 }
 
 function formatMessageText(text) {
-  // Escape HTML
-  const escaped = text
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
+  // Step 1: extract and protect fenced code blocks before any other processing
+  const blocks = [];
+  const noFences = text.replace(/```[\w]*\r?\n?([\s\S]*?)```/g, (_, code) => {
+    const i = blocks.length;
+    const safe = code.trim()
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    blocks.push(`<pre>${safe}</pre>`);
+    return `\x02BLOCK${i}\x03`;
+  });
 
-  // Code blocks
-  const withCode = escaped.replace(
-    /```[\w]*\n?([\s\S]*?)```/g,
-    (_, code) => `<pre>${code.trim()}</pre>`
-  );
+  // Step 2: line-by-line block processing
+  const lines = noFences.split('\n');
+  const parts = [];
+  let j = 0;
 
-  // Bold
-  const withBold = withCode.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+  while (j < lines.length) {
+    const line = lines[j];
+    const trimmed = line.trim();
 
-  // Newlines → <br>
-  return withBold.replace(/\n/g, '<br>');
+    // Code block placeholder on its own line
+    if (/^\x02BLOCK\d+\x03$/.test(trimmed)) {
+      const n = +trimmed.match(/\x02BLOCK(\d+)\x03/)[1];
+      parts.push(blocks[n]);
+      j++; continue;
+    }
+
+    // Headings (### before ## before #)
+    let m;
+    if ((m = line.match(/^####\s+(.+)$/)))  { parts.push(`<h5>${inlineFmt(m[1])}</h5>`); j++; continue; }
+    if ((m = line.match(/^###\s+(.+)$/)))   { parts.push(`<h5>${inlineFmt(m[1])}</h5>`); j++; continue; }
+    if ((m = line.match(/^##\s+(.+)$/)))    { parts.push(`<h4>${inlineFmt(m[1])}</h4>`); j++; continue; }
+    if ((m = line.match(/^#\s+(.+)$/)))     { parts.push(`<h3>${inlineFmt(m[1])}</h3>`); j++; continue; }
+
+    // Horizontal rule
+    if (/^[-*_]{3,}$/.test(trimmed)) { parts.push('<hr>'); j++; continue; }
+
+    // Unordered list — collect consecutive bullet lines
+    if (/^[-*•]\s+/.test(line)) {
+      const items = [];
+      while (j < lines.length && /^[-*•]\s+/.test(lines[j])) {
+        items.push(`<li>${inlineFmt(lines[j].replace(/^[-*•]\s+/, ''))}</li>`);
+        j++;
+      }
+      parts.push(`<ul>${items.join('')}</ul>`);
+      continue;
+    }
+
+    // Ordered list — collect consecutive numbered lines
+    if (/^\d+\.\s+/.test(line)) {
+      const items = [];
+      while (j < lines.length && /^\d+\.\s+/.test(lines[j])) {
+        items.push(`<li>${inlineFmt(lines[j].replace(/^\d+\.\s+/, ''))}</li>`);
+        j++;
+      }
+      parts.push(`<ol>${items.join('')}</ol>`);
+      continue;
+    }
+
+    // Empty line → paragraph break
+    if (trimmed === '') { parts.push('<br>'); j++; continue; }
+
+    // Regular line — inline format, then restore any inline block placeholders
+    const inlined = inlineFmt(line);
+    const restored = inlined.replace(/\x02BLOCK(\d+)\x03/g, (_, n) => blocks[+n]);
+    parts.push(restored + '<br>');
+    j++;
+  }
+
+  // Step 3: clean up excessive line breaks
+  let html = parts.join('');
+  html = html.replace(/(<br>\s*){3,}/g, '<br><br>');
+  html = html.replace(/(<br>)+$/, '');
+  return html;
+}
+
+function inlineFmt(text) {
+  let s = text
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  s = s.replace(/`([^`\n]+)`/g, '<code>$1</code>');
+  s = s.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+  return s;
+}
+
+function copySkillOutput(btn) {
+  const bubble = btn.closest('.message-content').querySelector('.message-bubble');
+  navigator.clipboard.writeText(bubble.innerText || bubble.textContent).then(() => {
+    const orig = btn.innerHTML;
+    btn.innerHTML = '<span class="material-symbols-outlined">check</span> Copied';
+    setTimeout(() => { btn.innerHTML = orig; }, 2000);
+  });
+}
+
+function downloadSkillOutput(btn) {
+  const bubble = btn.closest('.message-content').querySelector('.message-bubble');
+  const text = bubble.innerText || bubble.textContent;
+  const blob = new Blob([text], { type: 'text/markdown' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href     = url;
+  a.download = `klg-skill-report.md`;
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -2112,7 +2216,10 @@ function launchSelectedSkill() {
   selectAgent('alfred');
   const input = document.getElementById('chat-input');
   input.value = selectedSkill.prompt;
-  sendMessage();
+  input.focus();
+  // Select [Matter Name] so the user can type the matter immediately
+  const idx = input.value.indexOf('[Matter Name]');
+  if (idx !== -1) input.setSelectionRange(idx, idx + 13);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
