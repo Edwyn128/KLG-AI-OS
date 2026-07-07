@@ -1,0 +1,127 @@
+/* =============================================================================
+   KLG AI OS — Global Styles
+   Design tokens, reset, and base typography.
+   Component-specific styles live in *.module.css next to each component.
+   ============================================================================= */
+
+/* ── Design Tokens ──────────────────────────────────────────────────────── */
+:root {
+  /* Surface */
+  --bg-base:        #0a0e16;
+  --bg-panel:       #1c2028;
+  --bg-card:        #181c24;
+  --bg-input:       #262a33;
+  --bg-hover:       #31353e;
+  --border:         rgba(68,71,76,0.7);
+  --border-accent:  rgba(184,200,222,0.28);
+
+  /* Text */
+  --text-primary:   #dfe2ee;
+  --text-secondary: #c4c6cd;
+  --text-muted:     #8e9197;
+  --text-dim:       #44474c;
+
+  /* Brand accent — KLG Steel Blue */
+  --accent:         #b8c8de;
+  --accent-bright:  #d4e4fb;
+  --accent-dim:     rgba(184,200,222,0.1);
+  --accent-glow:    rgba(184,200,222,0.18);
+
+  /* Bloodhound accent — Amber */
+  --bh-accent:      #f39c12;
+  --bh-dim:         rgba(243,156,18,0.15);
+
+  /* Status */
+  --urgent:         #B22234;
+  --urgent-dim:     rgba(178,34,52,0.18);
+  --warning:        #f39c12;
+  --warning-dim:    rgba(243,156,18,0.15);
+  --ok:             #b5c8df;
+  --ok-dim:         rgba(181,200,223,0.15);
+
+  /* KLG Brand */
+  --klg-navy:       #1B2A3B;
+  --klg-red:        #B22234;
+
+  /* Typography */
+  --font-sans:  'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono:  'JetBrains Mono', 'Courier New', monospace;
+
+  /* Geometry */
+  --radius-sm:  2px;
+  --radius:     4px;
+  --radius-lg:  8px;
+  --radius-xl:  12px;
+
+  /* Transitions */
+  --ease:      cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-out:  cubic-bezier(0, 0, 0.2, 1);
+}
+
+/* ── Reset ──────────────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html { font-size: 14px; }
+
+body {
+  font-family: var(--font-sans);
+  background: var(--bg-base);
+  color: var(--text-primary);
+  height: 100dvh;
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+#root {
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* ── Scrollbars ─────────────────────────────────────────────────────────── */
+::-webkit-scrollbar       { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-dim); }
+
+/* ── Focus ──────────────────────────────────────────────────────────────── */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--radius);
+}
+
+/* ── Buttons ────────────────────────────────────────────────────────────── */
+button {
+  font-family: inherit;
+  cursor: pointer;
+  border: none;
+  background: none;
+}
+
+/* ── Links ──────────────────────────────────────────────────────────────── */
+a { color: var(--accent); text-decoration: none; }
+a:hover { color: var(--accent-bright); }
+
+/* ── Material Symbols icon size helper ──────────────────────────────────── */
+.material-symbols-outlined {
+  font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+  vertical-align: middle;
+  line-height: 1;
+  user-select: none;
+}
+
+/* ── Utility ────────────────────────────────────────────────────────────── */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0,0,0,0);
+  white-space: nowrap;
+  border: 0;
+}

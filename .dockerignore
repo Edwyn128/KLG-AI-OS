@@ -13,3 +13,5 @@ __pycache__/
 Dockerfile
 .dockerignore
 .github/
+web-next/node_modules/
+web-next/dist/

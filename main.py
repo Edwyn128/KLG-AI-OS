@@ -79,7 +79,7 @@ logger = logging.getLogger(__name__)
 # /slack/events — Slack verifies itself via HMAC signing secret
 #
 _AUTH_EXEMPT = {"/", "/health", "/slack/events"}
-_AUTH_EXEMPT_PREFIXES = ("/static/",)
+_AUTH_EXEMPT_PREFIXES = ("/static/", "/assets/")
 
 # Simple in-memory rate limiter (per IP, per minute).
 _rate_counts: dict[str, list[float]] = {}
@@ -423,26 +423,41 @@ async def auth_check():
 # STATIC FILES AND WEB UI
 # =============================================================================
 
-# Serve the web UI's static assets (CSS, JS) from the web/static/ directory.
-# StaticFiles makes files available at /static/app.js, /static/style.css, etc.
-_web_dir = Path(__file__).parent / "web"
-if _web_dir.exists():
+# Prefer the compiled React build (web-next/dist) when it exists.
+# Fall back to the legacy vanilla JS app (web/) for local dev without a build.
+_react_dist = Path(__file__).parent / "web-next" / "dist"
+_legacy_web  = Path(__file__).parent / "web"
+
+if _react_dist.exists():
+    # React (Vite) build — assets live in dist/assets/
+    # Exempt /assets/ from auth in the middleware above.
+    app.mount(
+        "/assets",
+        StaticFiles(directory=str(_react_dist / "assets")),
+        name="assets",
+    )
+
+    @app.get("/", include_in_schema=False)
+    async def serve_react_root():
+        return FileResponse(str(_react_dist / "index.html"))
+
+    # Catch-all: serve index.html for every non-API path so React Router works.
+    @app.get("/{full_path:path}", include_in_schema=False)
+    async def serve_react_spa(full_path: str, request: Request):
+        # Never intercept API / system paths — only UI routes.
+        if full_path.startswith(("alfred/", "bloodhound/", "cases/", "slack/", "auth/", "health")):
+            from fastapi import HTTPException
+            raise HTTPException(status_code=404)
+        return FileResponse(str(_react_dist / "index.html"))
+
+elif _legacy_web.exists():
+    # Legacy vanilla JS app — static assets in web/static/
     app.mount(
         "/static",
-        StaticFiles(directory=str(_web_dir / "static")),
+        StaticFiles(directory=str(_legacy_web / "static")),
         name="static",
     )
 
     @app.get("/", include_in_schema=False)
     async def serve_ui():
-        """
-        Serve the web UI dashboard.
-
-        This route catches the root URL (/) and serves index.html — the
-        single-page application that provides the Alfred chat interface and
-        the matter/Bloodhound dashboard.
-
-        include_in_schema=False hides this from the API docs (it's a UI
-        route, not an API endpoint, so it doesn't need documentation).
-        """
-        return FileResponse(str(_web_dir / "index.html"))
+        return FileResponse(str(_legacy_web / "index.html"))

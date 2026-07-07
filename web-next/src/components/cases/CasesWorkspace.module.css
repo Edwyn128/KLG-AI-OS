@@ -1,0 +1,15 @@
+.placeholder {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  color: var(--text-muted);
+  font-size: 14px;
+}
+
+.placeholder span {
+  font-size: 40px !important;
+  opacity: 0.3;
+}
