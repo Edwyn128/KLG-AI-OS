@@ -246,6 +246,14 @@ async def lifespan(app: FastAPI):
     if alfred_notes:
         logger.info("Alfred Notes initialized.")
 
+    # 2d. Initialize System State — Notion-backed KV store for tokens/delta links.
+    from notion_bridge.system_state import SystemState
+    system_state = SystemState(bridge) if settings.notion_system_state_db_id else None
+    if system_state:
+        logger.info("System State initialized.")
+    else:
+        logger.info("NOTION_SYSTEM_STATE_DB_ID not set — delta links will not persist across deploys.")
+
     # 3. Initialize Slack client (if configured) — must happen before Alfred deps
     #    so the slack_client reference is available when AlfredDependencies is built.
     app.state.slack_client = None
@@ -269,6 +277,7 @@ async def lifespan(app: FastAPI):
         sharepoint=sharepoint,
         comms_log=comms_log,
         alfred_notes=alfred_notes,
+        system_state=system_state,
         slack_client=app.state.slack_client,
     )
     logger.info("Alfred dependencies assembled.")
@@ -312,6 +321,8 @@ async def lifespan(app: FastAPI):
             slack_client=app.state.slack_client,
             watch_list=watch_list,
             bridge=bridge,
+            sharepoint=sharepoint,
+            system_state=system_state,
         )
         scheduler.start()
         app.state.scheduler = scheduler

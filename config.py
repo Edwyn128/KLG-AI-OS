@@ -239,6 +239,33 @@ class Settings(BaseSettings):
     Alfred uses this to scope file searches to the KLG document library.
     """
 
+    sharepoint_monitor_folder: str = "/Matters"
+    """
+    Root SharePoint folder path to watch for file and folder changes.
+    The delta monitor tracks everything under this path.
+    Default: /Matters  (KLG's top-level matter folder)
+    """
+
+    sharepoint_monitor_channel: str = "#sharepoint-activity"
+    """
+    Slack channel where SharePoint change notifications are posted.
+    Create this channel and invite the bot before enabling the monitor.
+    Set SHAREPOINT_MONITOR_CHANNEL in Railway env vars to override the default.
+    """
+
+    notion_system_state_db_id: str = ""
+    """
+    KLG System State database ID — lightweight Notion KV store for persisting
+    system tokens across Railway redeploys (e.g., SharePoint delta links).
+
+    Create a Notion database called "KLG System State" with two properties:
+      Name  (title)      — key string
+      Value (rich_text)  — stored value (up to 2000 chars)
+
+    Share the database with the Notion integration and paste the DB ID here.
+    Leave empty to skip delta token persistence (monitor resets on each deploy).
+    """
+
     # ── Slack (inbound / events) ──────────────────────────────────────────────
 
     slack_signing_secret: str = ""

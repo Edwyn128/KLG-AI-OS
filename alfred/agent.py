@@ -71,6 +71,7 @@ from notion_bridge.client import NotionBridge
 from notion_bridge.alfred_notes import AlfredNotes
 from notion_bridge.comms_log import CommsLog
 from notion_bridge.project_pages import ProjectPages
+from notion_bridge.system_state import SystemState
 from notion_bridge.watch_list import WatchList
 from sharepoint_bridge.client import SharePointBridge
 
@@ -139,6 +140,13 @@ class AlfredDependencies:
     Alfred saves facts here (attorney preferences, matter observations,
     opposing counsel patterns) and recalls them in future conversations.
     Optional — gracefully absent if NOTION_ALFRED_NOTES_DB_ID is not set.
+    """
+
+    system_state: SystemState | None = None
+    """
+    Lightweight Notion-backed KV store for persisting system tokens across
+    Railway redeploys (e.g., the SharePoint delta link).
+    Optional — gracefully absent if NOTION_SYSTEM_STATE_DB_ID is not set.
     """
 
     slack_client: Any | None = None

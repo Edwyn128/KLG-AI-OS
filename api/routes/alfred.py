@@ -736,6 +736,36 @@ async def trigger_hygiene_scan(request: Request) -> dict[str, str]:
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.post(
+    "/agents/sharepoint-monitor",
+    summary="Manually trigger the SharePoint delta change monitor",
+)
+async def trigger_sharepoint_monitor(request: Request) -> dict[str, str]:
+    """
+    Manually trigger one SharePoint delta poll cycle.
+
+    On first run: initialises the delta baseline and posts a confirmation
+    to #sharepoint-activity. No change events on first run.
+    On subsequent runs: surfaces any files or folders added, modified, or
+    deleted under /Matters since the last poll, grouped by matter.
+    """
+    from agents.sharepoint_monitor import run_sharepoint_monitor
+
+    alfred_deps = request.app.state.alfred_deps
+    slack_client = getattr(request.app.state, "slack_client", None)
+
+    try:
+        summary = await run_sharepoint_monitor(
+            sharepoint=alfred_deps.sharepoint,
+            system_state=alfred_deps.system_state,
+            slack_client=slack_client,
+        )
+        return {"status": "success", "detail": summary}
+    except Exception as e:
+        logger.error("trigger_sharepoint_monitor error: %s", e, exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # =============================================================================
 # HELPER FUNCTIONS
 # =============================================================================

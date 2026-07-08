@@ -343,6 +343,93 @@ class SharePointBridge:
             return f"[DOCX extraction failed: {e}]"
 
     # ─────────────────────────────────────────────────────────────────────────
+    # DELTA (CHANGE DETECTION)
+    # ─────────────────────────────────────────────────────────────────────────
+
+    async def poll_delta(
+        self,
+        folder_path: str = "/Matters",
+        delta_link: str | None = None,
+    ) -> tuple[list[dict], str]:
+        """
+        Poll the Microsoft Graph delta endpoint for changes under folder_path.
+
+        First call (delta_link=None):
+            Passes ?token=latest to skip all existing items and establish a
+            baseline. Returns an empty item list and the delta link to store.
+
+        Subsequent calls (delta_link=<stored URL>):
+            Returns only items changed since the previous call, plus the new
+            delta link to store.
+
+        On a 410 Gone response the stored delta link has expired — returns
+        ([], "") to signal that the caller should reset and re-initialise.
+
+        Returns:
+            (items, new_delta_link)
+        """
+        if not self._configured:
+            return [], ""
+
+        site_id = await self._get_site_id()
+        if not site_id:
+            return [], ""
+
+        headers = self._headers()
+        if not headers:
+            return [], ""
+
+        if delta_link:
+            url: str | None = delta_link
+        else:
+            # Encode the folder path for use in a Graph URL
+            encoded = folder_path.strip("/").replace(" ", "%20")
+            url = (
+                f"{GRAPH_BASE}/sites/{site_id}"
+                f"/drive/root:/{encoded}:/delta?token=latest"
+            )
+
+        items: list[dict] = []
+        new_delta_link = ""
+
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            while url:
+                try:
+                    resp = await client.get(url, headers=headers)
+                except httpx.RequestError as e:
+                    logger.error("SharePoint poll_delta network error: %s", e)
+                    return [], ""
+
+                if resp.status_code == 410:
+                    logger.warning(
+                        "SharePoint delta link returned 410 Gone — reset required."
+                    )
+                    return [], ""
+
+                try:
+                    resp.raise_for_status()
+                except httpx.HTTPStatusError as e:
+                    logger.error("SharePoint poll_delta HTTP error: %s", e)
+                    return [], ""
+
+                data = resp.json()
+                items.extend(data.get("value", []))
+
+                if "@odata.nextLink" in data:
+                    url = data["@odata.nextLink"]
+                elif "@odata.deltaLink" in data:
+                    new_delta_link = data["@odata.deltaLink"]
+                    url = None
+                else:
+                    url = None
+
+        logger.debug(
+            "SharePoint poll_delta: %d items returned, folder=%r",
+            len(items), folder_path,
+        )
+        return items, new_delta_link
+
+    # ─────────────────────────────────────────────────────────────────────────
     # INTERNAL HELPERS
     # ─────────────────────────────────────────────────────────────────────────
 

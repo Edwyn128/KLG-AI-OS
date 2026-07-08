@@ -65,10 +65,12 @@ PACIFIC_TZ = "America/Los_Angeles"
 
 
 def create_scheduler(
-    project_pages: Any,  # ProjectPages
+    project_pages: Any,          # ProjectPages
     slack_client: Any | None = None,
-    watch_list: Any | None = None,  # WatchList — for Bloodhound daily scan
-    bridge: Any | None = None,      # NotionBridge — for huddle import
+    watch_list: Any | None = None,   # WatchList — for Bloodhound daily scan
+    bridge: Any | None = None,       # NotionBridge — for huddle import
+    sharepoint: Any | None = None,   # SharePointBridge — for delta monitor
+    system_state: Any | None = None, # SystemState — delta link persistence
 ) -> AsyncIOScheduler:
     """
     Create and configure the APScheduler instance with all three agents.
@@ -247,6 +249,38 @@ def create_scheduler(
     else:
         logger.info(
             "Scheduler: Huddle import not scheduled — bridge not provided."
+        )
+
+    # ── Job 7: SharePoint Delta Monitor ──────────────────────────────────────
+    # Polls /Matters for file and folder changes every 30 minutes on weekdays.
+    # Posts a grouped summary to #sharepoint-activity when changes are found.
+    # Silently skips if SharePoint credentials are not configured.
+    #
+    if sharepoint and sharepoint._configured:
+        from agents.sharepoint_monitor import run_sharepoint_monitor
+
+        scheduler.add_job(
+            func=run_sharepoint_monitor,
+            trigger=CronTrigger(
+                day_of_week="mon-fri", hour="8-19", minute="0,30", timezone=PACIFIC_TZ
+            ),
+            kwargs={
+                "sharepoint": sharepoint,
+                "system_state": system_state,
+                "slack_client": slack_client,
+            },
+            id="sharepoint_monitor",
+            name="SharePoint Delta Monitor",
+            replace_existing=True,
+            misfire_grace_time=1800,
+        )
+        logger.info(
+            "Scheduler: Registered 'sharepoint_monitor' every 30 min Mon–Fri 8AM–7PM Pacific."
+        )
+    else:
+        logger.info(
+            "Scheduler: SharePoint monitor not scheduled — "
+            "SHAREPOINT_* credentials not configured."
         )
 
     return scheduler
