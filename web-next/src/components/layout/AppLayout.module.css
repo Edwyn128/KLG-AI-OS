@@ -3,7 +3,7 @@
   flex-direction: column;
   height: 100dvh;
   overflow: hidden;
-  background: var(--bg-main);
+  background: var(--bg-base);
 }
 
 .workspace {
@@ -11,4 +11,73 @@
   display: flex;
   overflow: hidden;
   position: relative;
+}
+
+/* ── Base layer (chat, always visible) ───────── */
+.baseLayer {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── Floating glass panel ─────────────────────── */
+.panel {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: var(--panel-width);
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  z-index: 20;
+
+  background:              var(--glass-bg);
+  backdrop-filter:         var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border-left:             1px solid rgba(178, 34, 52, 0.35);
+  box-shadow:              var(--glass-shadow), var(--glass-highlight);
+
+  animation: panelIn 0.28s var(--ease-out) both;
+}
+
+@media (max-width: 768px) {
+  .panel { width: 100vw; }
+}
+
+/* ── Panel header bar ─────────────────────────── */
+.panelHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px 12px;
+  border-bottom: 1px solid var(--glass-border);
+  flex-shrink: 0;
+}
+
+.panelTitle {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.panelClose {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: var(--text-muted);
+  transition: color 0.15s, background 0.15s;
+}
+
+.panelClose:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover);
 }

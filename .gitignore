@@ -63,6 +63,11 @@ Thumbs.db
 # Claude Code session data
 .claude/
 
+# Node / frontend
+node_modules/
+web-next/node_modules/
+web-next/dist/
+
 # Logs
 *.log
 logs/

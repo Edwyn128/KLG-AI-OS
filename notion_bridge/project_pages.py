@@ -168,9 +168,12 @@ class ProjectPages:
         target_date = props_dict.get("date:Target Date:start") or props_dict.get("Target Date") or "N/A"
         court_date  = props_dict.get("Next Court Deadline") or None
         court_info  = props_dict.get("Next Deadline Info") or ""
-        completion  = props_dict.get("Completion")
-        blocking    = props_dict.get("Is Blocking") or []
-        blocked_by  = props_dict.get("Blocked By") or []
+        completion      = props_dict.get("Completion")
+        blocking        = props_dict.get("Is Blocking") or []
+        blocked_by      = props_dict.get("Blocked By") or []
+        project_type    = props_dict.get("Project Type") or None
+        support_type    = props_dict.get("Support Type") or None
+        think_tank_type = props_dict.get("Think Tank Type") or None
 
         # Days-remaining helper for court deadline
         def _days_label(d: str) -> str:
@@ -188,8 +191,11 @@ class ProjectPages:
             f"Status:               {status}",
             f"Priority:             {priority}",
             f"Case Stage:           {case_stage}",
+            f"Project Type:         {project_type or 'N/A'}",
             f"Category:             {category}",
             f"Assignee:             {', '.join(assignees) if assignees else 'Unassigned'}",
+            *([f"Support Type:         {support_type}"] if support_type else []),
+            *([f"Think Tank Type:      {think_tank_type}"] if think_tank_type else []),
             f"Target Date:          {target_date}",
             f"Next Court Deadline:  {_days_label(court_date) if court_date else 'None set'}",
         ]
@@ -239,6 +245,7 @@ class ProjectPages:
         self,
         days: int = 7,
         category: str | None = "Case Project",
+        project_type: str | None = None,
     ) -> list[dict[str, Any]]:
         """
         Query the Projects database for matters with deadlines in the next N days.
@@ -274,6 +281,10 @@ class ProjectPages:
             [{"property": "Category", "select": {"equals": category}}]
             if category else []
         )
+        project_type_clause = (
+            [{"property": "Project Type", "select": {"equals": project_type}}]
+            if project_type else []
+        )
 
         def _build(date_prop: str) -> dict:
             return {"and": [
@@ -281,6 +292,7 @@ class ProjectPages:
                 {"property": date_prop, "date": {"on_or_before": cutoff}},
                 not_done,
                 *category_clause,
+                *project_type_clause,
             ]}
 
         results_by_target, results_by_court = await asyncio.gather(
@@ -321,6 +333,7 @@ class ProjectPages:
     async def get_all_active_matters(
         self,
         category: str | None = "Case Project",
+        project_type: str | None = None,
     ) -> list[dict[str, Any]]:
         """
         Return all matters currently in an active status.
@@ -345,6 +358,10 @@ class ProjectPages:
         if category:
             conditions.append(
                 {"property": "Category", "select": {"equals": category}}
+            )
+        if project_type:
+            conditions.append(
+                {"property": "Project Type", "select": {"equals": project_type}}
             )
 
         db_filter = {"and": conditions} if len(conditions) > 1 else conditions[0]

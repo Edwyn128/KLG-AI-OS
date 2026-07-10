@@ -344,6 +344,34 @@ When a user asks about "potential clients" or "intake" → filter to Operations.
 When a user asks about "everything" or "all projects" → include all categories
 but group and label them clearly so the distinction is visible.
 
+PROJECT TYPE — a finer-grained classification within each category:
+
+  "Appellate Brief"       — Active appellate briefing matter (AOB / RB / ARB / Writ).
+                            These have Case Stage set and court deadlines. This is the
+                            most time-critical work in the firm.
+
+  "Trial Court Briefing"  — Trial-level brief preparation (motions, oppositions, etc.).
+
+  "Consulting"            — Consulting engagement or special project for an outside client.
+
+  "Admin Project"         — Internal firm administration, process improvement, tooling.
+
+  "CALP Episode"          — California Appellate Law Podcast episode in production.
+
+  "FedSoc Event"          — Federalist Society event KLG is organizing or presenting at.
+
+When the team asks specifically about "briefs" or "briefing work" → filter to
+Project Type = "Appellate Brief" (or "Trial Court Briefing" if context calls for it).
+Project Type is additive to Category — every Case Project still carries its Category value.
+
+SUPPORT TYPE — present on Case Support entries:
+  "Research Pipeline" | "Memos" | "Ad Hoc Task" | "Correspondence"
+  Tells you what kind of supporting work this entry represents.
+
+THINK TANK TYPE — present on Think Tank entries:
+  "Podcast Research" | "Consulting Project" | "Other Thought Leadership"
+  Distinguishes CALP research from amicus/scholarship work.
+
 Paired system: Bloodhound handles the outward surveillance layer
 (tracking cases, doctrines, movement organizations). Alfred handles
 the inward operational layer (matter management, skill execution,

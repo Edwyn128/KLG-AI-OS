@@ -12,13 +12,21 @@ const TABS: { id: Workspace; label: string; icon: string }[] = [
 export function WorkspaceTabs() {
   const { activeWorkspace, setWorkspace } = useUIStore()
 
+  const handleTabClick = (id: Workspace) => {
+    if (id !== 'chat' && id === activeWorkspace) {
+      setWorkspace('chat')
+    } else {
+      setWorkspace(id)
+    }
+  }
+
   return (
     <nav className={styles.tabs}>
       {TABS.map(tab => (
         <button
           key={tab.id}
           className={`${styles.tab} ${activeWorkspace === tab.id ? styles.active : ''}`}
-          onClick={() => setWorkspace(tab.id)}
+          onClick={() => handleTabClick(tab.id)}
         >
           <span className={`material-symbols-outlined ${styles.icon}`}>{tab.icon}</span>
           <span className={styles.label}>{tab.label}</span>

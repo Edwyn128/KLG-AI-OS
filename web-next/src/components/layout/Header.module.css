@@ -4,8 +4,11 @@
   justify-content: space-between;
   padding: 0 20px;
   height: 52px;
-  background: var(--bg-sidebar);
-  border-bottom: 1px solid var(--border);
+  background:              var(--glass-bg);
+  backdrop-filter:         var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border-bottom:           1px solid var(--glass-border);
+  box-shadow:              var(--glass-highlight);
   flex-shrink: 0;
 }
 
@@ -19,7 +22,7 @@
   font-size: 18px;
   font-weight: 700;
   letter-spacing: 0.1em;
-  color: var(--text-primary);
+  color: var(--accent);
 }
 
 .brandSub {

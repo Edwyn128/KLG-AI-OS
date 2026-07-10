@@ -6,26 +6,31 @@
 
 /* ── Design Tokens ──────────────────────────────────────────────────────── */
 :root {
-  /* Surface */
-  --bg-base:        #0a0e16;
-  --bg-panel:       #1c2028;
-  --bg-card:        #181c24;
-  --bg-input:       #262a33;
-  --bg-hover:       #31353e;
-  --border:         rgba(68,71,76,0.7);
-  --border-accent:  rgba(184,200,222,0.28);
+  /* Surface — KLG Navy palette */
+  --bg-base:        #0e1a27;
+  --bg-panel:       #1B2A3B;
+  --bg-card:        #162233;
+  --bg-input:       #1d2d3f;
+  --bg-hover:       #243548;
+  --border:         rgba(184,200,222,0.18);
+  --border-accent:  rgba(178,34,52,0.45);
 
   /* Text */
-  --text-primary:   #dfe2ee;
-  --text-secondary: #c4c6cd;
-  --text-muted:     #8e9197;
-  --text-dim:       #44474c;
+  --text-primary:   #e5eaf4;
+  --text-secondary: #b8c8de;
+  --text-muted:     #6d8eaa;
+  --text-dim:       #3a5470;
 
-  /* Brand accent — KLG Steel Blue */
-  --accent:         #b8c8de;
-  --accent-bright:  #d4e4fb;
-  --accent-dim:     rgba(184,200,222,0.1);
-  --accent-glow:    rgba(184,200,222,0.18);
+  /* Brand accent — KLG Red (primary CTA / active states) */
+  --accent:         #B22234;
+  --accent-bright:  #cc2840;
+  --accent-dim:     rgba(178,34,52,0.15);
+  --accent-glow:    rgba(178,34,52,0.3);
+
+  /* Steel Blue — secondary accent (borders, glass tint, info text) */
+  --steel:          #b8c8de;
+  --steel-dim:      rgba(184,200,222,0.1);
+  --steel-glow:     rgba(184,200,222,0.18);
 
   /* Bloodhound accent — Amber */
   --bh-accent:      #f39c12;
@@ -56,6 +61,21 @@
   /* Transitions */
   --ease:      cubic-bezier(0.4, 0, 0.2, 1);
   --ease-out:  cubic-bezier(0, 0, 0.2, 1);
+
+  /* Liquid glass — navy tinted */
+  --glass-bg:        rgba(14, 26, 39, 0.84);
+  --glass-bg-light:  rgba(27, 42, 59, 0.9);
+  --glass-border:    rgba(184, 200, 222, 0.18);
+  --glass-highlight: inset 0 1px 0 rgba(184, 200, 222, 0.1);
+  --glass-blur:      blur(28px) saturate(160%);
+  --glass-shadow:    0 0 48px rgba(0,0,0,0.6), 0 1px 0 rgba(184,200,222,0.06);
+  --radius-glass:    16px;
+  --panel-width:     50vw;
+}
+
+@keyframes panelIn {
+  from { transform: translateX(100%); opacity: 0.6; }
+  to   { transform: translateX(0);    opacity: 1;   }
 }
 
 /* ── Reset ──────────────────────────────────────────────────────────────── */
@@ -65,8 +85,8 @@ html { font-size: 14px; }
 
 body {
   font-family: var(--font-sans);
-  background: var(--bg-base);
-  color: var(--text-primary);
+  background: #0e1a27;
+  color: #e5eaf4;
   height: 100dvh;
   overflow: hidden;
   -webkit-font-smoothing: antialiased;
@@ -78,6 +98,7 @@ body {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  background: #0e1a27;
 }
 
 /* ── Scrollbars ─────────────────────────────────────────────────────────── */
