@@ -365,11 +365,19 @@ class Settings(BaseSettings):
       gemini-1.5-pro     → Google Gemini Pro
     """
 
-    alfred_model_fallbacks: str = "gemini-1.5-pro"
+    alfred_model_fallbacks: str = "claude-haiku-4-5-20251001,gpt-4o"
     """
     Comma-separated list of fallback models to try if alfred_model hits a
-    billing/quota error. Alfred walks this list in order until one succeeds.
-    Example: ALFRED_MODEL_FALLBACKS=claude-sonnet-4-6,gemini-1.5-pro
+    billing/quota/rate-limit error. Alfred walks this list in order until one succeeds.
+
+    Default chain:
+      1. claude-haiku-4-5-20251001 — same Anthropic API key, but Tier 1 rate limit
+         is 25k input TPM vs 10k for Sonnet. Handles temporary per-minute spikes
+         without leaving the Anthropic ecosystem.
+      2. gpt-4o — cross-provider backstop. Requires OPENAI_API_KEY in Railway.
+         Silently skipped if the key is not configured.
+
+    Override via ALFRED_MODEL_FALLBACKS in Railway env vars.
     Leave empty to disable automatic fallback.
     """
 
