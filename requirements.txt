@@ -37,15 +37,16 @@ anthropic==0.101.0
 # OpenAI SDK — GPT-4o model routing in Alfred + ChatGPT Deep Research tool.
 openai>=1.50.0
 
-# Google Generative AI SDK — Gemini model routing in Alfred.
-# Required by pydantic-ai's GeminiModel provider.
-google-generativeai>=0.8.0
-
 # Pydantic AI — the agent framework that wraps the above SDKs.
-# It gives us type-safe tool definitions, dependency injection, and a clean
-# agent loop without reinventing the wheel. (It's also what Code Puppy uses
-# internally — we're just using it directly without the wrapper.)
-pydantic-ai==1.94.0
+# Using pydantic-ai-slim (not the full meta-package) with only the three
+# provider extras Alfred actually uses: Anthropic (Claude), OpenAI (GPT-4o
+# fallback + ChatGPT Deep Research tool), Google (Gemini routing).
+# The full pydantic-ai wheel pulls in bedrock, cohere, groq, huggingface,
+# temporalio, xai, logfire, ag-ui and dozens of other unused extras — this
+# keeps the Railway Docker build fast and avoids dependency conflicts.
+# Note: pydantic-ai-slim's "google" extra brings in google-genai (the new
+# unified Google SDK); google-generativeai is not needed in pydantic-ai 1.x.
+pydantic-ai-slim[anthropic,openai,google]==1.94.0
 
 
 # ── Notion ────────────────────────────────────────────────────────────────────
