@@ -30,6 +30,9 @@ interface ChatState {
   // Available models list
   models: typeof MODELS
 
+  // Draft input pre-filled by Skills launcher
+  draftInput: string
+
   // Actions
   setAgent: (agent: Agent) => void
   setModel: (model: ModelValue) => void
@@ -42,6 +45,7 @@ interface ChatState {
   removePendingFile: (token: string) => void
   clearPendingFiles: () => void
   clearChat: (agent: Agent) => void
+  setDraftInput: (v: string) => void
 }
 
 export const useChatStore = create<ChatState>((set, get) => ({
@@ -53,6 +57,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   bloodhoundMessages: [],
   pendingFiles: [],
   models: MODELS,
+  draftInput: '',
 
   setAgent: (agent) => set({ currentAgent: agent }),
   setModel: (model) => set({ selectedModel: model }),
@@ -98,4 +103,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
       set({ bloodhoundMessages: [] })
     }
   },
+
+  setDraftInput: (v) => set({ draftInput: v }),
 }))

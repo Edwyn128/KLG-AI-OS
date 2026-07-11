@@ -4,6 +4,7 @@
 // =============================================================================
 
 import { useAuthStore } from '@/store/authStore'
+import type { MatterListResponse, DeadlineItem } from '@/types'
 
 const AUTH_STORAGE_KEY_USER = 'klg_user'
 const AUTH_STORAGE_KEY_PASS = 'klg_password'
@@ -68,6 +69,18 @@ export async function apiFetch(path: string, options: FetchOptions = {}): Promis
   }
 
   return response
+}
+
+export async function fetchMatters(): Promise<MatterListResponse> {
+  const res = await apiFetch('/alfred/matters')
+  if (!res.ok) throw new Error('Failed to fetch matters')
+  return res.json()
+}
+
+export async function fetchDeadlines(): Promise<DeadlineItem[]> {
+  const res = await apiFetch('/alfred/deadlines')
+  if (!res.ok) throw new Error('Failed to fetch deadlines')
+  return res.json()
 }
 
 /**

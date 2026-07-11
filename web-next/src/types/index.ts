@@ -2,7 +2,7 @@
 // KLG AI OS — TypeScript types
 // =============================================================================
 
-export type Workspace = 'chat' | 'skills' | 'cases' | 'activity'
+export type Workspace = 'dashboard' | 'chat'
 
 export type Agent = 'alfred' | 'bloodhound'
 
