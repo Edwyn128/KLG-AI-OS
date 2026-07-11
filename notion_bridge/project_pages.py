@@ -270,13 +270,6 @@ class ProjectPages:
         # deep compound filter nesting, so we keep each query simple.
         import asyncio
 
-        not_done = {
-            "or": [
-                {"property": "Status", "status": {"equals": "In progress"}},
-                {"property": "Status", "status": {"equals": "Planning"}},
-                {"property": "Status", "status": {"equals": "Paused"}},
-            ]
-        }
         category_clause = (
             [{"property": "Category", "select": {"equals": category}}]
             if category else []
@@ -290,7 +283,6 @@ class ProjectPages:
             return {"and": [
                 {"property": date_prop, "date": {"on_or_after": today}},
                 {"property": date_prop, "date": {"on_or_before": cutoff}},
-                not_done,
                 *category_clause,
                 *project_type_clause,
             ]}
@@ -346,15 +338,7 @@ class ProjectPages:
         Returns:
             List of active matter dicts sorted by Priority descending.
         """
-        conditions: list[dict] = [
-            {
-                "or": [
-                    {"property": "Status", "status": {"equals": "In progress"}},
-                    {"property": "Status", "status": {"equals": "Planning"}},
-                    {"property": "Status", "status": {"equals": "Paused"}},
-                ]
-            }
-        ]
+        conditions: list[dict] = []
         if category:
             conditions.append(
                 {"property": "Category", "select": {"equals": category}}
@@ -364,7 +348,11 @@ class ProjectPages:
                 {"property": "Project Type", "select": {"equals": project_type}}
             )
 
-        db_filter = {"and": conditions} if len(conditions) > 1 else conditions[0]
+        db_filter: dict | None = (
+            {"and": conditions} if len(conditions) > 1
+            else conditions[0] if len(conditions) == 1
+            else None
+        )
 
         return await self._bridge.query_database(
             database_id=settings.notion_projects_db_id,
