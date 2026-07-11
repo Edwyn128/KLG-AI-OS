@@ -80,7 +80,9 @@ export async function fetchMatters(): Promise<MatterListResponse> {
 export async function fetchDeadlines(): Promise<DeadlineItem[]> {
   const res = await apiFetch('/alfred/deadlines')
   if (!res.ok) throw new Error('Failed to fetch deadlines')
-  return res.json()
+  const data = await res.json()
+  // Endpoint returns { matters: [...], count, days_ahead, category }
+  return Array.isArray(data) ? data : (data.matters ?? [])
 }
 
 /**

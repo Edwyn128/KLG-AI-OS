@@ -105,7 +105,9 @@ export function DashboardWorkspace() {
     )
   }
 
-  const sorted = [...deadlines].sort((a, b) => (a.days_until ?? 9999) - (b.days_until ?? 9999))
+  const sorted = Array.isArray(deadlines)
+    ? [...deadlines].sort((a, b) => (a.days_until ?? 9999) - (b.days_until ?? 9999))
+    : []
 
   return (
     <div className={styles.container}>
