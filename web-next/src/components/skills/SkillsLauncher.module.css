@@ -53,7 +53,15 @@
   border-radius: var(--radius-glass);
   box-shadow: var(--glass-shadow);
 
+  /* Smooth expand/compress */
+  transition: width 0.2s ease, max-height 0.2s ease;
+
   animation: popupIn 0.18s var(--ease-out) both;
+}
+
+.popupExpanded {
+  width: 520px;
+  max-height: 600px;
 }
 
 @keyframes popupIn {
@@ -61,8 +69,8 @@
   to   { transform: translateY(0)   scale(1);    opacity: 1; }
 }
 
-@media (max-width: 400px) {
-  .popup {
+@media (max-width: 560px) {
+  .popup, .popupExpanded {
     right: 8px;
     left: 8px;
     width: auto;
@@ -88,13 +96,19 @@
   color: var(--accent);
 }
 
-.closeBtn {
+.headerActions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.iconBtn {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
   border: none;
   background: transparent;
   color: var(--text-muted);
@@ -102,14 +116,60 @@
   transition: color 0.12s, background 0.12s;
 }
 
-.closeBtn:hover {
+.iconBtn:hover {
   color: var(--text-primary);
   background: var(--bg-hover);
 }
 
-.closeBtn .material-symbols-outlined {
+.iconBtn .material-symbols-outlined {
   font-size: 16px !important;
 }
+
+/* ── Search row (expanded only) ───────────────────── */
+
+.searchRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--glass-border);
+  flex-shrink: 0;
+}
+
+.searchIcon {
+  font-size: 16px !important;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.searchInput {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  font-size: 13px;
+  color: var(--text-primary);
+  font-family: inherit;
+}
+
+.searchInput::placeholder {
+  color: var(--text-muted);
+}
+
+.searchClear {
+  display: flex;
+  align-items: center;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 0;
+  flex-shrink: 0;
+  transition: color 0.12s;
+}
+
+.searchClear:hover { color: var(--text-primary); }
+.searchClear .material-symbols-outlined { font-size: 14px !important; }
 
 /* ── Category chips ───────────────────────────────── */
 
@@ -156,6 +216,13 @@
   flex: 1;
 }
 
+.emptyRow {
+  padding: 20px 14px;
+  font-size: 12px;
+  color: var(--text-muted);
+  text-align: center;
+}
+
 .skillRow {
   width: 100%;
   display: flex;
@@ -165,9 +232,10 @@
   background: transparent;
   border: none;
   border-bottom: 1px solid var(--glass-border);
+  border-left: 2px solid transparent;
   cursor: pointer;
   text-align: left;
-  transition: background 0.12s;
+  transition: background 0.12s, border-left-color 0.12s;
 }
 
 .skillRow:last-child {
@@ -176,6 +244,7 @@
 
 .skillRow:hover {
   background: var(--bg-hover);
+  border-left-color: var(--accent);
 }
 
 .skillIcon {
@@ -200,6 +269,7 @@
   line-height: 1.2;
 }
 
+/* Compact: 1-line clamp */
 .skillDesc {
   font-size: 11px;
   color: var(--text-muted);
@@ -208,6 +278,11 @@
   display: -webkit-box;
   -webkit-line-clamp: 1;
   -webkit-box-orient: vertical;
+}
+
+/* Expanded: 2-line clamp */
+.popupExpanded .skillDesc {
+  -webkit-line-clamp: 2;
 }
 
 .skillMeta {
