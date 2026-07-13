@@ -202,17 +202,24 @@ async def _run_alfred_and_reply(
                 logger.debug("Slack: Could not log @mention to Notion: %s", e)
 
     except Exception as e:
-        err_type = type(e).__name__
-        err_msg = str(e)[:300]
         logger.error("Slack Alfred reply error for user %s: %s", user_id, e, exc_info=True)
         if slack_client:
             try:
+                err_lower = str(e).lower()
+                if any(p in err_lower for p in ("credit balance", "credits", "billing", "payment", "exhausted")):
+                    user_msg = (
+                        "Alfred's API credits are depleted — all models failed. "
+                        "Please ask Tim to add credits at console.anthropic.com → Plans & Billing."
+                    )
+                elif any(p in err_lower for p in ("rate limit", "quota", "429")):
+                    user_msg = "Alfred is temporarily rate-limited. Please try again in a moment."
+                elif "timed out" in err_lower or "timeout" in err_lower:
+                    user_msg = "Alfred timed out on this request. Try a shorter question or open the web UI."
+                else:
+                    user_msg = "Alfred encountered an unexpected error. Try again or open the web UI directly."
                 await slack_client.chat_postMessage(
                     channel=channel,
-                    text=(
-                        f"Alfred hit an error: `{err_type}: {err_msg}`\n"
-                        "Try again or open the web UI directly."
-                    ),
+                    text=user_msg,
                     thread_ts=thread_ts,
                 )
             except Exception:

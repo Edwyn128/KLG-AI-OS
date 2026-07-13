@@ -498,16 +498,24 @@ AlfredAgent: Agent[AlfredDependencies, str] = Agent(
 
 def _is_billing_error(exc: BaseException) -> bool:
     """Return True if the error warrants a provider fallback (billing/quota/rate-limit)."""
-    # pydantic-ai 1.x wraps HTTP failures as ModelHTTPError — check this first.
-    # A 429 always means rate-limited or quota-exhausted; fall back immediately.
+    # pydantic-ai 1.x wraps HTTP failures as ModelHTTPError.
+    # 429 = rate-limited / quota-exhausted.
+    # 400 with a billing body = credit balance depleted — still worth trying other providers.
     try:
         from pydantic_ai.exceptions import ModelHTTPError
         if isinstance(exc, ModelHTTPError):
-            return exc.status_code == 429
+            if exc.status_code == 429:
+                return True
+            if exc.status_code == 400:
+                body_str = str(getattr(exc, "body", "") or "").lower()
+                return any(p in body_str for p in (
+                    "credit balance", "credits", "billing", "payment",
+                ))
+            return False
     except ImportError:
         pass
 
-    # Legacy path: string-match covers pre-1.x pydantic-ai and non-pydantic-ai paths.
+    # Legacy / non-pydantic-ai path: string-match.
     msg = str(exc).lower()
     return any(phrase in msg for phrase in (
         "credit balance",
