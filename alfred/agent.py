@@ -683,8 +683,7 @@ def resolve_alfred_model(model_str: str):
     if model_str == settings.alfred_model:
         return None
 
-    return build_model(model_str)
-
+    # Route sonar-* to Perplexity's OpenAI-compatible API
     if model_str.lower().startswith("sonar"):
         if not settings.perplexity_api_key:
             raise ValueError(
@@ -701,8 +700,7 @@ def resolve_alfred_model(model_str: str):
             ),
         )
 
-    logger.warning("Unknown model identifier '%s' — falling back to Claude default.", model_str)
-    return None
+    return build_model(model_str)
 
 
 def resolve_thinking_settings(model_str: str):

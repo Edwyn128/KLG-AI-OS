@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useAuthStore } from '@/store/authStore'
 import { useChatStore } from '@/store/chatStore'
+import { useUIStore } from '@/store/uiStore'
 import { apiFetch } from '@/api/client'
 import type { ChatMessage, SSEEvent, UploadResponse } from '@/types'
 import styles from './ChatWorkspace.module.css'
@@ -11,6 +12,7 @@ function genId(): string {
 
 export function ChatWorkspace() {
   const { user } = useAuthStore()
+  const { setSkillsOpen } = useUIStore()
   const {
     alfredMessages,
     alfredHistory,
@@ -19,6 +21,7 @@ export function ChatWorkspace() {
     selectedModel,
     models,
     draftInput,
+    skillTrigger,
     setModel,
     setLoading,
     addMessage,
@@ -30,6 +33,7 @@ export function ChatWorkspace() {
     clearPendingFiles,
     clearChat,
     setDraftInput,
+    setSkillTrigger,
   } = useChatStore()
 
   const [text, setText] = useState('')
@@ -37,32 +41,19 @@ export function ChatWorkspace() {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
-  // Pre-fill from Skills launcher
-  useEffect(() => {
-    if (!draftInput) return
-    setText(draftInput)
-    setDraftInput('')
-    textareaRef.current?.focus()
-  }, [draftInput, setDraftInput])
+  // Core send logic. actualText goes to Alfred; displayText shows in the chat bubble.
+  // When a skill is triggered, displayText is the skill name and actualText is the full prompt.
+  const sendMessage = useCallback(async (actualText: string, displayText?: string) => {
+    if (!actualText.trim() || isLoading) return
 
-  // Scroll to bottom on new messages
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [alfredMessages])
-
-  async function handleSend() {
-    const msg = text.trim()
-    if (!msg || isLoading) return
-
-    setText('')
+    const show = (displayText ?? actualText).trim()
     const fileTokens = pendingFiles.map(f => f.token)
     clearPendingFiles()
 
-    const userMsgId = genId()
     addMessage('alfred', {
-      id: userMsgId,
+      id: genId(),
       role: 'user',
-      text: msg,
+      text: show,
       name: user || 'You',
     })
 
@@ -78,10 +69,10 @@ export function ChatWorkspace() {
     setLoading(true)
 
     try {
-      const res = await apiFetch('/alfred/chat', {
+      const res = await apiFetch('/alfred/chat/stream', {
         method: 'POST',
         body: JSON.stringify({
-          message: msg,
+          message: actualText,
           model: selectedModel,
           history: alfredHistory,
           file_tokens: fileTokens,
@@ -131,7 +122,6 @@ export function ChatWorkspace() {
             }
           }
         }
-        // Ensure loading cleared if stream ended without done event
         setLoading(false)
         if (accumulated) finalizeMessage(alfredMsgId, [])
       } else {
@@ -148,6 +138,37 @@ export function ChatWorkspace() {
       finalizeMessage(alfredMsgId, [])
       setLoading(false)
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLoading, pendingFiles, selectedModel, alfredHistory, user])
+
+  // Pre-fill from manual draftInput (non-skill use)
+  useEffect(() => {
+    if (!draftInput) return
+    setText(draftInput)
+    setDraftInput('')
+    textareaRef.current?.focus()
+  }, [draftInput, setDraftInput])
+
+  // Auto-send when a skill is triggered from the launcher — shows skill name in chat,
+  // sends full prompt to Alfred so the user never has to read or edit the raw prompt.
+  useEffect(() => {
+    if (!skillTrigger) return
+    const { prompt, displayName } = skillTrigger
+    setSkillTrigger(null)
+    sendMessage(prompt, displayName)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [skillTrigger])
+
+  // Scroll to bottom on new messages
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [alfredMessages])
+
+  async function handleSend() {
+    const msg = text.trim()
+    if (!msg) return
+    setText('')
+    await sendMessage(msg)
   }
 
   async function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
@@ -194,6 +215,14 @@ export function ChatWorkspace() {
           title="Clear conversation"
         >
           <span className="material-symbols-outlined">delete_sweep</span>
+        </button>
+
+        <button
+          className={styles.clearBtn}
+          onClick={() => setSkillsOpen(true)}
+          title="Open skills"
+        >
+          <span className="material-symbols-outlined">bolt</span>
         </button>
       </div>
 

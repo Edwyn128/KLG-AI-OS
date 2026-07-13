@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import json
 import logging
+from datetime import date
 from typing import Any
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
@@ -539,6 +540,41 @@ async def get_activity(
     return {"count": len(entries), "entries": entries, "days": days}
 
 
+def _normalize_matter(d: dict) -> dict:
+    """Map Notion Title-Case property keys to the snake_case shape the frontend expects."""
+    def _assignee(val) -> str:
+        if isinstance(val, list):
+            return ", ".join(str(v) for v in val if v) if val else ""
+        return str(val) if val else ""
+
+    def _days_until(date_str: str | None) -> int | None:
+        if not date_str:
+            return None
+        try:
+            target = date.fromisoformat(date_str[:10])
+            return (target - date.today()).days
+        except (ValueError, TypeError):
+            return None
+
+    ncd = d.get("Next Court Deadline")
+    td = d.get("Target Date")
+
+    return {
+        "id": d.get("id"),
+        "url": d.get("url"),
+        "name": d.get("Project name", ""),
+        "status": d.get("Status", ""),
+        "priority": d.get("Priority", ""),
+        "category": d.get("Category", ""),
+        "case_stage": d.get("Case Stage", ""),
+        "assignee": _assignee(d.get("Assignee")),
+        "target_date": td,
+        "next_court_deadline": ncd,
+        "summary": d.get("Summary", ""),
+        "days_until": _days_until(ncd or td),
+    }
+
+
 @router.get("/matters", summary="List active matters by category")
 async def list_active_matters(
     category: str = "Case Project",
@@ -561,7 +597,8 @@ async def list_active_matters(
     try:
         cat = None if category.lower() == "all" else category
         matters = await alfred_deps.project_pages.get_all_active_matters(category=cat)
-        return {"count": len(matters), "category": category, "matters": matters}
+        normalized = [_normalize_matter(m) for m in matters]
+        return {"count": len(normalized), "category": category, "matters": normalized}
     except Exception as e:
         logger.error("list_active_matters error: %s", e, exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
@@ -587,7 +624,8 @@ async def get_upcoming_deadlines(
         matters = await alfred_deps.project_pages.get_matters_with_upcoming_deadlines(
             days=days, category=cat
         )
-        return {"days_ahead": days, "category": category, "count": len(matters), "matters": matters}
+        normalized = [_normalize_matter(m) for m in matters]
+        return {"days_ahead": days, "category": category, "count": len(normalized), "matters": normalized}
     except Exception as e:
         logger.error("get_upcoming_deadlines error: %s", e, exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))

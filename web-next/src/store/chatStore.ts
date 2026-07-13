@@ -33,6 +33,9 @@ interface ChatState {
   // Draft input pre-filled by Skills launcher
   draftInput: string
 
+  // Skill auto-send trigger: { prompt, displayName } set by SkillsLauncher, consumed by ChatWorkspace
+  skillTrigger: { prompt: string; displayName: string } | null
+
   // Actions
   setAgent: (agent: Agent) => void
   setModel: (model: ModelValue) => void
@@ -46,6 +49,7 @@ interface ChatState {
   clearPendingFiles: () => void
   clearChat: (agent: Agent) => void
   setDraftInput: (v: string) => void
+  setSkillTrigger: (t: { prompt: string; displayName: string } | null) => void
 }
 
 export const useChatStore = create<ChatState>((set, get) => ({
@@ -58,6 +62,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   pendingFiles: [],
   models: MODELS,
   draftInput: '',
+  skillTrigger: null,
 
   setAgent: (agent) => set({ currentAgent: agent }),
   setModel: (model) => set({ selectedModel: model }),
@@ -105,4 +110,5 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   setDraftInput: (v) => set({ draftInput: v }),
+  setSkillTrigger: (t) => set({ skillTrigger: t }),
 }))

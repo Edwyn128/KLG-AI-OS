@@ -2,14 +2,14 @@ import { useEffect, useState } from 'react'
 import { useUIStore } from '@/store/uiStore'
 import { useChatStore } from '@/store/chatStore'
 import { KLG_SKILLS } from '@/data/skills'
-import type { SkillCategory } from '@/types'
+import type { Skill, SkillCategory } from '@/types'
 import styles from './SkillsLauncher.module.css'
 
 const CATEGORIES: SkillCategory[] = ['ALL', 'INTAKE', 'RESEARCH', 'DRAFTING', 'QA', 'ARGUMENT', 'OPS', 'RECORD']
 
 export function SkillsLauncher() {
   const { skillsOpen, setSkillsOpen, setWorkspace } = useUIStore()
-  const { setDraftInput } = useChatStore()
+  const { setSkillTrigger } = useChatStore()
   const [activeCategory, setActiveCategory] = useState<SkillCategory>('ALL')
 
   // Close on Escape
@@ -26,10 +26,10 @@ export function SkillsLauncher() {
     ? KLG_SKILLS
     : KLG_SKILLS.filter(s => s.category === activeCategory)
 
-  function handleSkillClick(prompt: string) {
+  function handleSkillClick(skill: Skill) {
     setSkillsOpen(false)
     setWorkspace('chat')
-    setDraftInput(prompt)
+    setSkillTrigger({ prompt: skill.prompt, displayName: skill.name })
   }
 
   return (
@@ -60,7 +60,7 @@ export function SkillsLauncher() {
               <li key={skill.id}>
                 <button
                   className={styles.skillRow}
-                  onClick={() => handleSkillClick(skill.prompt)}
+                  onClick={() => handleSkillClick(skill)}
                 >
                   <span className={styles.skillIcon}>{skill.icon}</span>
                   <div className={styles.skillInfo}>
