@@ -1,14 +1,18 @@
 import { useEffect, useState } from 'react'
-import { fetchMatters, fetchDeadlines } from '@/api/client'
-import type { Matter, DeadlineItem } from '@/types'
+import { fetchMatters, fetchMatterDetail, fetchMatterTasks } from '@/api/client'
+import { useMatterStore } from '@/store/matterStore'
+import type { Matter } from '@/types'
+import { MatterDetailPanel } from './MatterDetailPanel'
 import styles from './DashboardWorkspace.module.css'
 
-function urgencyClass(daysUntil?: number): string {
-  if (daysUntil == null) return ''
-  if (daysUntil <= 7)  return styles.urgentRed
-  if (daysUntil <= 30) return styles.urgentAmber
-  return styles.urgentGreen
-}
+const KLG_STAGES = [
+  'Matter Intake & Setup',
+  'Pleadings & Notices',
+  'Brief Preparation & Drafting',
+  'Cites & Compliance',
+  'Review & Finalization',
+  'Contingency Tasks',
+]
 
 function formatDate(dateStr?: string): string {
   if (!dateStr) return '—'
@@ -17,59 +21,41 @@ function formatDate(dateStr?: string): string {
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
-function statusClass(status?: string): string {
-  const s = (status ?? '').toLowerCase()
-  if (s.includes('active') || s.includes('open'))   return styles.statusActive
-  if (s.includes('pending') || s.includes('draft')) return styles.statusPending
-  if (s.includes('closed') || s.includes('done'))   return styles.statusClosed
-  return styles.statusDefault
+function urgencyDotClass(daysUntil?: number): string {
+  if (daysUntil == null) return ''
+  if (daysUntil <= 7) return styles.urgentRed
+  if (daysUntil <= 30) return styles.urgentAmber
+  return styles.urgentGreen
 }
 
-function WorkloadSection({ matters }: { matters: Matter[] }) {
-  const byAssignee: Record<string, number> = {}
-  for (const m of matters) {
-    const name = m.assignee ?? 'Unassigned'
-    byAssignee[name] = (byAssignee[name] ?? 0) + 1
-  }
-  const entries = Object.entries(byAssignee).sort((a, b) => b[1] - a[1])
-  if (!entries.length) return null
-
-  return (
-    <section className={styles.section}>
-      <h2 className={styles.sectionTitle}>Workload</h2>
-      <ul className={styles.workloadList}>
-        {entries.map(([name, count]) => (
-          <li key={name} className={styles.workloadRow}>
-            <span className={styles.workloadAvatar}>{name[0]?.toUpperCase() ?? '?'}</span>
-            <span className={styles.workloadName}>{name}</span>
-            <span className={styles.workloadCount}>{count} {count === 1 ? 'matter' : 'matters'}</span>
-          </li>
-        ))}
-      </ul>
-    </section>
-  )
+function statusClass(status?: string): string {
+  const s = (status ?? '').toLowerCase()
+  if (s.includes('active') || s.includes('open') || s.includes('in progress')) return styles.statusActive
+  if (s.includes('pending') || s.includes('draft') || s.includes('paused')) return styles.statusPending
+  if (s.includes('closed') || s.includes('done') || s.includes('canceled')) return styles.statusClosed
+  return styles.statusDefault
 }
 
 export function DashboardWorkspace() {
   const [matters, setMatters] = useState<Matter[]>([])
-  const [deadlines, setDeadlines] = useState<DeadlineItem[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+
+  const { selectedMatter, setSelectedMatter, setTasks, setTasksLoading } = useMatterStore()
 
   useEffect(() => {
     let cancelled = false
     setLoading(true)
     setError(null)
 
-    Promise.all([fetchMatters(), fetchDeadlines()])
-      .then(([mRes, dRes]) => {
+    fetchMatters()
+      .then(res => {
         if (cancelled) return
-        setMatters(mRes.matters)
-        setDeadlines(dRes)
+        setMatters(res.matters)
       })
       .catch((err: unknown) => {
         if (cancelled) return
-        setError(err instanceof Error ? err.message : 'Failed to load dashboard data')
+        setError(err instanceof Error ? err.message : 'Failed to load matters')
       })
       .finally(() => {
         if (!cancelled) setLoading(false)
@@ -78,17 +64,35 @@ export function DashboardWorkspace() {
     return () => { cancelled = true }
   }, [])
 
+  async function handleSelectMatter(m: Matter) {
+    setSelectedMatter(m)
+    setTasksLoading(true)
+    try {
+      const [detail, tasks] = await Promise.all([
+        fetchMatterDetail(m.id),
+        fetchMatterTasks(m.id),
+      ])
+      setSelectedMatter(detail)
+      setTasks(tasks)
+    } catch {
+      setTasks([])
+    } finally {
+      setTasksLoading(false)
+    }
+  }
+
   if (loading) {
     return (
       <div className={styles.container}>
-        {[0, 1, 2].map(i => (
-          <div key={i} className={`${styles.section} ${styles.skeletonSection}`}>
-            <div className={`${styles.skeletonBar} ${styles.skeletonTitle}`} />
-            {[0, 1, 2, 3].map(j => (
-              <div key={j} className={`${styles.skeletonBar} ${styles.skeletonRow}`} />
-            ))}
-          </div>
-        ))}
+        <div className={`${styles.listPanel} ${styles.skeletonPanel}`}>
+          {[0, 1, 2, 3, 4].map(i => (
+            <div key={i} className={styles.skeletonCard} />
+          ))}
+        </div>
+        <div className={`${styles.detailPanel} ${styles.detailEmpty}`}>
+          <span className="material-symbols-outlined">gavel</span>
+          <p>Loading matters…</p>
+        </div>
       </div>
     )
   }
@@ -105,67 +109,100 @@ export function DashboardWorkspace() {
     )
   }
 
-  const sorted = Array.isArray(deadlines)
-    ? [...deadlines].sort((a, b) => (a.days_until ?? 9999) - (b.days_until ?? 9999))
-    : []
+  // Group matters by case_stage, ordering by KLG_STAGES then ungrouped
+  const grouped: Record<string, Matter[]> = {}
+  for (const m of matters) {
+    const stage = m.case_stage || 'Other'
+    if (!grouped[stage]) grouped[stage] = []
+    grouped[stage].push(m)
+  }
+
+  const orderedStages = [
+    ...KLG_STAGES.filter(s => grouped[s]),
+    ...Object.keys(grouped).filter(s => !KLG_STAGES.includes(s)),
+  ]
+
+  // Sort matters within each stage by urgency
+  for (const stage of orderedStages) {
+    grouped[stage].sort((a, b) => (a.days_until ?? 9999) - (b.days_until ?? 9999))
+  }
+
+  const deadlines: Matter[] = matters
+    .filter(m => m.days_until != null && m.days_until <= 30)
+    .sort((a, b) => (a.days_until ?? 9999) - (b.days_until ?? 9999))
+    .slice(0, 5)
 
   return (
     <div className={styles.container}>
-      {/* Active Matters */}
-      <section className={`${styles.section} ${styles.mattersSection}`}>
-        <h2 className={styles.sectionTitle}>Active Matters</h2>
-        {matters.length === 0 ? (
-          <p className={styles.empty}>No active matters.</p>
-        ) : (
-          <ul className={styles.matterList}>
-            {matters.map(m => (
-              <li key={m.id} className={styles.matterCard}>
-                <div className={styles.matterTop}>
-                  <span className={styles.matterName}>{m.name}</span>
+      {/* Left: matter list */}
+      <div className={styles.listPanel}>
+        {/* Upcoming deadlines strip */}
+        {deadlines.length > 0 && (
+          <div className={styles.deadlineStrip}>
+            <span className={styles.stripLabel}>Next deadlines</span>
+            {deadlines.map(d => (
+              <span
+                key={d.id}
+                className={styles.stripItem}
+                onClick={() => {
+                  const m = matters.find(x => x.id === d.id)
+                  if (m) handleSelectMatter(m)
+                }}
+              >
+                <span className={`${styles.urgencyDot} ${urgencyDotClass(d.days_until)}`} />
+                <span className={styles.stripName}>{d.name}</span>
+                <span className={styles.stripDate}>{formatDate(d.next_court_deadline ?? d.target_date)}</span>
+              </span>
+            ))}
+          </div>
+        )}
+
+        {/* Grouped matter list */}
+        <div className={styles.matterList}>
+          {orderedStages.map(stage => (
+            <div key={stage} className={styles.stageGroup}>
+              <div className={styles.stageHeader}>{stage}</div>
+              {grouped[stage].map(m => (
+                <button
+                  key={m.id}
+                  className={`${styles.matterRow} ${selectedMatter?.id === m.id ? styles.matterRowActive : ''}`}
+                  onClick={() => handleSelectMatter(m)}
+                >
+                  <span className={`${styles.urgencyBar} ${urgencyDotClass(m.days_until)}`} />
+                  <div className={styles.matterRowContent}>
+                    <span className={styles.matterName}>{m.name}</span>
+                    <div className={styles.matterRowMeta}>
+                      {m.assignee && <span className={styles.metaChip}>{m.assignee}</span>}
+                      {(m.next_court_deadline || m.target_date) && (
+                        <span className={styles.metaChipDate}>
+                          {formatDate(m.next_court_deadline ?? m.target_date)}
+                        </span>
+                      )}
+                    </div>
+                  </div>
                   {m.status && (
                     <span className={`${styles.statusBadge} ${statusClass(m.status)}`}>
                       {m.status}
                     </span>
                   )}
-                </div>
-                <div className={styles.matterMeta}>
-                  {m.case_stage && <span className={styles.metaChip}>{m.case_stage}</span>}
-                  {m.assignee   && <span className={styles.metaChip}>{m.assignee}</span>}
-                  {(m.next_court_deadline || m.target_date) && (
-                    <span className={`${styles.metaChip} ${styles.deadlineChip}`}>
-                      <span className="material-symbols-outlined" style={{ fontSize: 12 }}>calendar_today</span>
-                      {formatDate(m.next_court_deadline ?? m.target_date)}
-                    </span>
-                  )}
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+                </button>
+              ))}
+            </div>
+          ))}
+        </div>
+      </div>
 
-      {/* Upcoming Deadlines */}
-      <section className={styles.section}>
-        <h2 className={styles.sectionTitle}>Upcoming Deadlines</h2>
-        {sorted.length === 0 ? (
-          <p className={styles.empty}>No upcoming deadlines.</p>
+      {/* Right: detail panel */}
+      <div className={styles.detailPanel}>
+        {selectedMatter ? (
+          <MatterDetailPanel />
         ) : (
-          <ul className={styles.deadlineList}>
-            {sorted.map(d => (
-              <li key={d.id} className={styles.deadlineRow}>
-                <span className={`${styles.urgencyDot} ${urgencyClass(d.days_until)}`} />
-                <span className={styles.deadlineName}>{d.name}</span>
-                <span className={styles.deadlineDate}>
-                  {formatDate(d.next_court_deadline ?? d.target_date)}
-                </span>
-              </li>
-            ))}
-          </ul>
+          <div className={styles.detailEmpty}>
+            <span className="material-symbols-outlined">gavel</span>
+            <p>Select a matter to view details and tasks</p>
+          </div>
         )}
-      </section>
-
-      {/* Workload by Attorney */}
-      <WorkloadSection matters={matters} />
+      </div>
     </div>
   )
 }

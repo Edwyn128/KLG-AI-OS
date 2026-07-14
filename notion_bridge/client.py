@@ -420,6 +420,56 @@ class NotionBridge:
             return ""
 
     @_notion_retry
+    async def get_page_blocks(self, page_id: str) -> list[dict[str, Any]]:
+        """
+        Return all child blocks of a Notion page with auto-pagination.
+
+        Used by TaskPages to detect whether a matter page contains an inline
+        task database (child_database block) or to-do checkbox blocks.
+
+        Args:
+            page_id: The Notion page or block ID whose children to list.
+
+        Returns:
+            List of raw block dicts from the Notion API. Each block has a
+            "type" field and a type-specific data dict (e.g., "to_do", "paragraph").
+        """
+        results: list[dict[str, Any]] = []
+        start_cursor: str | None = None
+
+        while True:
+            kwargs: dict[str, Any] = {"block_id": page_id}
+            if start_cursor:
+                kwargs["start_cursor"] = start_cursor
+            response = await self._client.blocks.children.list(**kwargs)
+            results.extend(response.get("results", []))
+            if response.get("has_more") and response.get("next_cursor"):
+                start_cursor = response["next_cursor"]
+            else:
+                break
+
+        return results
+
+    @_notion_retry
+    async def update_block(self, block_id: str, **props: Any) -> dict[str, Any]:
+        """
+        Update a Notion block's content.
+
+        Used by TaskPages to toggle to-do block checked state or rename a task.
+
+        The kwargs should match the block's type key. For a to_do block:
+            await bridge.update_block(block_id, to_do={"checked": True})
+
+        Args:
+            block_id: The block to update.
+            **props:  Block-type payload, e.g. to_do={...}, paragraph={...}.
+
+        Returns:
+            The raw updated block dict from the Notion API.
+        """
+        return await self._client.blocks.update(block_id=block_id, **props)
+
+    @_notion_retry
     async def append_block(self, page_id: str, text: str) -> None:
         """
         Append a paragraph of text to the bottom of a Notion page.

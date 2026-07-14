@@ -631,6 +631,221 @@ async def get_upcoming_deadlines(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+class MatterUpdateRequest(BaseModel):
+    """Request body for PATCH /alfred/matters/{matter_id}."""
+    status: str | None = None
+    priority: str | None = None
+    target_date: str | None = None
+    next_court_deadline: str | None = None
+    case_stage: str | None = None
+    summary: str | None = None
+
+
+class TaskCreateRequest(BaseModel):
+    """Request body for POST /alfred/matters/{matter_id}/tasks."""
+    name: str = Field(..., min_length=1, max_length=500)
+    stage: str = ""
+    assignee: str = ""
+    deadline: str | None = None
+    eta: str | None = None
+    duration: int | None = None
+    priority: str = ""
+
+
+class TaskUpdateRequest(BaseModel):
+    """Request body for PATCH /alfred/tasks/{task_id}."""
+    is_block: bool = False
+    status: str | None = None
+    name: str | None = None
+    stage: str | None = None
+    assignee: str | None = None
+    deadline: str | None = None
+    eta: str | None = None
+    duration: int | None = None
+    priority: str | None = None
+
+
+@router.get("/matters/{matter_id}", summary="Get full detail for a single matter")
+async def get_matter_detail(
+    matter_id: str,
+    alfred_deps=Depends(get_alfred_deps),
+) -> dict[str, Any]:
+    """
+    Return full Notion properties for a single matter page.
+
+    Unlike GET /alfred/matters which returns a summary list, this endpoint
+    returns all fields for one matter including Slack channel, Clio URL,
+    completion percentage, and next deadline info — used by the detail panel.
+    """
+    try:
+        raw = await alfred_deps.bridge.get_page(matter_id)
+        return _normalize_matter(raw)
+    except Exception as e:
+        logger.error("get_matter_detail(%s) error: %s", matter_id, e, exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.patch("/matters/{matter_id}", summary="Update fields on a matter")
+async def update_matter_fields(
+    matter_id: str,
+    req: MatterUpdateRequest,
+    alfred_deps=Depends(get_alfred_deps),
+) -> dict[str, Any]:
+    """
+    Update one or more structured fields on a matter's Notion page.
+
+    Maps frontend snake_case field names back to Notion Title-Case property names.
+    Only provided (non-None) fields are updated — all others are left unchanged.
+    """
+    properties: dict[str, Any] = {}
+
+    if req.status is not None:
+        properties["Status"] = {"status": {"name": req.status}}
+    if req.priority is not None:
+        properties["Priority"] = {"select": {"name": req.priority}}
+    if req.target_date is not None:
+        properties["Target Date"] = (
+            {"date": {"start": req.target_date}} if req.target_date else {"date": None}
+        )
+    if req.next_court_deadline is not None:
+        properties["Next Court Deadline"] = (
+            {"date": {"start": req.next_court_deadline}}
+            if req.next_court_deadline
+            else {"date": None}
+        )
+    if req.case_stage is not None:
+        properties["Case Stage"] = {"select": {"name": req.case_stage}}
+    if req.summary is not None:
+        properties["Summary"] = {
+            "rich_text": [{"type": "text", "text": {"content": req.summary}}]
+        }
+
+    if not properties:
+        raise HTTPException(status_code=422, detail="No fields provided to update.")
+
+    try:
+        raw = await alfred_deps.bridge.update_page(matter_id, properties=properties)
+        return _normalize_matter(raw)
+    except Exception as e:
+        logger.error("update_matter_fields(%s) error: %s", matter_id, e, exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/matters/{matter_id}/tasks", summary="Get all tasks for a matter")
+async def get_matter_tasks(
+    matter_id: str,
+    alfred_deps=Depends(get_alfred_deps),
+) -> dict[str, Any]:
+    """
+    Return all tasks stored inside a matter's Notion page.
+
+    Detects whether tasks are stored as an inline child database (full structured
+    fields) or as to-do checkbox blocks (name + checked state only). Both forms
+    are returned in the same normalized shape.
+    """
+    from notion_bridge.tasks import TaskPages
+
+    try:
+        task_pages = TaskPages(alfred_deps.bridge)
+        tasks = await task_pages.get_tasks_for_matter(matter_id)
+        return {"matter_id": matter_id, "count": len(tasks), "tasks": tasks}
+    except Exception as e:
+        logger.error("get_matter_tasks(%s) error: %s", matter_id, e, exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/matters/{matter_id}/tasks", summary="Create a task for a matter")
+async def create_matter_task(
+    matter_id: str,
+    req: TaskCreateRequest,
+    alfred_deps=Depends(get_alfred_deps),
+) -> dict[str, Any]:
+    """
+    Create a new task for a matter.
+
+    If the matter page has an inline child database, creates a row in it.
+    Otherwise, appends a to-do checkbox block to the page body.
+    """
+    from notion_bridge.tasks import TaskPages
+
+    try:
+        task_pages = TaskPages(alfred_deps.bridge)
+        task = await task_pages.create_task(
+            matter_id=matter_id,
+            name=req.name,
+            stage=req.stage,
+            assignee=req.assignee,
+            deadline=req.deadline,
+            eta=req.eta,
+            duration=req.duration,
+            priority=req.priority,
+        )
+        return task
+    except Exception as e:
+        logger.error("create_matter_task(%s) error: %s", matter_id, e, exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.patch("/tasks/{task_id}", summary="Update a task")
+async def update_task(
+    task_id: str,
+    req: TaskUpdateRequest,
+    alfred_deps=Depends(get_alfred_deps),
+) -> dict[str, Any]:
+    """
+    Update one or more fields on a task.
+
+    Pass is_block=True for tasks stored as to-do blocks (name + status only);
+    pass is_block=False (default) for tasks stored in an inline database (full fields).
+    """
+    from notion_bridge.tasks import TaskPages
+
+    try:
+        task_pages = TaskPages(alfred_deps.bridge)
+        updated = await task_pages.update_task(
+            task_id=task_id,
+            is_block=req.is_block,
+            status=req.status,
+            name=req.name,
+            stage=req.stage,
+            assignee=req.assignee,
+            deadline=req.deadline,
+            eta=req.eta,
+            duration=req.duration,
+            priority=req.priority,
+        )
+        return updated or {"id": task_id, "updated": True}
+    except Exception as e:
+        logger.error("update_task(%s) error: %s", task_id, e, exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/tasks/{task_id}", summary="Complete/delete a task")
+async def delete_task(
+    task_id: str,
+    is_block: bool = False,
+    alfred_deps=Depends(get_alfred_deps),
+) -> dict[str, str]:
+    """
+    Mark a task as Done (soft-delete).
+
+    For to-do blocks: marks the checkbox as checked.
+    For inline database rows: sets Status to "Done".
+
+    Query params:
+      is_block: true if the task is stored as a to-do block rather than a DB row.
+    """
+    from notion_bridge.tasks import TaskPages
+
+    try:
+        task_pages = TaskPages(alfred_deps.bridge)
+        await task_pages.delete_task(task_id=task_id, is_block=is_block)
+        return {"status": "deleted", "task_id": task_id}
+    except Exception as e:
+        logger.error("delete_task(%s) error: %s", task_id, e, exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.post(
     "/agents/huddle-import",
     summary="Manually trigger the Slack huddle → Notion import",

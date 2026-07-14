@@ -4,7 +4,7 @@
 // =============================================================================
 
 import { useAuthStore } from '@/store/authStore'
-import type { MatterListResponse, DeadlineItem } from '@/types'
+import type { MatterListResponse, DeadlineItem, Matter, Task } from '@/types'
 
 const AUTH_STORAGE_KEY_USER = 'klg_user'
 const AUTH_STORAGE_KEY_PASS = 'klg_password'
@@ -83,6 +83,51 @@ export async function fetchDeadlines(): Promise<DeadlineItem[]> {
   const data = await res.json()
   // Endpoint returns { matters: [...], count, days_ahead, category }
   return Array.isArray(data) ? data : (data.matters ?? [])
+}
+
+export async function fetchMatterDetail(id: string): Promise<Matter> {
+  const res = await apiFetch(`/alfred/matters/${id}`)
+  if (!res.ok) throw new Error('Failed to fetch matter detail')
+  return res.json()
+}
+
+export async function fetchMatterTasks(id: string): Promise<Task[]> {
+  const res = await apiFetch(`/alfred/matters/${id}/tasks`)
+  if (!res.ok) throw new Error('Failed to fetch matter tasks')
+  const data = await res.json()
+  return Array.isArray(data) ? data : (data.tasks ?? [])
+}
+
+export async function patchMatter(id: string, fields: Partial<Matter>): Promise<Matter> {
+  const res = await apiFetch(`/alfred/matters/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(fields),
+  })
+  if (!res.ok) throw new Error('Failed to update matter')
+  return res.json()
+}
+
+export async function createTask(matterId: string, task: Partial<Task>): Promise<Task> {
+  const res = await apiFetch(`/alfred/matters/${matterId}/tasks`, {
+    method: 'POST',
+    body: JSON.stringify(task),
+  })
+  if (!res.ok) throw new Error('Failed to create task')
+  return res.json()
+}
+
+export async function patchTask(taskId: string, fields: Partial<Task> & { is_block?: boolean }): Promise<Task> {
+  const res = await apiFetch(`/alfred/tasks/${taskId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(fields),
+  })
+  if (!res.ok) throw new Error('Failed to update task')
+  return res.json()
+}
+
+export async function deleteTask(taskId: string, isBlock = false): Promise<void> {
+  const res = await apiFetch(`/alfred/tasks/${taskId}?is_block=${isBlock}`, { method: 'DELETE' })
+  if (!res.ok) throw new Error('Failed to delete task')
 }
 
 /**

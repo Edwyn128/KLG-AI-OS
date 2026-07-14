@@ -1,93 +1,179 @@
+/* ── Layout ─────────────────────────────────────────── */
+
 .container {
   flex: 1;
   display: flex;
-  gap: 16px;
-  padding: 20px;
+  gap: 0;
   overflow: hidden;
 }
 
-@media (max-width: 768px) {
-  .container {
-    flex-direction: column;
-    overflow-y: auto;
-    overflow-x: hidden;
-  }
-}
+/* ── Left panel — matter list ────────────────────────── */
 
-/* ── Sections ──────────────────────────────────── */
-
-.section {
+.listPanel {
+  width: 360px;
+  min-width: 280px;
+  max-width: 400px;
+  flex-shrink: 0;
   display: flex;
   flex-direction: column;
-  flex: 1;
-  min-width: 0;
-  background: var(--glass-bg);
-  backdrop-filter: var(--glass-blur);
-  -webkit-backdrop-filter: var(--glass-blur);
-  border: 1px solid var(--glass-border);
-  border-radius: var(--radius-glass);
-  padding: 16px;
+  border-right: 1px solid var(--glass-border);
   overflow: hidden;
 }
 
-.mattersSection {
-  flex: 2;
+/* ── Deadline strip ───────────────────────────────────── */
+
+.deadlineStrip {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 12px 8px;
+  border-bottom: 1px solid var(--glass-border);
+  flex-shrink: 0;
 }
 
-.sectionTitle {
-  font-size: 11px;
-  font-weight: 600;
+.stripLabel {
+  font-size: 9px;
+  font-weight: 700;
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--accent);
-  margin: 0 0 14px;
-  flex-shrink: 0;
+  margin-bottom: 4px;
 }
 
-/* ── Matter Cards ────────────────────────────────── */
+.stripItem {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  cursor: pointer;
+  padding: 2px 0;
+  border-radius: 4px;
+  transition: background 0.1s;
+}
+
+.stripItem:hover { background: var(--bg-hover); }
+
+.stripName {
+  flex: 1;
+  font-size: 11px;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.stripDate {
+  font-size: 10px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Matter list ──────────────────────────────────────── */
 
 .matterList {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  overflow-y: auto;
   flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+  overflow-y: auto;
+  padding: 8px 0;
 }
 
-.matterCard {
-  background: var(--glass-bg-light);
-  border: 1px solid var(--glass-border);
-  border-radius: 8px;
-  padding: 10px 12px;
+.stageGroup {
+  margin-bottom: 4px;
+}
+
+.stageHeader {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  padding: 6px 14px 4px;
+}
+
+.matterRow {
+  width: 100%;
+  display: flex;
+  align-items: flex-start;
+  gap: 0;
+  padding: 9px 14px 9px 0;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--glass-border);
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.1s;
+  position: relative;
+}
+
+.matterRow:hover {
+  background: var(--bg-hover);
+}
+
+.matterRowActive {
+  background: var(--bg-hover);
+}
+
+.urgencyBar {
+  width: 3px;
+  align-self: stretch;
+  border-radius: 0 2px 2px 0;
+  margin-right: 10px;
   flex-shrink: 0;
 }
 
-.matterTop {
+.urgentRed   { background: #e05c5c; }
+.urgentAmber { background: #ffc144; }
+.urgentGreen { background: #4caf7a; }
+
+.matterRowContent {
+  flex: 1;
+  min-width: 0;
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 8px;
-  margin-bottom: 6px;
+  flex-direction: column;
+  gap: 3px;
 }
 
 .matterName {
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
   color: var(--text-primary);
   line-height: 1.3;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.matterRowMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.metaChip {
+  font-size: 10px;
+  color: var(--text-muted);
+  background: var(--bg-hover);
+  border: 1px solid var(--glass-border);
+  border-radius: 3px;
+  padding: 1px 5px;
+}
+
+.metaChipDate {
+  font-size: 10px;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
 }
 
 .statusBadge {
-  font-size: 10px;
+  font-size: 9px;
   font-weight: 600;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.04em;
   text-transform: uppercase;
-  padding: 2px 7px;
+  padding: 2px 6px;
   border-radius: 20px;
   flex-shrink: 0;
+  align-self: flex-start;
+  margin-left: 6px;
 }
 
 .statusActive  { background: rgba(76, 175, 122, 0.18); color: #4caf7a; }
@@ -95,144 +181,49 @@
 .statusClosed  { background: rgba(120, 120, 140, 0.18); color: #888; }
 .statusDefault { background: var(--glass-border); color: var(--text-muted); }
 
-.matterMeta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 5px;
-}
-
-.metaChip {
-  display: flex;
-  align-items: center;
-  gap: 3px;
-  font-size: 11px;
-  color: var(--text-muted);
-  background: var(--bg-hover);
-  border: 1px solid var(--glass-border);
-  border-radius: 4px;
-  padding: 2px 6px;
-}
-
-.deadlineChip {
-  color: var(--text-secondary);
-}
-
-/* ── Deadline List ───────────────────────────────── */
-
-.deadlineList {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  overflow-y: auto;
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.deadlineRow {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 10px;
-  background: var(--glass-bg-light);
-  border: 1px solid var(--glass-border);
-  border-radius: 6px;
-}
+/* ── Urgency dot (strip) ──────────────────────────────── */
 
 .urgencyDot {
-  width: 8px;
-  height: 8px;
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
   flex-shrink: 0;
 }
 
-.urgentRed   { background: #e05c5c; box-shadow: 0 0 6px rgba(224,92,92,0.5); }
-.urgentAmber { background: #ffc144; }
-.urgentGreen { background: #4caf7a; }
+/* ── Right panel — detail ─────────────────────────────── */
 
-.deadlineName {
+.detailPanel {
   flex: 1;
-  font-size: 12px;
-  color: var(--text-primary);
   min-width: 0;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  display: flex;
+  flex-direction: column;
 }
 
-.deadlineDate {
-  font-size: 11px;
-  color: var(--text-muted);
-  flex-shrink: 0;
-  font-variant-numeric: tabular-nums;
-}
-
-/* ── Workload ─────────────────────────────────────── */
-
-.workloadList {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  overflow-y: auto;
+.detailEmpty {
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 6px;
-}
-
-.workloadRow {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 8px 10px;
-  background: var(--glass-bg-light);
-  border: 1px solid var(--glass-border);
-  border-radius: 6px;
-}
-
-.workloadAvatar {
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  background: var(--accent);
-  color: #fff;
-  display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 12px;
-  font-weight: 700;
-  flex-shrink: 0;
-}
-
-.workloadName {
-  flex: 1;
-  font-size: 13px;
-  color: var(--text-primary);
-}
-
-.workloadCount {
-  font-size: 11px;
+  gap: 12px;
   color: var(--text-muted);
 }
 
-/* ── Empty states ─────────────────────────────────── */
+.detailEmpty .material-symbols-outlined { font-size: 40px; }
+.detailEmpty p { font-size: 13px; margin: 0; }
 
-.empty {
-  font-size: 13px;
-  color: var(--text-muted);
-  margin: 0;
-}
-
-/* ── Error ────────────────────────────────────────── */
+/* ── Error ────────────────────────────────────────────── */
 
 .errorCard {
+  flex: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 8px;
   padding: 32px;
+  margin: 20px;
   background: rgba(224, 92, 92, 0.08);
   border: 1px solid rgba(224, 92, 92, 0.25);
   border-radius: var(--radius-glass);
@@ -244,14 +235,16 @@
 .errorCard p { margin: 0; font-size: 13px; }
 .errorDetail { font-size: 11px; color: var(--text-muted) !important; }
 
-/* ── Skeleton ─────────────────────────────────────── */
+/* ── Skeleton ─────────────────────────────────────────── */
 
-.skeletonSection {
-  gap: 10px;
+.skeletonPanel {
+  padding: 12px;
+  gap: 8px;
 }
 
-.skeletonBar {
-  border-radius: 4px;
+.skeletonCard {
+  height: 54px;
+  border-radius: 6px;
   background: linear-gradient(
     90deg,
     var(--glass-border) 25%,
@@ -260,19 +253,31 @@
   );
   background-size: 200% 100%;
   animation: shimmer 1.4s ease-in-out infinite;
-}
-
-.skeletonTitle {
-  height: 12px;
-  width: 40%;
-  margin-bottom: 4px;
-}
-
-.skeletonRow {
-  height: 52px;
+  flex-shrink: 0;
 }
 
 @keyframes shimmer {
   0%   { background-position: 200% 0; }
   100% { background-position: -200% 0; }
+}
+
+/* ── Responsive ───────────────────────────────────────── */
+
+@media (max-width: 768px) {
+  .container {
+    flex-direction: column;
+    overflow-y: auto;
+  }
+
+  .listPanel {
+    width: 100%;
+    max-width: 100%;
+    border-right: none;
+    border-bottom: 1px solid var(--glass-border);
+    max-height: 50vh;
+  }
+
+  .detailPanel {
+    min-height: 50vh;
+  }
 }

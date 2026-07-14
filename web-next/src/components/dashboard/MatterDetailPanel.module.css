@@ -1,0 +1,395 @@
+/* ── Panel shell ─────────────────────────────────────── */
+
+.panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* ── Header ───────────────────────────────────────────── */
+
+.panelHeader {
+  padding: 16px 20px 10px;
+  border-bottom: 1px solid var(--glass-border);
+  flex-shrink: 0;
+}
+
+.panelTitle {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0;
+  line-height: 1.3;
+}
+
+/* ── Stage progress bar ───────────────────────────────── */
+
+.stageBar {
+  display: flex;
+  padding: 10px 16px;
+  gap: 3px;
+  border-bottom: 1px solid var(--glass-border);
+  flex-shrink: 0;
+  overflow-x: auto;
+}
+
+.stagePill {
+  flex: 1;
+  min-width: 60px;
+  padding: 4px 6px;
+  border-radius: 4px;
+  background: var(--glass-border);
+  text-align: center;
+  overflow: hidden;
+}
+
+.stagePillLabel {
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: block;
+}
+
+.stageComplete {
+  background: rgba(76, 175, 122, 0.18);
+}
+
+.stageComplete .stagePillLabel { color: #4caf7a; }
+
+.stageCurrent {
+  background: rgba(178, 34, 52, 0.18);
+}
+
+.stageCurrent .stagePillLabel {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+/* ── Metadata grid ────────────────────────────────────── */
+
+.metaGrid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0;
+  border-bottom: 1px solid var(--glass-border);
+  flex-shrink: 0;
+}
+
+.metaCell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 14px;
+  border-right: 1px solid var(--glass-border);
+}
+
+.metaCell:last-child { border-right: none; }
+.metaCell:nth-child(3n) { border-right: none; }
+
+.metaLabel {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.metaValue {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.metaLink {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 12px;
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.metaLink:hover { text-decoration: underline; }
+
+.editableField {
+  background: transparent;
+  border: none;
+  border-bottom: 1px dashed var(--glass-border);
+  padding: 0;
+  font-size: 12px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+  transition: border-color 0.12s, color 0.12s;
+}
+
+.editableField:hover {
+  border-bottom-color: var(--accent);
+  color: var(--text-primary);
+}
+
+.emptyField { color: var(--text-muted); }
+
+.inlineSelect {
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: 4px;
+  padding: 2px 4px;
+  font-size: 12px;
+  color: var(--text-primary);
+  font-family: inherit;
+  outline: none;
+}
+
+/* ── Task section ─────────────────────────────────────── */
+
+.taskSection {
+  flex: 1;
+  overflow-y: auto;
+  padding-bottom: 16px;
+}
+
+.taskSectionHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px 6px;
+}
+
+.taskSectionTitle {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.loadingDot {
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+}
+
+.noTasks {
+  padding: 12px 16px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.noTasks p { margin: 0 0 8px; }
+
+/* ── Task group ───────────────────────────────────────── */
+
+.taskGroup {
+  border-bottom: 1px solid var(--glass-border);
+}
+
+.taskGroupHeader {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.1s;
+}
+
+.taskGroupHeader:hover { background: var(--bg-hover); }
+
+.taskGroupHeader .material-symbols-outlined { color: var(--text-muted); flex-shrink: 0; }
+
+.taskGroupTitle {
+  flex: 1;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  letter-spacing: 0.02em;
+}
+
+.taskGroupCount {
+  font-size: 10px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.taskGroupBody {
+  padding: 0 0 4px;
+}
+
+/* ── Task row ─────────────────────────────────────────── */
+
+.taskRow {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 6px 14px 6px 24px;
+  border-bottom: 1px solid transparent;
+  transition: background 0.1s;
+  position: relative;
+}
+
+.taskRow:hover {
+  background: var(--bg-hover);
+}
+
+.taskRow:hover .taskDelete {
+  opacity: 1;
+}
+
+.taskDone {
+  opacity: 0.55;
+}
+
+.taskCheck {
+  background: transparent;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  margin-top: 1px;
+  transition: color 0.1s;
+}
+
+.taskCheck .material-symbols-outlined { font-size: 18px; }
+.taskCheck:hover { color: var(--accent); }
+
+.taskCheckDone { color: #4caf7a; }
+.taskCheckDone:hover { color: #4caf7a; }
+
+.taskInfo {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.taskName {
+  font-size: 12px;
+  color: var(--text-primary);
+  line-height: 1.4;
+  cursor: default;
+}
+
+.taskDone .taskName {
+  text-decoration: line-through;
+  color: var(--text-muted);
+}
+
+.taskNameInput {
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--accent);
+  outline: none;
+  font-size: 12px;
+  color: var(--text-primary);
+  font-family: inherit;
+  width: 100%;
+}
+
+.taskMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+}
+
+.taskChip {
+  font-size: 10px;
+  color: var(--text-muted);
+  background: var(--bg-hover);
+  border: 1px solid var(--glass-border);
+  border-radius: 3px;
+  padding: 0 5px;
+}
+
+.taskChipMuted {
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+.taskDelete {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  opacity: 0;
+  padding: 0;
+  transition: opacity 0.1s, color 0.1s;
+}
+
+.taskDelete .material-symbols-outlined { font-size: 14px; }
+.taskDelete:hover { color: #e05c5c; }
+
+/* ── Add task ─────────────────────────────────────────── */
+
+.addTaskBtn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 24px;
+  width: 100%;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-size: 11px;
+  color: var(--text-muted);
+  transition: color 0.1s;
+  font-family: inherit;
+}
+
+.addTaskBtn:hover { color: var(--accent); }
+.addTaskBtn .material-symbols-outlined { font-size: 14px; }
+
+.addTaskForm {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 14px 5px 24px;
+}
+
+.addTaskInput {
+  flex: 1;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-size: 12px;
+  color: var(--text-primary);
+  font-family: inherit;
+  outline: none;
+}
+
+.addTaskInput:focus { border-color: var(--accent); }
+
+.addTaskSave,
+.addTaskCancel {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  padding: 0;
+  transition: color 0.1s;
+}
+
+.addTaskSave .material-symbols-outlined,
+.addTaskCancel .material-symbols-outlined { font-size: 16px; }
+
+.addTaskSave:hover { color: #4caf7a; }
+.addTaskCancel:hover { color: #e05c5c; }
+.addTaskSave:disabled { opacity: 0.4; cursor: default; }

@@ -1925,3 +1925,186 @@ async def run_skill(
         )
 
     return result.output
+
+
+@AlfredAgent.tool
+async def get_matter_tasks(
+    ctx: RunContext[AlfredDependencies],
+    matter_name: str,
+) -> str:
+    """
+    Get all tasks for a named matter from its Notion project page.
+
+    Use this when the user asks about what tasks are pending on a matter,
+    what work is assigned to whom, or what stages are complete.
+
+    Args:
+        matter_name: The name or partial name of the matter. Example: "Williams", "Amin Mohamed"
+
+    Returns:
+        A formatted list of tasks grouped by stage, showing status, assignee, and deadline.
+        Returns a "no tasks found" message if the matter has no structured tasks.
+    """
+    from notion_bridge.tasks import TaskPages
+
+    matter = await ctx.deps.project_pages.find_matter(matter_name)
+    if not matter:
+        return f"No matter found matching '{matter_name}'. Try a different search term."
+
+    task_pages = TaskPages(ctx.deps.bridge)
+    tasks = await task_pages.get_tasks_for_matter(matter["id"])
+
+    if not tasks:
+        return (
+            f"No structured tasks found for '{matter.get('Project name', matter_name)}'. "
+            "Tasks may be stored as free-form notes in the matter page. "
+            "Try find_and_summarize_matter to read the full page content."
+        )
+
+    display_name = matter.get("Project name", matter_name)
+    lines = [f"Tasks for {display_name}:", ""]
+    current_stage = None
+
+    for t in tasks:
+        stage = t.get("stage", "")
+        if stage and stage != current_stage:
+            current_stage = stage
+            lines.append(f"\n  {stage}:")
+
+        status_icon = "✓" if t["status"] == "Done" else ("→" if t["status"] == "In Progress" else "○")
+        assignee = f" — {t['assignee']}" if t.get("assignee") else ""
+        deadline = f" (due {t['deadline']})" if t.get("deadline") else ""
+        lines.append(f"    {status_icon} {t['name']}{assignee}{deadline}")
+
+    return "\n".join(lines)
+
+
+@AlfredAgent.tool
+async def create_matter_task(
+    ctx: RunContext[AlfredDependencies],
+    matter_name: str,
+    task_name: str,
+    stage: str = "",
+    assignee: str = "",
+    deadline: str = "",
+    priority: str = "",
+) -> str:
+    """
+    Create a new task on a named matter's Notion project page.
+
+    Use this when the user wants to add a new to-do item to a matter —
+    for example, "Add a task to file the cert petition supplement in Williams by Aug 15."
+
+    Args:
+        matter_name: The matter to add the task to. Example: "Williams"
+        task_name:   The task description. Example: "File cert petition supplement"
+        stage:       The workflow stage. One of: "Matter Intake & Setup", "Pleadings & Notices",
+                     "Brief Preparation & Drafting", "Cites & Compliance",
+                     "Review & Finalization", "Contingency Tasks". Leave blank if unknown.
+        assignee:    Team member name (first name is fine). Example: "Brittney", "Tim"
+        deadline:    ISO 8601 date string. Example: "2026-08-15". Leave blank if not specified.
+        priority:    "Urgent", "High", "Medium", or "Low". Leave blank if not specified.
+
+    Returns:
+        Confirmation that the task was created, or an error message if it failed.
+    """
+    from notion_bridge.tasks import TaskPages
+
+    matter = await ctx.deps.project_pages.find_matter(matter_name)
+    if not matter:
+        return f"No matter found matching '{matter_name}'. Check the matter name and try again."
+
+    task_pages = TaskPages(ctx.deps.bridge)
+    try:
+        await task_pages.create_task(
+            matter_id=matter["id"],
+            name=task_name,
+            stage=stage,
+            assignee=assignee,
+            deadline=deadline or None,
+            priority=priority,
+        )
+    except Exception as e:
+        return f"Failed to create task: {e}"
+
+    display_name = matter.get("Project name", matter_name)
+    parts = [f"Task '{task_name}' created in {display_name}"]
+    if stage:
+        parts.append(f"stage: {stage}")
+    if assignee:
+        parts.append(f"assigned to {assignee}")
+    if deadline:
+        parts.append(f"due {deadline}")
+    return " — ".join(parts) + "."
+
+
+@AlfredAgent.tool
+async def update_matter_task(
+    ctx: RunContext[AlfredDependencies],
+    matter_name: str,
+    task_name: str,
+    new_status: str = "",
+    new_assignee: str = "",
+    new_deadline: str = "",
+    new_stage: str = "",
+) -> str:
+    """
+    Update an existing task on a named matter.
+
+    Use this when the user wants to change a task's status, reassign it,
+    update its deadline, or move it to a different stage.
+
+    Args:
+        matter_name:  The matter the task belongs to. Example: "Williams"
+        task_name:    The task name to find (partial match is fine). Example: "Assemble appendix"
+        new_status:   New status value. One of: "To Do", "In Progress", "Done". Leave blank to keep unchanged.
+        new_assignee: New assignee name. Leave blank to keep unchanged.
+        new_deadline: New ISO date string. Example: "2026-08-15". Leave blank to keep unchanged.
+        new_stage:    New stage name. Leave blank to keep unchanged.
+
+    Returns:
+        Confirmation of what was updated, or an error if the task was not found.
+    """
+    from notion_bridge.tasks import TaskPages
+
+    matter = await ctx.deps.project_pages.find_matter(matter_name)
+    if not matter:
+        return f"No matter found matching '{matter_name}'."
+
+    task_pages = TaskPages(ctx.deps.bridge)
+    tasks = await task_pages.get_tasks_for_matter(matter["id"])
+
+    # Case-insensitive partial name match
+    task = next(
+        (t for t in tasks if task_name.lower() in t["name"].lower()),
+        None,
+    )
+    if not task:
+        available = ", ".join(f"'{t['name']}'" for t in tasks[:5])
+        return (
+            f"No task matching '{task_name}' found in {matter.get('Project name', matter_name)}. "
+            + (f"Available: {available}" if available else "No tasks found.")
+        )
+
+    try:
+        await task_pages.update_task(
+            task_id=task["id"],
+            is_block=task.get("is_block", False),
+            status=new_status or None,
+            assignee=new_assignee or None,
+            deadline=new_deadline or None,
+            stage=new_stage or None,
+        )
+    except Exception as e:
+        return f"Failed to update task '{task['name']}': {e}"
+
+    parts = [f"Task '{task['name']}' updated"]
+    if new_status:
+        parts.append(f"status → {new_status}")
+    if new_assignee:
+        parts.append(f"assigned to {new_assignee}")
+    if new_deadline:
+        parts.append(f"deadline → {new_deadline}")
+    if new_stage:
+        parts.append(f"stage → {new_stage}")
+    return " — ".join(parts) + "."

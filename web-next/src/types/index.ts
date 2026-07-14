@@ -48,6 +48,27 @@ export interface Matter {
   last_edited_time?: string
   url?: string
   summary?: string
+  days_until?: number
+  // Extended fields (returned by GET /alfred/matters/{id})
+  slack_channel?: string
+  clio_url?: string
+  completion?: number
+}
+
+// ── Task ─────────────────────────────────────────────────────────────────────
+
+export interface Task {
+  id: string
+  name: string
+  stage: string
+  status: 'To Do' | 'In Progress' | 'Done'
+  assignee?: string
+  deadline?: string | null
+  eta?: string | null
+  duration?: number | null
+  priority?: string
+  matter_id?: string
+  is_block?: boolean
 }
 
 // ── Chat ─────────────────────────────────────────────────────────────────────

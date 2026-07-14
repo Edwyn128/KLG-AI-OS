@@ -53,5 +53,6 @@ MODULES IN THIS PACKAGE
 
 from notion_bridge.client import NotionBridge
 from notion_bridge.comms_log import CommsLog
+from notion_bridge.tasks import TaskPages
 
-__all__ = ["NotionBridge", "CommsLog"]
+__all__ = ["NotionBridge", "CommsLog", "TaskPages"]
