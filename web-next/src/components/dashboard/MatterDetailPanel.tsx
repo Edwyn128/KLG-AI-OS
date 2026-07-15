@@ -15,6 +15,7 @@ const KLG_STAGES = [
 
 const STATUS_OPTIONS = ['In progress', 'Backlog', 'Planning', 'Paused', 'Review needed', 'Done', 'Canceled']
 const PRIORITY_OPTIONS = ['Urgent', 'High', 'Medium', 'Low']
+const TEAM_OPTIONS = ['Tim', 'Edwyn', 'Stu', 'Brittney', 'William', 'Ted', 'Richard']
 
 function formatDate(dateStr?: string | null): string {
   if (!dateStr) return '—'
@@ -46,7 +47,7 @@ function StageProgressBar({ currentStage }: { currentStage?: string }) {
   )
 }
 
-// ── Editable field ────────────────────────────────────────────────────────────
+// ── Editable components ───────────────────────────────────────────────────────
 
 function EditableSelect({
   value, options, onChange, label,
@@ -63,6 +64,7 @@ function EditableSelect({
         onChange={e => { onChange(e.target.value); setEditing(false) }}
         onBlur={() => setEditing(false)}
       >
+        <option value="">—</option>
         {options.map(o => <option key={o} value={o}>{o}</option>)}
       </select>
     )
@@ -74,9 +76,81 @@ function EditableSelect({
   )
 }
 
+function EditableText({
+  value, onChange, label, placeholder = '—', options,
+}: {
+  value?: string; onChange: (v: string) => void; label: string; placeholder?: string; options?: string[]
+}) {
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState(value ?? '')
+  const listId = `dl-${label.replace(/\s+/g, '-').toLowerCase()}`
+
+  function commit() {
+    setEditing(false)
+    if (draft !== (value ?? '')) onChange(draft)
+  }
+
+  if (editing) {
+    return (
+      <>
+        {options && (
+          <datalist id={listId}>
+            {options.map(o => <option key={o} value={o} />)}
+          </datalist>
+        )}
+        <input
+          className={styles.inlineInput}
+          autoFocus
+          list={options ? listId : undefined}
+          value={draft}
+          onChange={e => setDraft(e.target.value)}
+          onBlur={commit}
+          onKeyDown={e => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') setEditing(false) }}
+          placeholder={placeholder}
+        />
+      </>
+    )
+  }
+  return (
+    <button className={styles.editableField} onClick={() => { setDraft(value ?? ''); setEditing(true) }} title={`Edit ${label}`}>
+      {value || <span className={styles.emptyField}>—</span>}
+    </button>
+  )
+}
+
+function EditableDate({
+  value, onChange, label,
+}: {
+  value?: string | null; onChange: (v: string) => void; label: string
+}) {
+  const [editing, setEditing] = useState(false)
+
+  const isoValue = value
+    ? (() => { const d = new Date(value); return isNaN(d.getTime()) ? '' : d.toISOString().slice(0, 10) })()
+    : ''
+
+  if (editing) {
+    return (
+      <input
+        type="date"
+        className={styles.inlineInput}
+        autoFocus
+        defaultValue={isoValue}
+        onBlur={e => { setEditing(false); if (e.target.value) onChange(e.target.value) }}
+        onKeyDown={e => { if (e.key === 'Escape') setEditing(false) }}
+      />
+    )
+  }
+  return (
+    <button className={styles.editableField} onClick={() => setEditing(true)} title={`Edit ${label}`}>
+      {value ? formatDate(value) : <span className={styles.emptyField}>—</span>}
+    </button>
+  )
+}
+
 // ── Task row ─────────────────────────────────────────────────────────────────
 
-function TaskRow({ task, matterId }: { task: Task; matterId: string }) {
+function TaskRow({ task }: { task: Task }) {
   const { updateTaskOptimistic } = useMatterStore()
   const [editingName, setEditingName] = useState(false)
   const [nameVal, setNameVal] = useState(task.name)
@@ -220,21 +294,14 @@ function AddTaskRow({ matterId, stage }: { matterId: string; stage: string }) {
 function MetaGrid({ matter }: { matter: Matter }) {
   const { updateMatterOptimistic } = useMatterStore()
 
-  async function handleStatusChange(status: string) {
-    updateMatterOptimistic({ status })
-    try {
-      await patchMatter(matter.id, { status })
-    } catch {
-      updateMatterOptimistic({ status: matter.status })
-    }
-  }
-
-  async function handlePriorityChange(priority: string) {
-    updateMatterOptimistic({ priority })
-    try {
-      await patchMatter(matter.id, { priority })
-    } catch {
-      updateMatterOptimistic({ priority: matter.priority })
+  function makeHandler<K extends keyof Matter>(field: K) {
+    return async (value: string) => {
+      updateMatterOptimistic({ [field]: value } as Partial<Matter>)
+      try {
+        await patchMatter(matter.id, { [field]: value } as Partial<Matter>)
+      } catch {
+        updateMatterOptimistic({ [field]: matter[field] } as Partial<Matter>)
+      }
     }
   }
 
@@ -242,29 +309,27 @@ function MetaGrid({ matter }: { matter: Matter }) {
     <div className={styles.metaGrid}>
       <div className={styles.metaCell}>
         <span className={styles.metaLabel}>Status</span>
-        <EditableSelect
-          value={matter.status}
-          options={STATUS_OPTIONS}
-          onChange={handleStatusChange}
-          label="Status"
-        />
+        <EditableSelect value={matter.status} options={STATUS_OPTIONS} onChange={makeHandler('status')} label="Status" />
       </div>
       <div className={styles.metaCell}>
         <span className={styles.metaLabel}>Priority</span>
-        <EditableSelect
-          value={matter.priority}
-          options={PRIORITY_OPTIONS}
-          onChange={handlePriorityChange}
-          label="Priority"
-        />
+        <EditableSelect value={matter.priority} options={PRIORITY_OPTIONS} onChange={makeHandler('priority')} label="Priority" />
+      </div>
+      <div className={styles.metaCell}>
+        <span className={styles.metaLabel}>Stage</span>
+        <EditableSelect value={matter.case_stage} options={KLG_STAGES} onChange={makeHandler('case_stage')} label="Stage" />
       </div>
       <div className={styles.metaCell}>
         <span className={styles.metaLabel}>Assignee</span>
-        <span className={styles.metaValue}>{matter.assignee || '—'}</span>
+        <EditableText value={matter.assignee} options={TEAM_OPTIONS} onChange={makeHandler('assignee')} label="Assignee" />
       </div>
       <div className={styles.metaCell}>
-        <span className={styles.metaLabel}>Deadline</span>
-        <span className={styles.metaValue}>{formatDate(matter.next_court_deadline ?? matter.target_date)}</span>
+        <span className={styles.metaLabel}>Court Deadline</span>
+        <EditableDate value={matter.next_court_deadline} onChange={makeHandler('next_court_deadline')} label="Court Deadline" />
+      </div>
+      <div className={styles.metaCell}>
+        <span className={styles.metaLabel}>Target Date</span>
+        <EditableDate value={matter.target_date} onChange={makeHandler('target_date')} label="Target Date" />
       </div>
       {matter.url && (
         <div className={styles.metaCell}>
@@ -273,12 +338,6 @@ function MetaGrid({ matter }: { matter: Matter }) {
             Open page
             <span className="material-symbols-outlined" style={{ fontSize: 12 }}>open_in_new</span>
           </a>
-        </div>
-      )}
-      {matter.slack_channel && (
-        <div className={styles.metaCell}>
-          <span className={styles.metaLabel}>Slack</span>
-          <span className={styles.metaValue}>{matter.slack_channel}</span>
         </div>
       )}
     </div>
@@ -307,7 +366,7 @@ function TaskGroup({
       {open && (
         <div className={styles.taskGroupBody}>
           {tasks.map(t => (
-            <TaskRow key={t.id} task={t} matterId={matterId} />
+            <TaskRow key={t.id} task={t} />
           ))}
           <AddTaskRow matterId={matterId} stage={stage} />
         </div>
