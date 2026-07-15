@@ -12,6 +12,13 @@ export type SkillMode = 'research' | 'drafting' | 'analysis' | 'ops'
 
 // ── Skill ────────────────────────────────────────────────────────────────────
 
+export interface SkillParam {
+  key: string
+  label: string
+  placeholder: string
+  required: boolean
+}
+
 export interface Skill {
   id: string
   name: string
@@ -23,6 +30,9 @@ export interface Skill {
   desc: string
   checklist: string[]
   prompt: string
+  params?: SkillParam[]
+  requiresFile?: boolean
+  fileHint?: string
 }
 
 // ── User ─────────────────────────────────────────────────────────────────────

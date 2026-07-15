@@ -36,7 +36,9 @@ export const KLG_SKILLS: Skill[] = [
       'Verify all citations are pinpoint and Bluebook-compliant',
       'Run final readability and persuasion audit',
     ],
-    prompt: "Alfred, run klg-brief-elevation on [Matter Name]. I'll attach the draft brief now.",
+    prompt: "Alfred, run klg-brief-elevation on {{matter}}. I'll attach the draft brief now.",
+    requiresFile: true,
+    fileHint: 'Attach the draft brief (.docx or .pdf)',
   },
   {
     id: 'authority-map',
@@ -54,7 +56,15 @@ export const KLG_SKILLS: Skill[] = [
       'Flag any unresolved tensions or open questions',
       'Export as a structured outline ready for brief citation',
     ],
-    prompt: 'Alfred, run klg-authority-map on [Matter Name]: [doctrine, e.g. Garcetti public employee speech retaliation]',
+    prompt: 'Alfred, run klg-authority-map on {{matter}}: {{doctrine}}',
+    params: [
+      {
+        key: 'doctrine',
+        label: 'Doctrine or legal issue',
+        placeholder: 'e.g. Garcetti public employee speech retaliation',
+        required: true,
+      },
+    ],
   },
   {
     id: 'issue-framing',
@@ -72,7 +82,15 @@ export const KLG_SKILLS: Skill[] = [
       'Check alignment with the standard of review argument',
       'Select the version that best primes the panel',
     ],
-    prompt: 'Alfred, run klg-issue-framing on [Matter Name]: [describe the ruling being challenged and the key facts]',
+    prompt: 'Alfred, run klg-issue-framing on {{matter}}: {{ruling}}',
+    params: [
+      {
+        key: 'ruling',
+        label: 'Ruling being challenged and key facts',
+        placeholder: 'e.g. Summary judgment on Monell claim — court found no policy or custom despite widespread incidents',
+        required: true,
+      },
+    ],
   },
   {
     id: 'standard-of-review',
@@ -90,7 +108,15 @@ export const KLG_SKILLS: Skill[] = [
       'Identify favorable preservation issues that affect the standard',
       'Identify any invited-error or forfeiture arguments opponent may raise',
     ],
-    prompt: 'Alfred, run klg-standard-of-review on [Matter Name]: [describe the trial court ruling and the appellate court]',
+    prompt: 'Alfred, run klg-standard-of-review on {{matter}}: {{ruling}}',
+    params: [
+      {
+        key: 'ruling',
+        label: 'Trial court ruling and appellate court',
+        placeholder: 'e.g. Granted summary judgment on § 1983 claim — appeal in 9th Circuit',
+        required: true,
+      },
+    ],
   },
   {
     id: 'record-navigator',
@@ -108,7 +134,9 @@ export const KLG_SKILLS: Skill[] = [
       'Flag any potential harmless error or prejudice arguments',
       "Summarize record facts that support the appellant's narrative",
     ],
-    prompt: "Alfred, run klg-record-navigator on [Matter Name]. I'll attach the key record documents now, or describe the case below.",
+    prompt: "Alfred, run klg-record-navigator on {{matter}}. I'll attach the key record documents now.",
+    requiresFile: true,
+    fileHint: 'Attach trial transcripts or key record excerpts',
   },
   {
     id: 'oral-argument-prep',
@@ -127,7 +155,15 @@ export const KLG_SKILLS: Skill[] = [
       'Confirm record citations for key factual claims',
       'Run a moot court session with prepared challengers',
     ],
-    prompt: 'Alfred, run klg-oral-argument-prep on [Matter Name]: [court, argument date, and key arguments to prep]. I can attach the brief as well.',
+    prompt: 'Alfred, run klg-oral-argument-prep on {{matter}}: {{details}}',
+    params: [
+      {
+        key: 'details',
+        label: 'Court, argument date, and key arguments to prep',
+        placeholder: 'e.g. 9th Circuit, Sept 12, First Amendment retaliation and Monell liability',
+        required: true,
+      },
+    ],
   },
   {
     id: 'matter-intake',
@@ -146,7 +182,15 @@ export const KLG_SKILLS: Skill[] = [
       'Set initial deadlines and calendar all critical dates',
       'Draft engagement letter outline for review',
     ],
-    prompt: 'Alfred, run klg-matter-intake: [new matter name, client name, type of matter, and any key facts]',
+    prompt: 'Alfred, run klg-matter-intake: {{details}}',
+    params: [
+      {
+        key: 'details',
+        label: 'Matter name, client, type, and key facts',
+        placeholder: 'e.g. Johnson v. City — public employee First Amendment, referred by Tim, appeal from CDCA',
+        required: true,
+      },
+    ],
   },
   {
     id: 'amicus-assessment',
@@ -165,7 +209,15 @@ export const KLG_SKILLS: Skill[] = [
       'Draft the proposed question or argument section titles',
       'Estimate briefing timeline and resource commitment',
     ],
-    prompt: 'Alfred, run klg-amicus-assessment: [case name, court, legal question, and why KLG might care]',
+    prompt: 'Alfred, run klg-amicus-assessment: {{details}}',
+    params: [
+      {
+        key: 'details',
+        label: 'Case name, court, legal question, and KLG interest',
+        placeholder: 'e.g. Smith v. County, 9th Cir., qualified immunity scope — aligns with our public employee practice',
+        required: true,
+      },
+    ],
   },
   {
     id: 'hygiene-audit',
@@ -183,7 +235,7 @@ export const KLG_SKILLS: Skill[] = [
       'Check that all active matters have a Priority set',
       'Summarize findings and post to Slack',
     ],
-    prompt: 'Alfred, please run a full matter hygiene audit on all active matters in Notion. Flag any issues — missing dates, stale pages, blocked matters, or missing priorities.',
+    prompt: 'Alfred, please run a full matter hygiene audit on all active matters in Notion. Use your get_upcoming_deadlines and get_team_workload tools to surface any issues — missing dates, stale pages, blocked matters, or missing priorities. Present the findings as a prioritized action list.',
   },
   {
     id: 'calp-episode-prep',
@@ -201,7 +253,15 @@ export const KLG_SKILLS: Skill[] = [
       'Research opposing viewpoints and prepare challenge questions',
       'Draft episode description and social media copy',
     ],
-    prompt: 'Alfred, run klg-podcast-guest-prep: [guest name, episode topic or case, and any background]',
+    prompt: 'Alfred, run klg-podcast-guest-prep: {{details}}',
+    params: [
+      {
+        key: 'details',
+        label: 'Guest name, episode topic or case, and any background',
+        placeholder: 'e.g. Prof. Jane Smith, sovereign immunity after Thacker, 2024 law review article on the topic',
+        required: true,
+      },
+    ],
   },
   {
     id: 'bloodhound-triage',
@@ -219,7 +279,7 @@ export const KLG_SKILLS: Skill[] = [
       'Flag any case with imminent deadline (cert. petition, briefing)',
       'Update tiers and notes in Notion',
     ],
-    prompt: "Alfred, pull up the Bloodhound Watch List and let's do a triage review. Show me all Tier 1 cases first, then Tier 2. For each, I'll decide if we need immediate action.",
+    prompt: "Alfred, pull up the Bloodhound Watch List using your get_bloodhound_watch_list tool and run a triage review. Show me all Tier 1 cases first, then Tier 2. For each, flag whether it needs immediate action, an amicus brief, or just monitoring.",
   },
   {
     id: 'response-plan',
@@ -238,7 +298,9 @@ export const KLG_SKILLS: Skill[] = [
       'Assign research priorities to William before drafting',
       'Use the proposed structure as the brief outline',
     ],
-    prompt: "Alfred, I'd like to run klg-response-plan. I'll attach the opening brief now. Once uploaded, run the skill on [Matter Name].",
+    prompt: "Alfred, run klg-response-plan on {{matter}}. I'll attach the appellant's opening brief now.",
+    requiresFile: true,
+    fileHint: "Attach the appellant's opening brief (.docx or .pdf)",
   },
   {
     id: 'appendix-audit',
@@ -257,7 +319,9 @@ export const KLG_SKILLS: Skill[] = [
       'Update the compile folder with any additions',
       'Re-run if the compile folder changes significantly',
     ],
-    prompt: "Alfred, run klg-appendix-audit on [Matter Name]. I'll attach the full docket as the first file and the proposed compile folder as the second.",
+    prompt: "Alfred, run klg-appendix-audit on {{matter}}. I'll attach the full docket list as the first file and the proposed compile folder as the second.",
+    requiresFile: true,
+    fileHint: 'Attach the full docket list, then the proposed compile folder',
   },
   {
     id: 'conflict-waiver',
@@ -275,7 +339,15 @@ export const KLG_SKILLS: Skill[] = [
       'Draft waiver language per California Rules of Professional Conduct',
       'Route to Tim for review before sending to clients',
     ],
-    prompt: 'Alfred, run klg-conflict-waiver on [Matter Name]: [names of all parties and nature of the joint representation]',
+    prompt: 'Alfred, run klg-conflict-waiver on {{matter}}: {{details}}',
+    params: [
+      {
+        key: 'details',
+        label: 'Party names and nature of joint representation',
+        placeholder: 'e.g. Jointly representing John and Jane Smith — adverse interests may arise on fee allocation',
+        required: true,
+      },
+    ],
   },
   {
     id: 'deep-research-prompts',
@@ -292,7 +364,15 @@ export const KLG_SKILLS: Skill[] = [
       'Copy prompts into ChatGPT Deep Research and run',
       'Feed results back to Alfred for synthesis',
     ],
-    prompt: 'Alfred, run klg-deep-research-prompts on [Matter Name]. Attach the case materials or describe the research question.',
+    prompt: 'Alfred, run klg-deep-research-prompts on {{matter}}: {{question}}',
+    params: [
+      {
+        key: 'question',
+        label: 'Research question or case issue',
+        placeholder: 'e.g. Whether qualified immunity bars § 1983 claims against a supervisor who failed to intervene',
+        required: true,
+      },
+    ],
   },
   {
     id: 'style-guide-check',
@@ -309,7 +389,9 @@ export const KLG_SKILLS: Skill[] = [
       'Review nominalizations and passive voice flagged by Alfred',
       'Apply fixes before routing to Tim for substantive review',
     ],
-    prompt: "Alfred, run klg-style-guide-check on [Matter Name]. I'll attach the document to check now.",
+    prompt: "Alfred, run klg-style-guide-check on {{matter}}. I'll attach the document now.",
+    requiresFile: true,
+    fileHint: 'Attach the brief or memo to check (.docx or .pdf)',
   },
   {
     id: 'cite-check',
@@ -327,6 +409,8 @@ export const KLG_SKILLS: Skill[] = [
       'Phase B: Alfred verifies each citation against the source text',
       'Fix any misquotations or mis-citations before filing',
     ],
-    prompt: "Alfred, run klg-cite-check on [Matter Name]. Attach the brief for Phase A. I'll provide Westlaw source text for Phase B.",
+    prompt: "Alfred, run klg-cite-check on {{matter}}. Attach the brief for Phase A. I'll provide Westlaw source text for Phase B.",
+    requiresFile: true,
+    fileHint: 'Attach the brief for Phase A citation audit',
   },
 ]

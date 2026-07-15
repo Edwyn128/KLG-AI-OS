@@ -308,3 +308,160 @@
   background: var(--glass-border);
   color: var(--text-muted);
 }
+
+.fileChip,
+.paramChip {
+  display: flex;
+  align-items: center;
+  color: var(--text-muted);
+}
+
+.fileChip .material-symbols-outlined,
+.paramChip .material-symbols-outlined {
+  font-size: 12px !important;
+}
+
+/* ── Matter chip ──────────────────────────────────── */
+
+.matterChip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  background: var(--accent-dim);
+  border-bottom: 1px solid var(--glass-border);
+  flex-shrink: 0;
+}
+
+.matterChip .material-symbols-outlined {
+  font-size: 14px !important;
+  color: var(--accent);
+  flex-shrink: 0;
+}
+
+.matterChipEmpty {
+  color: var(--text-muted);
+  font-weight: 400;
+  background: transparent;
+}
+
+.matterChipEmpty .material-symbols-outlined {
+  color: var(--text-muted);
+}
+
+/* ── Param form ───────────────────────────────────── */
+
+.paramBack {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  padding: 0;
+  font-family: inherit;
+}
+
+.paramBack .material-symbols-outlined {
+  font-size: 16px !important;
+  color: var(--text-muted);
+}
+
+.paramForm {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px 14px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.paramField {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.paramLabel {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.paramInput {
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: 6px;
+  padding: 7px 10px;
+  font-size: 12px;
+  color: var(--text-primary);
+  font-family: inherit;
+  outline: none;
+  width: 100%;
+  box-sizing: border-box;
+  transition: border-color 0.12s;
+}
+
+.paramInput:focus {
+  border-color: var(--accent);
+}
+
+.paramInput::placeholder {
+  color: var(--text-muted);
+}
+
+.fileHint {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--text-muted);
+  background: var(--bg-hover);
+  border: 1px dashed var(--glass-border);
+  border-radius: 6px;
+  padding: 8px 10px;
+}
+
+.fileHint .material-symbols-outlined {
+  font-size: 14px !important;
+  flex-shrink: 0;
+}
+
+.paramSend {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 9px 14px;
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.12s, opacity 0.12s;
+  margin-top: 4px;
+}
+
+.paramSend:hover:not(:disabled) {
+  background: #8b1a27;
+}
+
+.paramSend:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.paramSend .material-symbols-outlined {
+  font-size: 16px !important;
+}
