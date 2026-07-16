@@ -274,8 +274,13 @@ class Skill(ABC):
 # Imported by individual skills — do not duplicate these in skill files.
 # =============================================================================
 
-async def skill_generate(prompt: str) -> str:
-    """Run a prompt through the configured Alfred model and return the output."""
+async def skill_generate(prompt: str, deps: Any = None) -> str:
+    """Run a prompt through the configured Alfred model and return the output.
+
+    deps is accepted but not yet wired into the agent — individual skills can
+    use it directly (e.g. via deps.notion or deps.sharepoint) to pre-populate
+    the prompt with live context before calling this function.
+    """
     from pydantic_ai import Agent
     from alfred.model_factory import build_model
     from config import settings
