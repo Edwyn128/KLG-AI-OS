@@ -57,6 +57,10 @@ from alfred.skills.klg_standard_of_review import KLGStandardOfReview
 from alfred.skills.klg_oral_argument_prep import KLGOralArgumentPrep
 from alfred.skills.klg_amicus_assessment import KLGAmicusAssessment
 from alfred.skills.klg_record_navigator import KLGRecordNavigator
+from alfred.skills.klg_daily_triage import KLGDailyTriage
+from alfred.skills.klg_prebill_audit import KLGPrebillAudit
+from alfred.skills.klg_research_compilation import KLGResearchCompilation
+from alfred.skills.klg_brief_assembly import KLGBriefAssembly
 
 # Registry of all available skills, keyed by name.
 # Alfred's run_skill tool looks skills up here by name.
@@ -77,6 +81,10 @@ SKILL_REGISTRY: dict[str, Skill] = {
     KLGOralArgumentPrep.name:        KLGOralArgumentPrep(),
     KLGAmicusAssessment.name:        KLGAmicusAssessment(),
     KLGRecordNavigator.name:         KLGRecordNavigator(),
+    KLGDailyTriage.name:             KLGDailyTriage(),
+    KLGPrebillAudit.name:            KLGPrebillAudit(),
+    KLGResearchCompilation.name:     KLGResearchCompilation(),
+    KLGBriefAssembly.name:           KLGBriefAssembly(),
 }
 
 __all__ = [
@@ -99,4 +107,8 @@ __all__ = [
     "KLGOralArgumentPrep",
     "KLGAmicusAssessment",
     "KLGRecordNavigator",
+    "KLGDailyTriage",
+    "KLGPrebillAudit",
+    "KLGResearchCompilation",
+    "KLGBriefAssembly",
 ]

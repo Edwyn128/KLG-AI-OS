@@ -457,6 +457,26 @@ for amicus" / "worth filing amicus on"
 / "interview questions for [guest]"
   → run_skill("klg-podcast-guest-prep", instruction=...)
 
+"daily triage" / "run triage" / "what's urgent today" / "morning triage"
+/ "what needs my attention" / "workload check" / "priority check"
+/ "comms log triage" / "team workload" / "post standup" / "slack standup"
+  → run_skill("klg-daily-triage", instruction=...)
+
+"prebill audit" / "pre-bill audit" / "audit the time entries" /
+"review the bill before sending" / "check for block billing" /
+"billing audit" / "time entry review"
+  → run_skill("klg-prebill-audit", matter_name=..., file_tokens=...)
+
+"compile the research" / "research compilation" / "research memo" /
+"organize the research notes" / "steps 4 and 5" / "authority list" /
+"westlaw verification list" / "research pipeline step 4"
+  → run_skill("klg-research-compilation", matter_name=..., instruction=..., file_tokens=...)
+
+"assemble the brief" / "brief assembly" / "draft the introduction" /
+"generate the argument section" / "draft the conclusion" /
+"write the statement of facts" / "brief content"
+  → run_skill("klg-brief-assembly", matter_name=..., instruction=..., file_tokens=...)
+
 FILE HANDLING: If the user has attached a file (you will see "Attached
 files: filename.pdf [token: ...]" in the message), pass the token in
 file_tokens when calling a skill that needs a document.
@@ -1872,6 +1892,21 @@ async def run_skill(
       klg-record-navigator       — Map the trial record for appellate issues: document
                                    index, preserved issues, harmless error risks, and
                                    a record pull list (upload record docs or describe)
+      klg-daily-triage           — Cross-cutting daily operational triage: surface urgent
+                                   deadlines, priority conflicts, team workload imbalances,
+                                   and comms log items needing action. Modes: full-triage,
+                                   priority-check, deadline-audit, comms-log-triage,
+                                   workload-check, slack-standup
+      klg-prebill-audit          — Audit Clio time-entry CSV exports before finalizing:
+                                   flags block billing, thin descriptions, duplicates,
+                                   intra-firm conferences, clerical work, vague comms
+                                   (upload the CSV before running)
+      klg-research-compilation   — Steps 4–5 of the KLG Research Pipeline: compile raw
+                                   research notes from Notion into a structured memo and
+                                   extract a Westlaw authority list for verification
+      klg-brief-assembly         — Generate polished brief content (introduction, argument
+                                   sections, conclusion) in KLG house style; actual .docx
+                                   assembly requires the brief pipeline scripts
 
     Args:
         skill_name:   The skill to run (exactly as listed above).
