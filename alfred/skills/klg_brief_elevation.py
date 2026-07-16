@@ -104,6 +104,7 @@ DRAFT — attorney review required. Do not file without attorney sign-off.\
 
 class KLGBriefElevation(Skill):
     name = "klg-brief-elevation"
+    required_tools = ["search_notion"]
     description = (
         "Elevate a draft brief to KLG standard: theory critique, structure audit, "
         "argument-by-argument feedback, KLG style violations, and persuasion score. "
@@ -138,7 +139,7 @@ class KLGBriefElevation(Skill):
             instruction=instruction[:1000],
         )
 
-        output_text = await skill_generate(prompt)
+        output_text = await self.generate(prompt, ctx)
 
         return SkillResult(
             summary=(

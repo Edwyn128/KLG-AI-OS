@@ -100,6 +100,7 @@ DRAFT — attorney review required. Do not file without attorney sign-off.\
 
 class KLGResponsePlan(Skill):
     name = "klg-response-plan"
+    required_tools = ["search_notion", "search_sharepoint"]
     description = (
         "Draft a response brief strategy memo from the appellant's opening brief—"
         "argument map with counter-positions, record strategy, and research priorities. "
@@ -138,7 +139,7 @@ class KLGResponsePlan(Skill):
             instruction=instruction[:1000],
         )
 
-        output_text = await skill_generate(prompt)
+        output_text = await self.generate(prompt, ctx)
 
         return SkillResult(
             summary=(

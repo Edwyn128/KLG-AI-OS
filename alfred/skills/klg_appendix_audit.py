@@ -113,6 +113,7 @@ DRAFT — attorney review required. Do not lodge without attorney sign-off.\
 
 class KLGAppendixAudit(Skill):
     name = "klg-appendix-audit"
+    required_tools = ["search_sharepoint", "search_notion"]
     description = (
         "Audit a proposed appendix compile folder for underinclusivity: "
         "compare the full docket against proposed inclusions and flag documents "
@@ -173,7 +174,7 @@ class KLGAppendixAudit(Skill):
             instruction=instruction[:1000],
         )
 
-        output_text = await skill_generate(prompt)
+        output_text = await self.generate(prompt, ctx)
 
         return SkillResult(
             summary=(

@@ -98,6 +98,7 @@ DRAFT — attorney review required. Verify all record citations before filing.\
 
 class KLGRecordNavigator(Skill):
     name = "klg-record-navigator"
+    required_tools = ["search_sharepoint", "search_notion"]
     description = (
         "Map the trial record for appellate issues: document index, preserved issues, "
         "supporting facts, harmless error risks, and a record pull list. "
@@ -128,7 +129,7 @@ class KLGRecordNavigator(Skill):
             instruction=instruction[:1500] if record_text else "",
         )
 
-        output_text = await skill_generate(prompt)
+        output_text = await self.generate(prompt, ctx)
 
         return SkillResult(
             summary=f"Record navigation complete for {matter_label}. Preserved issues and record pull list ready.",

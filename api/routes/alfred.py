@@ -233,6 +233,10 @@ async def chat_with_alfred(
         if request.history:
             try:
                 message_history = ModelMessagesTypeAdapter.validate_python(request.history)
+                # Cap history to prevent context-length errors. Tool-call cycles add
+                # 3-5 messages per turn; 20 covers ~4-6 recent turns comfortably.
+                if len(message_history) > 20:
+                    message_history = message_history[-20:]
             except Exception:
                 message_history = []
 
@@ -350,6 +354,10 @@ async def chat_with_alfred_stream(
     if request.history:
         try:
             message_history = ModelMessagesTypeAdapter.validate_python(request.history)
+            # Cap history to prevent context-length errors. Tool-call cycles add
+            # 3-5 messages per turn; 20 covers ~4-6 recent turns comfortably.
+            if len(message_history) > 20:
+                message_history = message_history[-20:]
         except Exception:
             message_history = []
 

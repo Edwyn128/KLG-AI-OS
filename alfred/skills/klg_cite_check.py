@@ -115,6 +115,7 @@ Numbered list of every 🔴 PROBLEM citation with required action before filing.
 
 class KLGCiteCheck(Skill):
     name = "klg-cite-check"
+    required_tools = ["web_search"]
     description = (
         "Two-phase citation audit: Phase A audits format and flags hallucination risk "
         "(runs immediately); Phase B cross-checks against Westlaw source text."
@@ -160,11 +161,12 @@ class KLGCiteCheck(Skill):
                 success=False,
             )
 
-        result_text = await skill_generate(
+        result_text = await self.generate(
             _PHASE_A_PROMPT.format(
                 citation_rules=citation_rules[:8000],
                 brief_text=brief_text[:20000],
-            )
+            ),
+            ctx,
         )
 
         matter_label = ctx.matter_name or "Brief"

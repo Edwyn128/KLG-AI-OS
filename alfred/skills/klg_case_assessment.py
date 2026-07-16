@@ -101,6 +101,7 @@ Return only the query string, nothing else.\
 
 class KLGCaseAssessment(Skill):
     name = "klg-case-assessment"
+    required_tools = ["web_search", "search_notion", "search_sharepoint"]
     description = (
         "Assess a client inquiry against full matter context—Notion project page, "
         "Comms Log history, SharePoint documents, and live legal research—then draft "
@@ -145,7 +146,7 @@ class KLGCaseAssessment(Skill):
             inquiry=inquiry[:2000],
         )
 
-        output_text = await skill_generate(prompt)
+        output_text = await self.generate(prompt, ctx)
 
         return SkillResult(
             summary=(

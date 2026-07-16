@@ -93,6 +93,7 @@ DRAFT — attorney review required. Do not rely on unverified record citations.\
 
 class KLGOralArgumentPrep(Skill):
     name = "klg-oral-argument-prep"
+    required_tools = ["web_search", "search_notion"]
     description = (
         "Build a complete oral argument prep package: 60-second opener, 10 hardest "
         "questions with answers, record citations, and the one concession to offer. "
@@ -136,7 +137,7 @@ class KLGOralArgumentPrep(Skill):
             instruction=instruction[:2000],
         )
 
-        output_text = await skill_generate(prompt)
+        output_text = await self.generate(prompt, ctx)
 
         return SkillResult(
             summary=(
