@@ -96,6 +96,7 @@ DRAFT — Tim sign-off required before any amicus commitment.\
 
 class KLGAmicusAssessment(Skill):
     name = "klg-amicus-assessment"
+    required_tools = ["web_search", "search_notion"]
     description = (
         "Evaluate whether a case warrants a KLG amicus brief: importance assessment, "
         "KLG's unique angle, coalition map, proposed arguments, and a file/pass recommendation."
@@ -124,7 +125,7 @@ class KLGAmicusAssessment(Skill):
             instruction=instruction[:3000],
         )
 
-        output_text = await skill_generate(prompt)
+        output_text = await self.generate(prompt, ctx)
 
         return SkillResult(
             summary=f"Amicus assessment complete for {matter_label}. Recommendation and resource estimate ready for Tim's review.",

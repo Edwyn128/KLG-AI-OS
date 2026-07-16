@@ -83,6 +83,7 @@ DRAFT — attorney review required.\
 
 class KLGIssueFraming(Skill):
     name = "klg-issue-framing"
+    required_tools = ["web_search", "search_notion"]
     description = (
         "Frame the issue presented at the optimal level of specificity: drafts three "
         "versions (narrow / mid / broad), tests each against the standard of review, "
@@ -111,7 +112,7 @@ class KLGIssueFraming(Skill):
             instruction=instruction[:3000],
         )
 
-        output_text = await skill_generate(prompt)
+        output_text = await self.generate(prompt, ctx)
 
         return SkillResult(
             summary=f"Issue framing complete for {matter_label}. Three versions drafted with recommendation.",

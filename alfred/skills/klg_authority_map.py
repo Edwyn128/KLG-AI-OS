@@ -96,6 +96,7 @@ DRAFT — attorney verification required before citing in any filing.\
 
 class KLGAuthorityMap(Skill):
     name = "klg-authority-map"
+    required_tools = ["web_search", "search_notion"]
     description = (
         "Build a hierarchical authority map for a constitutional or statutory doctrine: "
         "SCOTUS → 9th Circuit → Cal. courts, with tensions and brief citation outline. "
@@ -124,7 +125,7 @@ class KLGAuthorityMap(Skill):
             instruction=instruction[:2000],
         )
 
-        output_text = await skill_generate(prompt)
+        output_text = await self.generate(prompt, ctx)
 
         return SkillResult(
             summary=(

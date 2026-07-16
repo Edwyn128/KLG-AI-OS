@@ -84,6 +84,7 @@ DRAFT — attorney verification required before filing.\
 
 class KLGStandardOfReview(Skill):
     name = "klg-standard-of-review"
+    required_tools = ["web_search", "search_notion"]
     description = (
         "Identify the applicable standard of review, draft the SOR statement, "
         "analyze preservation, and anticipate opponent SOR arguments. "
@@ -112,7 +113,7 @@ class KLGStandardOfReview(Skill):
             instruction=instruction[:2000],
         )
 
-        output_text = await skill_generate(prompt)
+        output_text = await self.generate(prompt, ctx)
 
         return SkillResult(
             summary=f"Standard of review analysis complete for {matter_label}.",

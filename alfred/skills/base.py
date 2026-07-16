@@ -168,6 +168,32 @@ class Skill(ABC):
     Skills that produce large documents (novella, record-digest) should set this.
     """
 
+    required_tools: list[str] = []
+    """
+    Tool names this skill may call during AI execution.
+    Must be a subset of the keys in SKILL_TOOLS (alfred/agent.py).
+    Scoped to least privilege — only list tools the skill actually needs.
+    run_skill is never a valid entry (no recursive invocation).
+    Skills that don't override this get a plain toolless completion (original behavior).
+    """
+
+    async def generate(self, prompt: str, ctx: SkillContext) -> str:
+        """
+        Run an AI completion with this skill's scoped tool access.
+
+        Call this instead of skill_generate(prompt) when the skill needs to
+        make tool calls during execution (web search, Notion lookup, etc.).
+        Tools are scoped to self.required_tools — the ephemeral agent only sees
+        the tools declared on this skill class.
+
+        Falls back to a plain toolless completion if required_tools is empty
+        or deps are not available (preserves backward compatibility).
+        """
+        deps = ctx.extra.get("deps")
+        if deps is not None and self.required_tools:
+            return await skill_generate(prompt, deps=deps, allowed_tools=self.required_tools)
+        return await skill_generate(prompt)
+
     @abstractmethod
     async def execute(self, ctx: SkillContext) -> SkillResult:
         """
@@ -274,19 +300,52 @@ class Skill(ABC):
 # Imported by individual skills — do not duplicate these in skill files.
 # =============================================================================
 
-async def skill_generate(prompt: str, deps: Any = None) -> str:
+async def skill_generate(
+    prompt: str,
+    deps: Any = None,
+    allowed_tools: list[str] | None = None,
+) -> str:
     """Run a prompt through the configured Alfred model and return the output.
 
-    deps is accepted but not yet wired into the agent — individual skills can
-    use it directly (e.g. via deps.notion or deps.sharepoint) to pre-populate
-    the prompt with live context before calling this function.
+    When deps and allowed_tools are both provided, the ephemeral agent gets
+    those tools registered so the AI can call Notion, web search, etc. during
+    its execution. Without them, runs as a plain one-shot completion.
+
+    Call via Skill.generate(prompt, ctx) rather than directly — the base class
+    resolves deps and required_tools automatically.
     """
     from pydantic_ai import Agent
     from alfred.model_factory import build_model
     from config import settings
 
-    agent: Agent[None, str] = Agent(model=build_model(settings.alfred_model), output_type=str)
-    result = await agent.run(prompt)
+    if deps is not None and allowed_tools:
+        # Local import to avoid circular dependency (alfred.agent imports alfred.skills).
+        from alfred.agent import AlfredDependencies, SKILL_TOOLS  # type: ignore[attr-defined]
+
+        skill_agent: Agent[AlfredDependencies, str] = Agent(
+            model=build_model(settings.alfred_model),
+            deps_type=AlfredDependencies,
+            output_type=str,
+        )
+        registered = 0
+        for name in allowed_tools:
+            fn = SKILL_TOOLS.get(name)
+            if fn is not None:
+                skill_agent.tool(fn)
+                registered += 1
+
+        logger.debug(
+            "skill_generate: scoped agent with %d/%d tool(s): %s",
+            registered, len(allowed_tools), allowed_tools,
+        )
+        result = await skill_agent.run(prompt, deps=deps)
+    else:
+        bare_agent: Agent[None, str] = Agent(
+            model=build_model(settings.alfred_model),
+            output_type=str,
+        )
+        result = await bare_agent.run(prompt)
+
     return result.output
 
 

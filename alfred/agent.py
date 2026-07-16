@@ -2108,3 +2108,32 @@ async def update_matter_task(
     if new_stage:
         parts.append(f"stage → {new_stage}")
     return " — ".join(parts) + "."
+
+
+# =============================================================================
+# SKILL TOOLS REGISTRY
+# =============================================================================
+# Maps tool name → callable for skills that need scoped tool access.
+# Skills declare which tools they need via the required_tools class attribute.
+# run_skill is intentionally excluded — no recursive skill invocation.
+SKILL_TOOLS: dict[str, Any] = {
+    "find_and_summarize_matter":  find_and_summarize_matter,
+    "get_upcoming_deadlines":     get_upcoming_deadlines,
+    "search_notion":              search_notion,
+    "get_bloodhound_watch_list":  get_bloodhound_watch_list,
+    "log_action_to_matter":       log_action_to_matter,
+    "get_team_workload":          get_team_workload,
+    "update_matter_status":       update_matter_status,
+    "update_matter":              update_matter,
+    "save_note":                  save_note,
+    "recall_notes":               recall_notes,
+    "create_new_matter":          create_new_matter,
+    "search_sharepoint":          search_sharepoint,
+    "send_slack_message":         send_slack_message,
+    "deep_research_with_chatgpt": deep_research_with_chatgpt,
+    "web_search":                 web_search,
+    "read_sharepoint_file":       read_sharepoint_file,
+    "get_matter_tasks":           get_matter_tasks,
+    "create_matter_task":         create_matter_task,
+    "update_matter_task":         update_matter_task,
+}
