@@ -122,6 +122,7 @@ async def receive_event(request: Request) -> JSONResponse:
                 slack_client=request.app.state.slack_client,
                 alfred_deps=request.app.state.alfred_deps,
                 user_id=user_id,
+                files=event.get("files", []),
             )
         )
 
@@ -136,6 +137,7 @@ async def _run_alfred_and_reply(
     slack_client,
     alfred_deps,
     user_id: str,
+    files: list | None = None,
 ) -> None:
     """
     Run Alfred on the incoming Slack message and post the response as a reply.
@@ -159,6 +161,13 @@ async def _run_alfred_and_reply(
             thread_ts=thread_ts,
             event_ts=event_ts,
         )
+
+        # Append any attached file content to the message so Alfred can act on it
+        if files:
+            file_context = await _extract_slack_file_text(files)
+            if file_context:
+                message = message + "\n\n" + file_context
+
         result = await run_with_fallback(message, message_history=history or None, deps=alfred_deps)
         response_text = result.output
 
@@ -260,7 +269,10 @@ async def _fetch_conversation_history(
             )
             raw_messages = resp.get("messages", [])
         else:
-            return []
+            # Top-level channel @mention — read recent channel history so Alfred
+            # has the same conversational context Claude.ai shows in its responses.
+            resp = await slack_client.conversations_history(channel=channel, limit=15)
+            raw_messages = list(reversed(resp.get("messages", [])))
 
         history = []
         for msg in raw_messages:
@@ -282,6 +294,66 @@ async def _fetch_conversation_history(
     except Exception as e:
         logger.debug("Could not fetch Slack history (continuing without): %s", e)
         return []
+
+
+async def _extract_slack_file_text(files: list) -> str:
+    """
+    Download and extract text from Slack file attachments.
+
+    Uses the bot token to download private Slack files. Handles PDF, .txt,
+    .md, and .docx. Binary files get a placeholder so Alfred knows they exist.
+    Caps at 2 files and 15,000 chars per file to keep context manageable.
+    """
+    import httpx
+    import tempfile
+    import os
+
+    from config import settings
+    if not settings.slack_bot_token:
+        return ""
+
+    from alfred.skills.base import skill_read_file_text
+
+    texts: list[str] = []
+    for f in files[:2]:
+        name = f.get("name", "file")
+        url = f.get("url_private_download") or f.get("url_private", "")
+        mimetype = f.get("mimetype", "")
+        if not url:
+            continue
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                resp = await client.get(
+                    url,
+                    headers={"Authorization": f"Bearer {settings.slack_bot_token}"},
+                )
+                resp.raise_for_status()
+
+            ext = os.path.splitext(name)[1].lower() or ".bin"
+            with tempfile.NamedTemporaryFile(suffix=ext, delete=False) as tmp:
+                tmp.write(resp.content)
+                tmp_path = tmp.name
+
+            try:
+                extracted = skill_read_file_text(tmp_path)
+                if extracted:
+                    texts.append(f"[Attached file: {name}]\n{extracted[:15000]}")
+                else:
+                    texts.append(
+                        f"[Attached file: {name} ({mimetype}) — "
+                        "content could not be extracted. Ask the user to upload via the Alfred web UI.]"
+                    )
+            finally:
+                try:
+                    os.unlink(tmp_path)
+                except Exception:
+                    pass
+
+        except Exception as e:
+            logger.warning("Slack file download failed for %s: %s", name, e)
+            texts.append(f"[Attached file: {name} — download failed.]")
+
+    return "\n\n".join(texts)
 
 
 def _verify_slack_signature(request: Request, body: bytes) -> None:

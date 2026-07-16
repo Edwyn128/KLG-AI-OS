@@ -1532,6 +1532,13 @@ async def send_slack_message(
 
     resolved = channel.strip().lstrip("@")
 
+    # Fetch members once — reused for both channel resolution and @mention rewriting
+    members_cache: list = []
+    try:
+        members_cache = (await ctx.deps.slack_client.users_list()).get("members") or []
+    except Exception as e:
+        logger.warning("Slack users_list failed: %s", e)
+
     # Channel name — post directly
     if resolved.startswith("#"):
         target = resolved
@@ -1539,32 +1546,54 @@ async def send_slack_message(
     elif resolved[:1] in ("U", "D", "C") and len(resolved) > 6:
         target = resolved
     else:
-        # Person's name — resolve to their Slack User ID via users.list
+        # Person's name — resolve to their Slack User ID
         target = None
-        try:
-            resp = await ctx.deps.slack_client.users_list()
-            name_lower = resolved.lower()
-            for member in (resp.get("members") or []):
-                if member.get("is_bot") or member.get("deleted"):
-                    continue
-                profile = member.get("profile", {})
-                candidates = [
-                    profile.get("display_name", ""),
-                    profile.get("real_name", ""),
-                    profile.get("first_name", ""),
-                    member.get("name", ""),
-                ]
-                if any(name_lower in c.lower() for c in candidates if c):
-                    target = member["id"]
-                    break
-        except Exception as e:
-            logger.warning("Slack user lookup failed: %s", e)
+        name_lower = resolved.lower()
+        for member in members_cache:
+            if member.get("is_bot") or member.get("deleted"):
+                continue
+            profile = member.get("profile", {})
+            candidates = [
+                profile.get("display_name", ""),
+                profile.get("real_name", ""),
+                profile.get("first_name", ""),
+                member.get("name", ""),
+            ]
+            if any(name_lower in c.lower() for c in candidates if c):
+                target = member["id"]
+                break
 
         if not target:
             return (
                 f"Could not find a Slack user matching '{channel}'. "
                 f"Try using their exact Slack display name or a channel like #case-management."
             )
+
+    # Rewrite @Name mentions in the message body to <@USERID> so they
+    # actually ping the person in Slack instead of appearing as plain text.
+    import re as _re
+    mention_names = _re.findall(r'@([\w][\w .]*?)(?=[^\w.]|$)', message)
+    for name in set(mention_names):
+        nl = name.lower().strip()
+        for member in members_cache:
+            if member.get("is_bot") or member.get("deleted"):
+                continue
+            profile = member.get("profile", {})
+            if any(
+                nl in (c or "").lower()
+                for c in [
+                    profile.get("display_name"),
+                    profile.get("real_name"),
+                    profile.get("first_name"),
+                    member.get("name"),
+                ]
+            ):
+                message = _re.sub(
+                    rf'@{_re.escape(name)}(?=[^\w.]|$)',
+                    f'<@{member["id"]}>',
+                    message,
+                )
+                break
 
     try:
         response = await ctx.deps.slack_client.chat_postMessage(
