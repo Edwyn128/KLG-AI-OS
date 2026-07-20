@@ -101,15 +101,15 @@ def _check_rate_limit(ip: str) -> bool:
 
 
 def _load_password_map() -> dict[str, str]:
-    """Parse APP_PASSWORDS JSON into {username: password}. Returns {} on error."""
+    """Parse APP_PASSWORDS JSON into {username_lower: password}. Returns {} on error."""
     import json
     raw = settings.app_passwords.strip()
     if not raw:
         return {}
-    # Railway's raw editor can add escape sequences or newlines — clean them.
-    # Remove literal \n whitespace sequences and unescape \" → "
-    cleaned = raw.replace('\\"', '"').replace('\n', '').replace('  ', '')
-    # If the whole string is itself a JSON-encoded string, unwrap it once.
+    # Railway's raw editor can wrap the value in extra quotes or add escape sequences.
+    # Handle: literal \n (two chars), actual newlines, escaped quotes, and outer string wrapping.
+    cleaned = raw.replace('\\n', '').replace('\n', '').replace('\\"', '"')
+    # If Railway double-encoded it as a JSON string, unwrap once.
     if cleaned.startswith('"') and cleaned.endswith('"'):
         try:
             cleaned = json.loads(cleaned)
@@ -117,9 +117,14 @@ def _load_password_map() -> dict[str, str]:
             pass
     try:
         data = json.loads(cleaned)
-        return {str(k).strip(): str(v).strip() for k, v in data.items()}
+        # Lowercase keys so lookup is case-insensitive (Tim == tim == TIM)
+        return {str(k).strip().lower(): str(v).strip() for k, v in data.items()}
     except Exception as e:
-        logger.warning("APP_PASSWORDS could not be parsed (%s) — per-user auth disabled", e)
+        logger.warning(
+            "APP_PASSWORDS could not be parsed — per-user auth disabled. "
+            "Error: %s. Raw value starts with: %.60r",
+            e, raw,
+        )
         return {}
 
 
@@ -129,7 +134,7 @@ def _verify_credentials(username: str, password: str) -> bool:
 
     Checks in order:
       1. Master password (APP_PASSWORD) — works for any username, admin override
-      2. Per-user password map (APP_PASSWORDS) — username must match exactly
+      2. Per-user password map (APP_PASSWORDS) — case-insensitive username match
     """
     # Master password override (any username accepted)
     if settings.app_password and secrets.compare_digest(
@@ -137,9 +142,9 @@ def _verify_credentials(username: str, password: str) -> bool:
     ):
         return True
 
-    # Per-user password
+    # Per-user password — keys stored lowercase, lookup normalized to lowercase
     pw_map = _load_password_map()
-    expected = pw_map.get(username, "")
+    expected = pw_map.get(username.lower(), "")
     if expected and secrets.compare_digest(password.encode(), expected.encode()):
         return True
 
