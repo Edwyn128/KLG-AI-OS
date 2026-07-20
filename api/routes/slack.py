@@ -155,6 +155,22 @@ async def _run_alfred_and_reply(
     from alfred.agent import run_with_fallback
 
     try:
+        # ── Connect mode: "@Alfred connect" → read channel history, introduce with matter context
+        if message.strip().lower() == "connect" or message.strip().lower().startswith("connect "):
+            response_text = await _handle_connect_mode(
+                slack_client=slack_client,
+                alfred_deps=alfred_deps,
+                channel=channel,
+                user_id=user_id,
+            )
+            if slack_client:
+                post_kwargs: dict = {"channel": channel, "text": response_text}
+                if not channel.startswith("D"):
+                    post_kwargs["thread_ts"] = thread_ts
+                await slack_client.chat_postMessage(**post_kwargs)
+                logger.info("Slack ← Alfred (connect): replied in %s", channel)
+            return
+
         history = await _fetch_conversation_history(
             slack_client=slack_client,
             channel=channel,
@@ -233,6 +249,96 @@ async def _run_alfred_and_reply(
                 )
             except Exception:
                 pass
+
+
+async def _handle_connect_mode(
+    slack_client,
+    alfred_deps,
+    channel: str,
+    user_id: str,
+) -> str:
+    """
+    Handle "@Alfred connect": read channel history, find matter context,
+    and return Alfred's contextual self-introduction.
+    """
+    from alfred.agent import run_with_fallback
+
+    # Read recent channel history (up to 30 messages, skip bots)
+    channel_history_text = ""
+    matter_context = ""
+    channel_name = ""
+
+    try:
+        if not channel.startswith("D"):
+            info_resp = await slack_client.conversations_info(channel=channel)
+            channel_name = (info_resp.get("channel") or {}).get("name", "")
+
+        history_resp = await slack_client.conversations_history(channel=channel, limit=30)
+        raw = list(reversed(history_resp.get("messages", [])))
+        lines = []
+        for msg in raw:
+            if msg.get("bot_id"):
+                continue
+            text = (msg.get("text") or "").strip()
+            if text and text.lower() not in ("connect", "@alfred connect"):
+                lines.append(f"[{msg.get('user', 'team')}]: {text[:300]}")
+        if lines:
+            channel_history_text = "\n".join(lines[-20:])  # last 20 non-bot messages
+    except Exception as e:
+        logger.debug("connect-mode: could not fetch channel history: %s", e)
+
+    # Look up the matter associated with this channel
+    try:
+        if channel_name and alfred_deps.project_pages:
+            from agents.case_checkin import resolve_matter_for_channel
+            matter = await resolve_matter_for_channel(channel_name, alfred_deps.project_pages)
+            if matter:
+                matter_name = matter.get("Project name") or matter.get("name") or ""
+                matter_status = matter.get("Status") or matter.get("status") or ""
+                matter_stage = matter.get("Case Stage") or matter.get("case_stage") or ""
+                matter_deadline = (
+                    matter.get("Next Court Deadline") or matter.get("next_court_deadline") or ""
+                )
+                matter_context = (
+                    f"Matter: {matter_name}\n"
+                    f"Status: {matter_status}\n"
+                    f"Stage: {matter_stage}\n"
+                    f"Next Court Deadline: {matter_deadline}"
+                )
+    except Exception as e:
+        logger.debug("connect-mode: could not resolve matter: %s", e)
+
+    # Build prompt for Alfred's self-introduction
+    parts = [
+        "You have just been invited into a Slack channel by a team member who typed '@Alfred connect'.",
+        "Introduce yourself briefly as Alfred, KLG's AI assistant.",
+        "Summarize the recent channel conversation (if any) in 2-3 sentences.",
+    ]
+    if matter_context:
+        parts.append(f"The channel is associated with this matter:\n{matter_context}")
+        parts.append(
+            "Mention the matter's current status and stage, and offer 2-3 relevant ways you can help "
+            "(e.g., task seeding, brief drafting, research, deadline tracking)."
+        )
+    else:
+        parts.append(
+            "Offer 3 general ways you can help the KLG team "
+            "(task management, brief drafting, research, deadline tracking)."
+        )
+    if channel_history_text:
+        parts.append(f"\nRecent channel messages:\n{channel_history_text}")
+
+    connect_prompt = "\n\n".join(parts)
+
+    try:
+        result = await run_with_fallback(connect_prompt, deps=alfred_deps)
+        return result.output
+    except Exception as e:
+        logger.error("connect-mode: Alfred call failed: %s", e)
+        return (
+            "Hi, I'm Alfred — KLG's AI assistant. I'm now connected to this channel. "
+            "Mention me anytime you need help with research, tasks, deadlines, or brief drafting."
+        )
 
 
 async def _fetch_conversation_history(

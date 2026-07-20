@@ -1,26 +1,34 @@
 """
 alfred/skills/klg_research_compilation.py — Steps 4–5 of the KLG Research Pipeline.
 
-Reads raw research notes from Notion, compiles them into a structured legal
-research memo, and extracts a formatted authority list for Westlaw verification.
+Two-phase workflow adapted from the full Claude.ai klg-research-compilation skill:
 
-KLG Research Pipeline:
-  Step 1 — Issue framing           (klg-issue-framing)
-  Step 2 — Deep research prompts   (klg-deep-research-prompts)
-  Step 3 — Research execution      (researcher runs prompts in Westlaw/Fastcase/web)
-  Step 4 — Research compilation  ← THIS SKILL: organize and synthesize notes
-  Step 5 — Authority extraction  ← THIS SKILL: extract citation list for Westlaw
+  Phase A — Compilation + Authority Extraction:
+    Read completed Deep Research memos from Notion (or uploaded files),
+    compile into a single research memo, perform convergence analysis,
+    and generate a Westlaw Find & Print authority list.
 
-Usage:
-  "Alfred, run klg-research-compilation on [Matter Name]: [any specific focus]"
+  Phase B — Finalization (optional, after Westlaw run):
+    Upload the Westlaw .doc file, cross-reference for hallucinations,
+    and produce the final verified research package.
 
-  Alfred reads the matter's Notion research page, compiles the memo,
-  and writes a summary back to Notion. The authority list is returned
-  for the research attorney to verify in Westlaw.
+  Post-Pipeline Review:
+    High-leverage findings, case memo options, client memo decision,
+    recursive research opportunities.
 
-NOTE: .docx / PDF assembly from compiled memo requires the brief pipeline
-scripts (pack.py / assemble_brief.py). Run those in the Alfred Code or
-Cowork environment after reviewing the memo Alfred produces here.
+KLG Research Pipeline steps:
+  1. klg-issue-framing       — define the precise legal question
+  2. klg-deep-research-prompts — generate tiered research prompts
+  3. [William runs prompts in Westlaw/Fastcase/Deep Research]
+  4. THIS SKILL (Phase A)   — compile + extract authorities
+  5. [William runs Comet/Westlaw Find & Print]
+  6. THIS SKILL (Phase B)   — finalize research package
+
+Westlaw authority list format (non-negotiable):
+  - Reporter volume, reporter name, start page ONLY — no case names, no years
+  - One authority per line, no blank lines, deduplicated
+  - Batches of ≤100 items if total exceeds 100
+  - Example: "75 Cal.App.5th 1234" / "42 U.S.C. § 1983"
 """
 from __future__ import annotations
 
@@ -33,96 +41,214 @@ logger = logging.getLogger(__name__)
 _COMPILATION_PROMPT = """\
 You are a KLG senior appellate attorney compiling legal research for {matter_label}.
 
-You have retrieved the matter's research notes from Notion. Your job:
-1. Organize the raw notes into a structured legal research memo
-2. Extract a clean authority list for Westlaw verification
+EFFICIENCY RULE: Single-pass reading. Read each memo ONCE. During that pass,
+extract (a) key conclusions, (b) every citation, (c) red flags. Do not re-read.
+Build the compiled document as you read. Target: Phase A in 10–15 minutes.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-MATTER CONTEXT (from Notion)
+BEFORE READING MEMOS — USE YOUR TOOLS:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+{fetch_instructions}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+MATTER CONTEXT:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 {matter_summary}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-RESEARCH NOTES (from Notion research page)
+RESEARCH MEMOS / NOTES:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-{research_notes}
+{research_content}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-SPECIFIC FOCUS / INSTRUCTIONS:
-{instruction}
-
+SPECIFIC FOCUS: {instruction}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 WRITING RULES:
 - Em dashes without spaces—like this
 - No "furthermore," "therefore," "clearly," "it is well established," "as such"
-- Active verbs. Lead with the holding, not the court's procedural history
-- CRITICAL: never fabricate case citations, holdings, or quotations
-  If a citation seems incomplete or uncertain, flag it: [VERIFY CITATION]
-  If a holding is paraphrased from notes, flag it: [PARAPHRASED — VERIFY]
+- Active verbs. Lead with the holding, not the procedural posture.
+- CRITICAL: never fabricate citations, holdings, or quotations
+  If a citation looks suspicious (unusual reporter, non-standard format):
+  mark it ⚠ [VERIFY CITATION] — do not drop it, do not trust it.
+  If a holding is paraphrased from notes: mark [PARAPHRASED — VERIFY]
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-STEP 4 — LEGAL RESEARCH MEMO
+PHASE A OUTPUT — PRODUCE ALL THREE SECTIONS:
 
-## Issue Presented
+## 1. COMPILED RESEARCH MEMORANDUM
+
+Header:
+  COMPILED LEGAL RESEARCH MEMORANDUM
+  Case: {matter_label}
+  Status: DRAFT — AI ASSISTED — Citations require Westlaw verification
+  Pipeline Stage: Step 4 of 5 — Compilation
+
+### Issue Presented
 [One sentence, precisely stated]
 
-## Short Answer
+### Short Answer
 [2–4 sentences — bottom line up front]
 
-## Governing Legal Standard
-[The controlling test(s) with citations]
+### Governing Legal Standard
+[Controlling test(s) with citations]
 
-## Analysis by Sub-Issue
+### Issue-by-Issue Analysis
+For each legal issue:
 
-For each sub-issue or legal question in the research:
+#### Issue [N]: [Title]
+**Governing rule:** [rule statement with lead citation]
+**Key favorable authority:** [citation — parenthetical]
+**Key adverse authority:** [citation — parenthetical, if any]
+**Analysis:** [synthesized discussion, ≤3 paragraphs]
+**Strength:** Strong / Moderate / Weak — [one-sentence explanation]
+**Research gaps:** [what still needs verification]
 
-### [Sub-Issue Title]
-**Controlling authority:** [cite]
-**Holding:** [what the court held]
-**Application to our facts:** [how this authority helps or hurts]
-**Distinguishing factors:** [if adverse, how we distinguish]
+### Favorable Authorities (Ranked)
+| Rank | Citation | What it establishes | Why it helps |
+|------|----------|---------------------|--------------|
+[Top 10, ranked by strength]
 
-## Favorable Authorities (Ranked)
-List the 10 strongest authorities for our position:
-| Rank | Citation | Holding | Why it helps |
-|------|----------|---------|--------------|
-
-## Adverse Authorities and Responses
-List all adverse authorities found. For each:
-| Citation | Holding | Our response / distinction |
+### Adverse Authorities and Responses
+| Citation | Holding | Our response/distinction |
 |----------|---------|--------------------------|
 
-## Research Gaps
-What questions remain unanswered that need additional research?
+---
+
+## 2. CONVERGENCE ANALYSIS
+
+Authorities cited in multiple memos are higher-confidence signals.
+
+### High-Confidence (cited in 3+ memos)
+| Authority | Full Citation | Cited in Memos | Issue |
+|-----------|--------------|----------------|-------|
+
+### Moderate-Confidence (cited in 2 memos)
+| Authority | Full Citation | Cited in Memos | Issue |
+|-----------|--------------|----------------|-------|
+
+### Single-Source (cited in 1 memo — verify carefully)
+| Authority | Full Citation | Source Memo | Issue | Flag |
+|-----------|--------------|-------------|-------|------|
+
+### Potential Hallucinations
+| Citation | Reason Flagged | Source | Priority |
+|----------|---------------|--------|----------|
+[Any citation that looks suspicious — non-standard reporter, unusual format,
+ year that seems off, holding inconsistent with known doctrine]
 
 ---
 
-STEP 5 — WESTLAW AUTHORITY EXTRACTION LIST
+## 3. WESTLAW AUTHORITY LIST
 
-Extract every case, statute, regulation, and secondary source cited in the
-notes into this format for Westlaw verification:
+Format: reporter volume + reporter abbreviation + start page ONLY.
+No case names. No years. No parentheticals. One per line. Deduplicated.
+Statutes: code name + section number.
 
-### Cases
-| Citation (as found in notes) | Verified? | Notes |
-|------------------------------|-----------|-------|
-[List all — include string cites that may need updating]
+**Total authorities: [N]**
+**Status: DRAFT — AI ASSISTED — Pending Westlaw verification**
 
-### Statutes and Regulations
-| Citation | Section | Notes |
-|----------|---------|-------|
+{batch_instruction}
 
-### Secondary Sources
-| Source | Author | Year | Notes |
-|--------|--------|------|-------|
+```
+[LIST EVERY AUTHORITY HERE, one per line]
+[Example:]
+75 Cal.App.5th 1234
+547 U.S. 410
+Cal. Gov. Code § 3304
+42 U.S.C. § 1983
+```
 
-FLAG: Any citation that looks incomplete, appears to be a paraphrase,
-or could not be verified from the notes should be marked [VERIFY BEFORE CITING].
+[If >100 authorities, split into labeled batches of ≤100:]
+```
+BATCH 1 OF [N] (items 1–100):
+[authorities]
+```
+```
+BATCH 2 OF [N] (items 101–[M]):
+[authorities]
+```
 
 ---
-DRAFT — attorney review required. Verify all citations in Westlaw before
-incorporating into a brief or motion.
+
+## 4. POST-PIPELINE OPTIONS
+
+Present these questions for the attorney to answer (respond with letter choices,
+e.g. "1a, 2b, 3b, 4c"):
+
+1. HIGH-LEVERAGE FINDINGS — Identify the 3–5 most strategically valuable
+   authorities or legal theories from this research. Add to case memo?
+   a. Yes — add to evolving case memo  b. No — keep separate
+
+2. COMPILED MEMO — Delivery preference?
+   a. Add to existing case memo as new section  b. Keep as standalone document
+
+3. CLIENT MEMO — Want a client-facing version?
+   a. No — internal only  b. Yes — create client-ready version now
+   c. Yes — but let me revise internal memo first
+
+4. ADDITIONAL RESEARCH — Are there gaps worth a second round?
+   a. Yes — generate new research prompts  b. No — sufficient
+
+---
+
+DRAFT — attorney review required. All [VERIFY CITATION] flags must be
+resolved in Westlaw before any authority appears in a filed brief.
+Pipeline Stage 5 (Westlaw verification) follows.
+"""
+
+_PHASE_B_PROMPT = """\
+You are a KLG senior appellate attorney finalizing a research package after Westlaw verification.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+MATTER: {matter_label}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+WESTLAW RESULTS (extracted text from downloaded .doc):
+{westlaw_content}
+
+PHASE A COMPILATION (from prior run):
+{prior_compilation}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+PHASE B TASKS:
+
+1. WESTLAW RESULTS SUMMARY
+   - How many authorities were successfully retrieved?
+   - Which were not found / rejected / out-of-plan?
+   Report:
+     Authorities requested: [N]
+     Successfully retrieved: [N]
+     Not found / rejected: [list]
+     Out of plan (excluded): [list]
+
+2. CROSS-REFERENCE vs. HALLUCINATION FLAGS
+   Compare retrieved authorities against the ⚠ [VERIFY CITATION] flags
+   from Phase A. Which flagged citations were confirmed real? Which were
+   not found (likely hallucinated)? Update confidence ratings.
+
+3. VERIFIED AUTHORITY LIST
+   Produce the final authority list with verification status:
+   | Citation | Status | Notes |
+   |----------|--------|-------|
+   | [cite] | ✅ Confirmed | |
+   | [cite] | ❌ Not found — hallucination risk | Remove from brief |
+   | [cite] | ⚠ Out-of-plan | Verify via law library |
+
+4. UPDATED RESEARCH SUMMARY
+   Revise the compiled memo's executive summary to reflect:
+   - [N] authorities confirmed via Westlaw
+   - [N] removed (not found / likely hallucinated)
+   - Final strength assessment for each issue
+
+5. POST-PIPELINE REVIEW (present once, all questions together)
+   [Same options as Phase A Post-Pipeline Options — attorney answers with letters]
+
+WRITING RULES: Same as Phase A. No fabricated holdings. Active voice. Em dashes—like this.
+
+DRAFT — attorney review required before final filing.
 """
 
 
@@ -130,9 +256,10 @@ class KLGResearchCompilation(Skill):
     name = "klg-research-compilation"
     required_tools = ["search_notion"]
     description = (
-        "Steps 4–5 of the KLG Research Pipeline: reads raw research notes from Notion, "
-        "compiles them into a structured legal research memo, and extracts a formatted "
-        "Westlaw authority list. Run after the research attorney has completed Steps 1–3."
+        "Steps 4–5 of the KLG Research Pipeline: compile Deep Research memos from Notion "
+        "into a structured legal research memo, perform convergence analysis, and generate "
+        "a Westlaw Find & Print authority list (batches of ≤100). "
+        "Phase B finalizes after Westlaw download. Run after Steps 1–3 are complete."
     )
 
     async def execute(self, ctx: SkillContext) -> SkillResult:
@@ -141,35 +268,66 @@ class KLGResearchCompilation(Skill):
         matter_label = ctx.matter_name or "this matter"
         matter_summary = ctx.matter_summary or "(No Notion project page found.)"
 
-        # Try to read research notes from an uploaded file first
-        research_notes = ""
+        # Determine phase from instruction
+        is_phase_b = any(k in instruction.lower() for k in (
+            "westlaw authorities", "westlaw downloaded", "finalize", "phase b",
+            "authorities are downloaded", "downloaded the westlaw",
+        ))
+
+        # Read any uploaded file
+        file_content = ""
         if file_tokens:
             try:
                 from alfred.file_store import consume_token, delete_file
                 path = consume_token(file_tokens[0])
                 if path:
-                    research_notes = skill_read_file_text(path)
+                    file_content = skill_read_file_text(path)
                     delete_file(path)
             except Exception as e:
                 logger.warning("klg-research-compilation: file extraction failed: %s", e)
 
-        # If no file, the scoped agent will fetch from Notion using search_notion
-        if not research_notes:
-            research_notes = (
-                "[No file uploaded — the scoped agent should call search_notion to "
-                f"retrieve research notes for {matter_label} from the matter's Notion page. "
-                "Search for 'research notes' or 'legal research' in the matter context.]"
+        if is_phase_b:
+            if not file_content:
+                return SkillResult(
+                    summary="klg-research-compilation (Phase B): no Westlaw file provided.",
+                    output=(
+                        "To finalize the research package, upload the Westlaw Find & Print "
+                        ".doc file downloaded after the authority verification run.\n\n"
+                        "Then say: 'Alfred, the Westlaw authorities are downloaded. "
+                        "Finalize the research package for [Matter Name].'"
+                    ),
+                    next_action="Upload the Westlaw .doc file and re-run.",
+                    success=False,
+                )
+
+            prompt = _PHASE_B_PROMPT.format(
+                matter_label=matter_label,
+                westlaw_content=file_content[:15000],
+                prior_compilation=matter_summary[:3000],
             )
 
-        if not matter_summary and not research_notes and not instruction:
+            output_text = await self.generate(prompt, ctx)
+            return SkillResult(
+                summary=f"Research package finalized for {matter_label}. Westlaw verification complete.",
+                output=f"**Research Compilation — Phase B Finalization — {matter_label}**\n\n{output_text}",
+                next_action=(
+                    "1. Verify all ❌ Not found authorities are removed from brief drafts.\n"
+                    "2. Save final research package to SharePoint: [Matter Folder]/KLG Research/\n"
+                    "3. Notify Tim in matter Slack channel that pipeline is complete."
+                ),
+                success=True,
+            )
+
+        # Phase A: Compilation
+        if not file_content and not matter_summary:
             return SkillResult(
                 summary="klg-research-compilation: no research content found.",
                 output=(
                     "No research notes found for this matter.\n\n"
-                    "To run research compilation:\n"
-                    "1. Complete Steps 1–3 of the KLG Research Pipeline first\n"
-                    "   (klg-issue-framing → klg-deep-research-prompts → run in Westlaw)\n"
-                    "2. Paste research notes into the matter's Notion page, OR\n"
+                    "**To run research compilation:**\n"
+                    "1. Complete Steps 1–3 first:\n"
+                    "   klg-issue-framing → klg-deep-research-prompts → run in Westlaw/Deep Research\n"
+                    "2. Paste research memo results into the matter's Notion page, OR\n"
                     "   upload a research notes file when invoking this skill\n"
                     "3. Re-run: `Alfred, run klg-research-compilation on [Matter Name]`"
                 ),
@@ -177,20 +335,29 @@ class KLGResearchCompilation(Skill):
                 success=False,
             )
 
-        # Build prompt — the scoped agent (with search_notion tool) will fetch
-        # additional Notion content if needed before synthesizing the memo
-        fetch_instruction = (
-            "BEFORE WRITING THE MEMO:\n"
-            "Call search_notion with a query like 'research notes [matter name]' to retrieve "
-            "any additional research content stored in Notion for this matter. "
-            "Combine that with any notes already provided below.\n\n"
-        ) if not file_tokens else ""
+        fetch_instructions = (
+            f"Call search_notion with query 'research notes {matter_label}' to retrieve "
+            "any additional research memos stored in Notion for this matter. "
+            "Combine whatever you find with the notes already provided below."
+        ) if not file_content else "(File uploaded — use the research content below.)"
 
-        prompt = fetch_instruction + _COMPILATION_PROMPT.format(
+        batch_instruction = (
+            "If the total authority count exceeds 100, split into batches of ≤100 items each, "
+            "labeled 'BATCH 1 OF N (items 1–100):' and so on. "
+            "Westlaw Find & Print accepts a maximum of 100 authorities per batch."
+        )
+
+        research_content = file_content[:15000] if file_content else (
+            f"[No file uploaded — retrieve from Notion using search_notion for '{matter_label}']"
+        )
+
+        prompt = _COMPILATION_PROMPT.format(
             matter_label=matter_label,
-            matter_summary=matter_summary[:3000],
-            research_notes=research_notes[:15000],
+            fetch_instructions=fetch_instructions,
+            matter_summary=matter_summary[:2000],
+            research_content=research_content,
             instruction=instruction or "(none — compile all available research)",
+            batch_instruction=batch_instruction,
         )
 
         output_text = await self.generate(prompt, ctx)
@@ -198,14 +365,16 @@ class KLGResearchCompilation(Skill):
         return SkillResult(
             summary=(
                 f"Research compilation complete for {matter_label}. "
-                "Memo and Westlaw authority list ready for attorney review."
+                "Memo, convergence table, and Westlaw authority list ready."
             ),
-            output=f"**Research Compilation — {matter_label}**\n\n{output_text}",
+            output=f"**Research Compilation — Phase A — {matter_label}**\n\n{output_text}",
             next_action=(
-                "1. Verify every citation marked [VERIFY CITATION] in Westlaw before using.\n"
-                "2. To assemble into a .docx memo, use the brief pipeline scripts in the "
-                "Alfred Code or Cowork environment: pack.py / assemble_brief.py.\n"
-                "3. Run klg-brief-elevation after drafting to apply KLG style standards."
+                "1. Copy the Westlaw Authority List (Section 3) and run it through "
+                "Westlaw Find & Print (batches of ≤100). Settings: Full text, Word (.doc), "
+                "single merged file.\n"
+                "2. Upload the Westlaw .doc and say: 'Alfred, the Westlaw authorities are "
+                "downloaded. Finalize the research package for [Matter Name].'\n"
+                "3. Verify every [VERIFY CITATION] flag before using any authority in a brief."
             ),
             success=True,
         )

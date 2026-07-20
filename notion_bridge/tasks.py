@@ -11,8 +11,14 @@ Tasks are stored inside each matter's Notion page, in one of two forms:
      Detected when no child_database block is present.
      Provides name and checked state only (lower fidelity).
 
-This module auto-detects which pattern a matter page uses and provides a
-unified interface for reading, creating, and updating tasks.
+This module also supports seeding tasks from the KLG shared task-template
+databases. When a new matter is opened, seed_from_template() copies all
+template rows into the appropriate shared DB with the new matter linked via
+the Projects relation.
+
+KLG shared task-template database IDs:
+  APPELLATE_TASKS_DB_ID   — "Appellate Briefing — Project Tasks"
+  TRIAL_COURT_TASKS_DB_ID — "Trial Court Brief Preparation — Project Tasks"
 """
 
 from __future__ import annotations
@@ -23,6 +29,17 @@ from typing import Any
 from notion_bridge.client import NotionBridge
 
 logger = logging.getLogger(__name__)
+
+# ── KLG shared task-template database IDs ────────────────────────────────────
+APPELLATE_TASKS_DB_ID   = "69e011f7-740e-41ee-be6b-f5673b36c392"
+TRIAL_COURT_TASKS_DB_ID = "deeacdf5-1c50-450b-bbc2-f6c14989aed2"
+
+# Notion user ID → display name (used in Slack seeding notifications)
+_NOTION_USER_NAMES: dict[str, str] = {
+    "b30c2eb6-779d-4d96-bdb9-2c3e81dced29": "Brittney",
+    "d3dcab1b-be5a-4f73-b205-1b28e895742f": "Tim",
+    "126d872b-594c-81f4-adf0-00020f9443eb": "Edwyn",
+}
 
 
 def _normalize_task(task_id: str, data: dict, *, is_block: bool = False) -> dict:
@@ -77,6 +94,77 @@ def _normalize_task(task_id: str, data: dict, *, is_block: bool = False) -> dict
         "priority": data.get("Priority") or data.get("priority") or "",
         "is_block": False,
     }
+
+
+def _build_seed_properties(row: dict, matter_id: str) -> dict[str, Any]:
+    """
+    Build a Notion properties dict for a new task row cloned from a template row.
+
+    Copies Task, Stage, Priority, Assignee, Expected Duration, Labels,
+    Auto-scheduled?, and Todo Notes from the template. Always sets Status to
+    "Not started" and Projects to [matter_id].
+    """
+    props: dict[str, Any] = {}
+
+    # Title (required)
+    task_name = row.get("Task") or row.get("Name") or ""
+    props["Task"] = {"title": [{"text": {"content": task_name}}]}
+
+    # Select fields
+    if row.get("Stage"):
+        props["Stage"] = {"select": {"name": row["Stage"]}}
+    if row.get("Priority"):
+        props["Priority"] = {"select": {"name": row["Priority"]}}
+
+    # Status — always reset
+    props["Status"] = {"status": {"name": "Not started"}}
+
+    # People — Assignee stored as JSON array of "user://UUID" strings in flat dict
+    assignee_raw = row.get("Assignee", "")
+    if assignee_raw:
+        import json
+        try:
+            people_list = json.loads(assignee_raw) if isinstance(assignee_raw, str) else assignee_raw
+            people_ids = []
+            for entry in (people_list if isinstance(people_list, list) else [people_list]):
+                uid = str(entry).removeprefix("user://").strip()
+                if uid:
+                    people_ids.append({"id": uid})
+            if people_ids:
+                props["Assignee"] = {"people": people_ids}
+        except Exception:
+            pass
+
+    # Rich text fields
+    if row.get("Expected Duration"):
+        props["Expected Duration"] = {
+            "rich_text": [{"text": {"content": str(row["Expected Duration"])}}]
+        }
+    if row.get("Todo Notes"):
+        props["Todo Notes"] = {
+            "rich_text": [{"text": {"content": str(row["Todo Notes"])}}]
+        }
+
+    # Checkbox
+    auto_sched = row.get("Auto-scheduled?")
+    if auto_sched is not None:
+        props["Auto-scheduled?"] = {"checkbox": auto_sched == "__YES__" or auto_sched is True}
+
+    # Multi-select Labels — stored as JSON array of strings
+    labels_raw = row.get("Labels", "")
+    if labels_raw:
+        import json
+        try:
+            labels = json.loads(labels_raw) if isinstance(labels_raw, str) else labels_raw
+            if isinstance(labels, list) and labels:
+                props["Labels"] = {"multi_select": [{"name": lbl} for lbl in labels]}
+        except Exception:
+            pass
+
+    # Relation — link to the new matter
+    props["Projects"] = {"relation": [{"id": matter_id}]}
+
+    return props
 
 
 class TaskPages:
@@ -215,6 +303,68 @@ class TaskPages:
             "priority": "",
             "is_block": True,
         }
+
+    async def seed_from_template(
+        self,
+        template_db_id: str,
+        matter_id: str,
+    ) -> list[dict]:
+        """
+        Seed tasks for a new matter from a KLG shared task-template database.
+
+        Reads all rows in template_db_id and clones each one as a new row in
+        the same database with the Projects relation set to matter_id. Status
+        is always reset to "Not started" regardless of the template row's state.
+
+        Idempotent: if any rows already link to matter_id, returns them without
+        creating duplicates.
+
+        Args:
+            template_db_id: APPELLATE_TASKS_DB_ID or TRIAL_COURT_TASKS_DB_ID.
+            matter_id:      Dashed UUID of the new matter's Notion page.
+
+        Returns:
+            List of newly created task dicts (or existing ones if already seeded).
+        """
+        # ── Duplicate guard ───────────────────────────────────────────────────
+        existing = await self._bridge.query_database(
+            database_id=template_db_id,
+            filter={"property": "Projects", "relation": {"contains": matter_id}},
+        )
+        if existing:
+            logger.info(
+                "seed_from_template: %d tasks already exist for matter %s — skipping.",
+                len(existing), matter_id[:8],
+            )
+            return [_normalize_task(r["id"], r, is_block=False) for r in existing if r.get("id")]
+
+        # ── Read template rows ────────────────────────────────────────────────
+        template_rows = await self._bridge.query_database(database_id=template_db_id)
+        if not template_rows:
+            logger.warning("seed_from_template: no template rows found in DB %s", template_db_id[:8])
+            return []
+
+        created: list[dict] = []
+        for row in template_rows:
+            props = _build_seed_properties(row, matter_id)
+            try:
+                raw = await self._bridge.create_page(
+                    database_id=template_db_id,
+                    properties=props,
+                )
+                if raw.get("id"):
+                    created.append(_normalize_task(raw["id"], raw, is_block=False))
+            except Exception as e:
+                logger.warning(
+                    "seed_from_template: failed to create task '%s': %s",
+                    row.get("Task") or row.get("Name") or "?", e,
+                )
+
+        logger.info(
+            "seed_from_template: created %d/%d tasks for matter %s.",
+            len(created), len(template_rows), matter_id[:8],
+        )
+        return created
 
     async def update_task(
         self,

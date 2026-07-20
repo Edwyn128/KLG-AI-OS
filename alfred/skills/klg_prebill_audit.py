@@ -1,22 +1,24 @@
 """
 alfred/skills/klg_prebill_audit.py — Pre-bill time-entry audit before finalization.
 
-Reads a Clio-exported CSV of time entries and flags billing problems before
-the bill goes to the client:
+Two-phase workflow:
+  Phase 1 — Mechanical detection: flag entries matching known cut patterns
+  Phase 2 — Judgment layer: Claude culls false positives and drafts supplements
 
-  • Block billing — multiple tasks lumped into one entry
-  • Thin descriptions — entries too vague to survive a fee motion
-  • Duplicate entries — same task billed twice
-  • Intra-firm conferences — partner + associate both billing the same call
-  • Clerical or administrative work — tasks that should not appear on a legal bill
-  • Vague communications — "phone call," "email correspondence" with no substance
+For the full .xlsx workbook (recommended for monthly billing QC), run the
+standalone script:
+    python alfred/skills/scripts/prebill_audit.py export.csv -o audit.xlsx --period "May 2026"
+
+This Alfred skill does the same detection as an LLM analysis when a CSV is
+uploaded, and returns a structured flagged-entry report with suggested supplements.
 
 Usage:
-  Upload the Clio time-entry CSV export, then:
-  "Alfred, run klg-prebill-audit on [Matter Name]."
+  1. Export time entries from Clio → Reports → Time Entries (CSV)
+  2. Attach the CSV in Alfred
+  3. "Alfred, run klg-prebill-audit on [Matter Name]."
 
-The skill reads the uploaded file, runs the LLM audit, and returns a flagged
-entry list with recommended edits or deletions.
+For full-period billing review (all matters, .xlsx output):
+  "Alfred, run klg-prebill-audit: monthly review for [Month Year]."
 """
 from __future__ import annotations
 
@@ -27,39 +29,61 @@ from alfred.skills.base import Skill, SkillContext, SkillResult, skill_read_file
 logger = logging.getLogger(__name__)
 
 _FEE_CUT_DOCTRINE = """\
-CALIFORNIA FEE-CUT DOCTRINE (embedded — do not invent additional authority):
+CALIFORNIA FEE-CUT DOCTRINE (internal training reference — verify all citations before filing):
 
-1. Block billing: billing multiple tasks in a single entry without time
-   allocated to each. Courts routinely apply percentage reductions (20–30%)
-   to block-billed entries. (Hensley v. Eckerhart; Ketchum v. Moses.)
+FRAMEWORK: Lodestar = reasonable hours × reasonable rate. Fee applicant bears
+the burden of documenting reasonable hours. Vague, padded, duplicative, or
+clerical time fails that burden. (Ketchum v. Moses (2001) 24 Cal.4th 1122 [VERIFY];
+PLCM Group, Inc. v. Drexler (2000) 22 Cal.4th 1084 [VERIFY])
 
-2. Insufficient description: entries must describe the work with enough
-   specificity for the court to assess reasonableness. "Research" or
-   "review file" without further detail routinely draws reductions.
+1. LONG ENTRY, THIN DESCRIPTION (highest exposure)
+   An entry of 2+ hours with a narrative too generic to test ("continue working on AOB,"
+   "attention to appeal") cannot be evaluated for reasonableness. Courts reduce or
+   strike. (Same authority as block billing — the defect is identical, magnified by hours.)
+   Fix: itemize discrete tasks and what each produced — which section drafted, which
+   issue researched, which authority located.
 
-3. Duplicative billing: when two timekeepers bill for the same meeting,
-   call, or task, courts reduce or eliminate the lesser entry — particularly
-   paralegal/associate entries for conferences the partner also bills.
+2. BLOCK BILLING (multiple tasks lumped in one entry)
+   Prevents the court from assessing the reasonableness of any single task. Courts apply
+   percentage haircuts (commonly 20–30%). (Bell v. Vista Unified School Dist. (2000)
+   82 Cal.App.4th 672 [VERIFY]; Christian Research Institute v. Alnor (2008)
+   165 Cal.App.4th 1315 [VERIFY])
+   Fix: split into separate entries, one task each, with task-level time.
 
-4. Clerical tasks: filing, copying, calendaring, and administrative coordination
-   are overhead, not compensable legal work. Billing these tasks invites
-   across-the-board reductions.
+3. DUPLICATE / NEAR-DUPLICATE ENTRIES
+   Identical or near-identical narratives read as the same work billed twice. Even when
+   work is genuinely distinct, identical text invites the inference and the cut.
+   Fix: differentiate narratives to show progression (Day 1: outline; Day 2: draft II.B).
 
-5. Vague communications: "phone call re: case" or "email to client" without
-   stating the substance fails the reasonable-scrutiny standard.
+4. INTRA-FIRM CONFERENCE (multiple billers on same meeting)
+   Courts ask whether multiple billers were necessary. Some co-authorship is reasonable
+   and defensible; it must be justified, not assumed.
+   Fix: confirm second attendee was necessary; otherwise bill one timekeeper.
 
-Flag — do not delete. Attorney decides what to keep, edit, or remove.
+5. CLERICAL / SECRETARIAL WORK (overhead, not compensable at professional rates)
+   Filing, formatting, bookmarking, uploading, calendaring, binder assembly,
+   memoranda of costs, proofs of service. (Missouri v. Jenkins (1989) 491 U.S. 274 [VERIFY])
+   Fix: write off, reclassify as overhead, or — if genuinely substantive — rewrite to show substance.
+
+6. CONFERENCE / EMAIL WITHOUT STATED SUBJECT
+   "Phone call re: case" or "email to client" fails the reasonableness test.
+   Fix: add "re [subject]" — takes 5 seconds, defeats the cut.
+
+7. BILLING JUDGMENT / LARGE SINGLE BLOCK (6+ hours in one entry)
+   Courts scrutinize. Confirm genuine continuous work; exercise billing judgment.
+
+SUPPLEMENTATION STANDARD: Specificity defeats vagueness cuts. But the cure is real
+task detail, not more words. A longer entry that is still generic is no better.
+Write what the work was and what it produced, in plain active voice.
 """
 
 _AUDIT_PROMPT = """\
 You are a KLG senior appellate attorney conducting a pre-bill audit.
 
-Your job: identify time entries in the attached CSV that create fee-cut risk
-before this invoice reaches the client. You are not the billing attorney —
-flag problems for review; do not unilaterally delete or revise entries.
+Your job: Phase 1 (detect) + Phase 2 (judgment) in one pass.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-FEE-CUT DOCTRINE (California)
+FEE-CUT DOCTRINE
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 {fee_cut_doctrine}
 
@@ -67,66 +91,81 @@ FEE-CUT DOCTRINE (California)
 MATTER: {matter_label}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 TIME ENTRIES (CSV):
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 {csv_content}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-ADDITIONAL INSTRUCTIONS:
-{instruction}
-
+ADDITIONAL INSTRUCTIONS: {instruction}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-Produce the pre-bill audit report in this format:
+PHASE 1 — FLAG EVERY ENTRY THAT MATCHES A CUT PATTERN:
 
-## Summary
-- Total entries reviewed: [N]
-- Total hours: [X.X]
-- Total amount: $[X]
-- Flagged entries: [N] entries, $[X] at risk
+Issue categories to detect:
+  LONG-THIN     — ≥2h with <8-word or generic description
+  BLOCK-BILLING — multiple distinct tasks in one entry (look for semicolons, action verb clusters)
+  DUPLICATE     — same/near-identical narrative by same timekeeper within the period
+  INTRA-CONF    — ≥2 timekeepers billing the same conference on the same day
+  CLERICAL      — filing, formatting, uploading, calendaring, copying, bookmarking, etc.
+  VAGUE-COMM    — conference/email entry with no "re [subject]"
+  OUTLIER       — single entry ≥6h (billing judgment check)
+  HYGIENE       — missing description, zero hours, off-increment duration
 
-## Flagged Entries
+PHASE 2 — JUDGMENT LAYER:
 
 For each flagged entry:
+1. Determine severity: High (LONG-THIN, BLOCK-BILLING, CLERICAL, DUPLICATE) /
+   Medium (INTRA-CONF, VAGUE-COMM, OUTLIER) / Low (HYGIENE)
+2. Cull obvious false positives — note them as cleared rather than flagging
+3. Draft a supplemented narrative drawn ONLY from what the work actually was
+   (based on context/description). If underlying work is unknown, write
+   "[TIMEKEEPER to supplement — describe tasks completed and outputs]"
 
-| # | Date | Timekeeper | Hours | Amount | Description | Issue | Recommended Action |
-|---|------|------------|-------|--------|-------------|-------|-------------------|
+OUTPUT FORMAT:
 
-Issue categories: BLOCK-BILLING | THIN-DESCRIPTION | DUPLICATE | INTRA-FIRM-CONF | CLERICAL | VAGUE-COMMS
+## Audit Summary
+- Total entries reviewed: [N]
+- Total hours: [X.X h]
+- Total amount: $[X]
+- Flagged entries: [N] entries / [X.X h] / $[X] at risk
 
-Recommended actions: SPLIT-ENTRY | EXPAND-DESCRIPTION | DELETE | REDUCE-TIME | COMBINE | VERIFY
+## High Severity Flags
 
-## Risk Assessment
+| # | Date | Timekeeper | Hours | Description | Issue | Suggested supplement |
+|---|------|------------|-------|-------------|-------|---------------------|
+[One row per flagged entry, sorted High → Medium → Low, then by hours desc]
 
-- High risk (likely reduced if challenged): [list entries]
-- Medium risk (could be defended with context): [list entries]
-- Low risk (fine as-is): [N entries — not listed individually]
+## Medium Severity Flags
 
-## Recommended Edits
+[Same table format]
 
-For each flagged entry, draft an improved description that would survive
-judicial scrutiny. Example:
-  Original: "Email re: case (0.5 hrs)"
-  Improved: "Email to client re: opposition's supplemental authority on Garcetti
-             and whether prior public-concern holding survives; advised client
-             of our response strategy (0.5 hrs)"
+## Summary by Issue Category
 
-## Totals at Risk
-
-| Issue Type | Entries | Hours | Amount |
-|------------|---------|-------|--------|
+| Issue | Entries | Hours | Amount |
+|-------|---------|-------|--------|
+| Long entry, thin description | | | |
 | Block billing | | | |
-| Thin description | | | |
-| Duplicate | | | |
+| Duplicate / near-duplicate | | | |
 | Intra-firm conference | | | |
-| Clerical | | | |
-| Vague communications | | | |
+| Clerical / non-billable | | | |
+| Conference/email without subject | | | |
+| Outlier (billing judgment) | | | |
 | **TOTAL AT RISK** | | | |
 
+## Summary by Timekeeper
+
+| Timekeeper | Flagged entries | Flagged hours |
+|------------|-----------------|---------------|
+
+## Firm-Level Notes (if applicable)
+[e.g., if >40% of entries land on whole/half-hour values: flag as possible estimation]
+
+## Recommended Next Steps
+1. [Top 2–3 specific actions for the billing team]
+
 ---
-DRAFT — attorney review required. Do not send this bill until flagged entries
-are resolved. Billing attorney has final authority on all edits.
+DRAFT — attorney review required. Attorney decides what to keep, edit, or remove.
+All flagged entries require billing-team judgment before Clio is updated.
+For the full .xlsx workbook, run: python alfred/skills/scripts/prebill_audit.py export.csv -o audit.xlsx
 """
 
 
@@ -134,16 +173,16 @@ class KLGPrebillAudit(Skill):
     name = "klg-prebill-audit"
     required_tools = []
     description = (
-        "Audit Clio time-entry CSV exports before finalization: flags block billing, "
-        "thin descriptions, duplicates, intra-firm conferences, clerical work, and "
-        "vague communications. Upload the CSV before running. "
-        "Returns a flagged-entry report with recommended edits."
+        "Monthly pre-bill hardening audit. Upload a Clio time-entry CSV, then run. "
+        "Detects block billing, thin descriptions, duplicates, intra-firm conferences, "
+        "clerical work, and vague communications. Returns flagged-entry report with "
+        "suggested supplements. Full .xlsx workbook available via the standalone script."
     )
 
     async def execute(self, ctx: SkillContext) -> SkillResult:
         file_tokens: list[str] = ctx.extra.get("file_tokens", [])
         instruction = ctx.user_instruction.strip()
-        matter_label = ctx.matter_name or "this matter"
+        matter_label = ctx.matter_name or "all matters (period review)"
 
         csv_content = ""
         if file_tokens:
@@ -160,12 +199,19 @@ class KLGPrebillAudit(Skill):
             return SkillResult(
                 summary="klg-prebill-audit: no time-entry file provided.",
                 output=(
-                    "Upload the Clio time-entry CSV export first, then run the audit:\n\n"
-                    "1. Export time entries from Clio → Reports → Time Entries (CSV)\n"
-                    "2. Attach the CSV in Alfred\n"
-                    "3. Run: `Alfred, run klg-prebill-audit on [Matter Name]`\n\n"
-                    "The audit flags block billing, thin descriptions, duplicates, "
-                    "intra-firm conferences, clerical work, and vague communications."
+                    "Upload the Clio time-entry CSV export first, then run the audit.\n\n"
+                    "**How to export from Clio:**\n"
+                    "Reports → Time Entries → select billing period → Export CSV\n\n"
+                    "**Then run:**\n"
+                    "`Alfred, run klg-prebill-audit on [Matter Name].`\n\n"
+                    "**Or for the full .xlsx workbook (monthly billing QC):**\n"
+                    "```\n"
+                    "python alfred/skills/scripts/prebill_audit.py export.csv \\\n"
+                    "  -o May2026_audit.xlsx --period 'May 2026'\n"
+                    "```\n\n"
+                    "The script produces a color-coded .xlsx with a Flagged Entries sheet "
+                    "(one row per flag with suggested supplement column) and a Summary sheet "
+                    "(counts/hours/dollars by issue category and timekeeper)."
                 ),
                 next_action="Export CSV from Clio and re-run with the file attached.",
                 success=False,
@@ -184,8 +230,11 @@ class KLGPrebillAudit(Skill):
             summary=f"Pre-bill audit complete for {matter_label}. Flagged entries ready for attorney review.",
             output=f"**Pre-Bill Audit — {matter_label}**\n\n{output_text}",
             next_action=(
-                "Review each flagged entry. Expand thin descriptions, split block-billed entries, "
-                "and remove clerical items before finalizing the invoice."
+                "1. Review each High severity flag first — expand thin descriptions, "
+                "split block-billed entries, write off clerical items.\n"
+                "2. For the full .xlsx workbook with color-coding and resolution columns:\n"
+                "   `python alfred/skills/scripts/prebill_audit.py export.csv -o audit.xlsx`\n"
+                "3. Attorney must approve all edits before Clio is updated."
             ),
             success=True,
         )
