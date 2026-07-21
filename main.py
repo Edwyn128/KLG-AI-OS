@@ -97,6 +97,11 @@ def _check_rate_limit(ip: str) -> bool:
         return False
     hits.append(now)
     _rate_counts[ip] = hits
+    # Prune IPs with no recent activity to prevent unbounded dict growth.
+    if len(_rate_counts) > 500:
+        stale = [k for k, v in _rate_counts.items() if not any(t > window_start for t in v)]
+        for k in stale:
+            del _rate_counts[k]
     return True
 
 
@@ -245,6 +250,8 @@ async def lifespan(app: FastAPI):
     bridge = NotionBridge()
     project_pages = ProjectPages(bridge)
     watch_list = WatchList(bridge)
+    from notion_bridge.tasks import TaskPages
+    task_pages = TaskPages(bridge)
     logger.info("Notion bridge initialized.")
 
     # 2. Initialize SharePoint bridge (optional — gracefully no-ops if unconfigured).
@@ -297,6 +304,7 @@ async def lifespan(app: FastAPI):
         alfred_notes=alfred_notes,
         system_state=system_state,
         slack_client=app.state.slack_client,
+        task_pages=task_pages,
     )
     logger.info("Alfred dependencies assembled.")
 

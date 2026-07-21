@@ -188,14 +188,79 @@ def get_alfred_deps(request: Request):
     return request.app.state.alfred_deps
 
 
+def get_verified_username(request: Request) -> str:
+    """
+    Extract and return the username from the verified Basic Auth header.
+
+    The middleware already validated the credential before this runs — we just
+    parse the username out of the header so routes can use it for logging and
+    access control without trusting the request body's self-reported user field.
+    Returns empty string if the header is absent or malformed (e.g., local dev
+    with auth disabled).
+    """
+    import base64
+    auth = request.headers.get("Authorization", "")
+    if auth.startswith("Basic "):
+        try:
+            return base64.b64decode(auth[6:]).decode().split(":", 1)[0]
+        except Exception:
+            pass
+    return ""
+
+
+# Users allowed to trigger internal agents (scheduler-equivalent endpoints).
+# Must match the casing used in APP_PASSWORDS keys (case-insensitive compare applied below).
+_AGENT_TRIGGER_ALLOWED = {"tim", "stu", "edwyn"}
+
+
+def require_agent_trigger_role(request: Request) -> str:
+    """
+    FastAPI dependency: enforce that only admin-level users can fire agent triggers.
+
+    Raises HTTP 403 for authenticated users who are not in _AGENT_TRIGGER_ALLOWED.
+    Returns the verified username on success.
+    """
+    username = get_verified_username(request)
+    if username.lower() not in _AGENT_TRIGGER_ALLOWED:
+        raise HTTPException(status_code=403, detail="Access restricted to admin users.")
+    return username
+
+
 # =============================================================================
 # ROUTES
 # =============================================================================
 
 
+def _parse_message_history(raw: list) -> list:
+    """
+    Validate and sanitize client-supplied conversation history.
+
+    Strips tool-request and tool-return parts to prevent history injection attacks.
+    Caps at 20 messages to prevent context-length errors.
+    Returns [] on any parse failure.
+    """
+    if not raw:
+        return []
+    try:
+        from pydantic_ai.messages import ModelMessagesTypeAdapter, ModelRequest, ModelResponse
+        parsed = ModelMessagesTypeAdapter.validate_python(raw)
+        safe = [
+            m for m in parsed
+            if isinstance(m, (ModelRequest, ModelResponse))
+            and not any(
+                getattr(p, "type", "") in ("tool-return", "tool-call")
+                for p in getattr(m, "parts", [])
+            )
+        ]
+        return safe[-20:] if len(safe) > 20 else safe
+    except Exception:
+        return []
+
+
 @router.post("/chat", response_model=ChatResponse, summary="Send a message to Alfred")
 async def chat_with_alfred(
     request: ChatRequest,
+    http_request: Request,
     alfred_deps=Depends(get_alfred_deps),
 ) -> ChatResponse:
     """
@@ -218,9 +283,12 @@ async def chat_with_alfred(
     """
     from alfred.agent import resolve_alfred_model, resolve_thinking_settings
 
+    # Use identity from the verified Basic Auth header, not the self-reported user field.
+    verified_user = get_verified_username(http_request) or request.user or "Team"
+
     logger.info(
         "Alfred chat from '%s' [model=%s]: %s",
-        request.user, request.model or "default", request.message[:100],
+        verified_user, request.model or "default", request.message[:100],
     )
 
     try:
@@ -229,16 +297,7 @@ async def chat_with_alfred(
         model_override = resolve_alfred_model(request.model)
         thinking_settings = resolve_thinking_settings(request.model)
 
-        message_history = []
-        if request.history:
-            try:
-                message_history = ModelMessagesTypeAdapter.validate_python(request.history)
-                # Cap history to prevent context-length errors. Tool-call cycles add
-                # 3-5 messages per turn; 20 covers ~4-6 recent turns comfortably.
-                if len(message_history) > 20:
-                    message_history = message_history[-20:]
-            except Exception:
-                message_history = []
+        message_history = _parse_message_history(request.history)
 
         effective_message = _inject_file_context(request.message, request.file_tokens)
 
@@ -251,8 +310,8 @@ async def chat_with_alfred(
             except Exception:
                 pass
 
-        # Store user identity on deps so save_note can attribute the note correctly.
-        alfred_deps._current_user = request.user  # type: ignore[attr-defined]
+        # Store verified user identity on deps so save_note can attribute correctly.
+        alfred_deps._current_user = verified_user  # type: ignore[attr-defined]
 
         from alfred.agent import run_with_fallback
         result = await run_with_fallback(
@@ -291,8 +350,8 @@ async def chat_with_alfred(
                     tools_used=tools_used,
                     model=request.model or _settings.alfred_model,
                 )
-            except Exception:
-                pass
+            except Exception as _log_err:
+                logger.warning("comms_log.log_interaction failed: %s", _log_err)
 
         return chat_response
 
@@ -310,6 +369,7 @@ async def chat_with_alfred(
 @router.post("/chat/stream", summary="Stream Alfred's response token by token")
 async def chat_with_alfred_stream(
     request: ChatRequest,
+    http_request: Request,
     alfred_deps=Depends(get_alfred_deps),
 ) -> StreamingResponse:
     """
@@ -331,9 +391,12 @@ async def chat_with_alfred_stream(
     from alfred.agent import AlfredAgent, resolve_alfred_model, resolve_thinking_settings
     from config import settings as _settings
 
+    # Use identity from the verified Basic Auth header, not the self-reported user field.
+    verified_user = get_verified_username(http_request) or request.user or "Team"
+
     logger.info(
         "Alfred stream from '%s' [model=%s]: %s",
-        request.user, request.model or "default", request.message[:100],
+        verified_user, request.model or "default", request.message[:100],
     )
 
     from pydantic_ai.messages import ModelMessagesTypeAdapter
@@ -350,16 +413,7 @@ async def chat_with_alfred_stream(
             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
         )
 
-    message_history = []
-    if request.history:
-        try:
-            message_history = ModelMessagesTypeAdapter.validate_python(request.history)
-            # Cap history to prevent context-length errors. Tool-call cycles add
-            # 3-5 messages per turn; 20 covers ~4-6 recent turns comfortably.
-            if len(message_history) > 20:
-                message_history = message_history[-20:]
-        except Exception:
-            message_history = []
+    message_history = _parse_message_history(request.history)
 
     async def generate():
         # Send a ping immediately so Railway's proxy knows this is SSE
@@ -387,9 +441,13 @@ async def chat_with_alfred_stream(
             )
 
             effective_message = _inject_file_context(request.message, request.file_tokens)
+
+            import dataclasses
+            scoped_deps = dataclasses.replace(alfred_deps, _current_user=verified_user)
+
             async with AlfredAgent.iter(
                 effective_message,
-                deps=alfred_deps,
+                deps=scoped_deps,
                 model=model_override,
                 model_settings=thinking_settings,
                 message_history=message_history,
@@ -437,15 +495,15 @@ async def chat_with_alfred_stream(
             if alfred_deps.comms_log:
                 try:
                     await alfred_deps.comms_log.log_interaction(
-                        user=request.user,
+                        user=verified_user,
                         agent="alfred",
                         message=request.message,
                         response=full_response,
                         tools_used=tools_used,
                         model=request.model or _settings.alfred_model,
                     )
-                except Exception:
-                    pass
+                except Exception as _log_err:
+                    logger.warning("comms_log.log_interaction failed: %s", _log_err)
 
             yield f"data: {json.dumps({'done': True, 'tools_used': tools_used, 'history': new_history})}\n\n"
 
@@ -754,7 +812,7 @@ async def get_matter_tasks(
     from notion_bridge.tasks import TaskPages
 
     try:
-        task_pages = TaskPages(alfred_deps.bridge)
+        task_pages = alfred_deps.task_pages or TaskPages(alfred_deps.bridge)
         tasks = await task_pages.get_tasks_for_matter(matter_id)
         return {"matter_id": matter_id, "count": len(tasks), "tasks": tasks}
     except Exception as e:
@@ -777,7 +835,7 @@ async def create_matter_task(
     from notion_bridge.tasks import TaskPages
 
     try:
-        task_pages = TaskPages(alfred_deps.bridge)
+        task_pages = alfred_deps.task_pages or TaskPages(alfred_deps.bridge)
         task = await task_pages.create_task(
             matter_id=matter_id,
             name=req.name,
@@ -809,7 +867,7 @@ async def update_task(
     from notion_bridge.tasks import TaskPages
 
     try:
-        task_pages = TaskPages(alfred_deps.bridge)
+        task_pages = alfred_deps.task_pages or TaskPages(alfred_deps.bridge)
         updated = await task_pages.update_task(
             task_id=task_id,
             is_block=req.is_block,
@@ -846,7 +904,7 @@ async def delete_task(
     from notion_bridge.tasks import TaskPages
 
     try:
-        task_pages = TaskPages(alfred_deps.bridge)
+        task_pages = alfred_deps.task_pages or TaskPages(alfred_deps.bridge)
         await task_pages.delete_task(task_id=task_id, is_block=is_block)
         return {"status": "deleted", "task_id": task_id}
     except Exception as e:
@@ -858,7 +916,11 @@ async def delete_task(
     "/agents/huddle-import",
     summary="Manually trigger the Slack huddle → Notion import",
 )
-async def trigger_huddle_import(request: Request) -> dict[str, Any]:
+async def trigger_huddle_import(
+    request: Request,
+    alfred_deps=Depends(get_alfred_deps),
+    _username: str = Depends(require_agent_trigger_role),
+) -> dict[str, Any]:
     """
     Manually trigger the Slack huddle canvas importer.
 
@@ -872,7 +934,6 @@ async def trigger_huddle_import(request: Request) -> dict[str, Any]:
     """
     from agents.huddle_import import run_huddle_import
 
-    alfred_deps = request.app.state.alfred_deps
     slack_client = getattr(request.app.state, "slack_client", None)
 
     try:
@@ -897,7 +958,11 @@ async def trigger_huddle_import(request: Request) -> dict[str, Any]:
     "/agents/case-checkin",
     summary="Manually trigger the case check-in agent",
 )
-async def trigger_case_checkin(request: Request) -> dict[str, str]:
+async def trigger_case_checkin(
+    request: Request,
+    alfred_deps=Depends(get_alfred_deps),
+    _username: str = Depends(require_agent_trigger_role),
+) -> dict[str, str]:
     """
     Manually trigger the case check-in agent.
 
@@ -909,7 +974,6 @@ async def trigger_case_checkin(request: Request) -> dict[str, str]:
     """
     from agents.case_checkin import run_case_checkin
 
-    alfred_deps = request.app.state.alfred_deps
     slack_client = getattr(request.app.state, "slack_client", None)
 
     try:
@@ -927,7 +991,11 @@ async def trigger_case_checkin(request: Request) -> dict[str, str]:
     "/agents/deadline-watch",
     summary="Manually trigger the daily deadline-watch agent",
 )
-async def trigger_deadline_watch(request: Request) -> dict[str, str]:
+async def trigger_deadline_watch(
+    request: Request,
+    alfred_deps=Depends(get_alfred_deps),
+    _username: str = Depends(require_agent_trigger_role),
+) -> dict[str, str]:
     """
     Manually trigger the daily deadline-watch agent.
 
@@ -939,7 +1007,6 @@ async def trigger_deadline_watch(request: Request) -> dict[str, str]:
     """
     from agents.deadline_watch import run_deadline_watch
 
-    alfred_deps = request.app.state.alfred_deps
     slack_client = getattr(request.app.state, "slack_client", None)
 
     try:
@@ -957,11 +1024,14 @@ async def trigger_deadline_watch(request: Request) -> dict[str, str]:
     "/agents/weekly-agenda",
     summary="Manually trigger the Monday weekly agenda agent",
 )
-async def trigger_weekly_agenda(request: Request) -> dict[str, str]:
+async def trigger_weekly_agenda(
+    request: Request,
+    alfred_deps=Depends(get_alfred_deps),
+    _username: str = Depends(require_agent_trigger_role),
+) -> dict[str, str]:
     """Trigger the weekly agenda — posts all active matters grouped by priority to #case-management."""
     from agents.scheduler import _run_weekly_agenda
 
-    alfred_deps = request.app.state.alfred_deps
     slack_client = getattr(request.app.state, "slack_client", None)
 
     try:
@@ -979,11 +1049,14 @@ async def trigger_weekly_agenda(request: Request) -> dict[str, str]:
     "/agents/hygiene-scan",
     summary="Manually trigger the weekly project hygiene scan",
 )
-async def trigger_hygiene_scan(request: Request) -> dict[str, str]:
+async def trigger_hygiene_scan(
+    request: Request,
+    alfred_deps=Depends(get_alfred_deps),
+    _username: str = Depends(require_agent_trigger_role),
+) -> dict[str, str]:
     """Trigger the hygiene scan — surfaces stale matters, missing dates, and owner gaps."""
     from agents.scheduler import _run_hygiene_scan
 
-    alfred_deps = request.app.state.alfred_deps
     slack_client = getattr(request.app.state, "slack_client", None)
 
     try:
@@ -1001,7 +1074,11 @@ async def trigger_hygiene_scan(request: Request) -> dict[str, str]:
     "/agents/sharepoint-monitor",
     summary="Manually trigger the SharePoint delta change monitor",
 )
-async def trigger_sharepoint_monitor(request: Request) -> dict[str, str]:
+async def trigger_sharepoint_monitor(
+    request: Request,
+    alfred_deps=Depends(get_alfred_deps),
+    _username: str = Depends(require_agent_trigger_role),
+) -> dict[str, str]:
     """
     Manually trigger one SharePoint delta poll cycle.
 
@@ -1012,7 +1089,6 @@ async def trigger_sharepoint_monitor(request: Request) -> dict[str, str]:
     """
     from agents.sharepoint_monitor import run_sharepoint_monitor
 
-    alfred_deps = request.app.state.alfred_deps
     slack_client = getattr(request.app.state, "slack_client", None)
 
     try:

@@ -162,6 +162,24 @@ class AlfredDependencies:
     to persist and replay conversation context across requests.
     """
 
+    task_pages: Any = None
+    """
+    High-level interface to per-matter task lists (notion_bridge.tasks.TaskPages).
+    Typed as Any here (rather than importing TaskPages directly) to avoid a
+    circular import between alfred.agent and notion_bridge.tasks. Optional —
+    route handlers fall back to constructing TaskPages(bridge) on demand if
+    this is not set.
+    """
+
+    _current_user: str | None = None
+    """
+    Verified username for the in-flight request, used by tools (e.g. save_note)
+    to attribute actions correctly. Set per-request — either mutated directly on
+    a request-scoped deps instance, or via dataclasses.replace() to produce a
+    scoped copy that does not mutate the shared singleton across concurrent
+    requests (see H-1).
+    """
+
 
 # =============================================================================
 # SYSTEM PROMPT
@@ -873,6 +891,15 @@ async def get_upcoming_deadlines(
     return "\n".join(lines)
 
 
+# Words that carry no search signal — don't bother searching these alone.
+# Module-level so it isn't rebuilt as a new set object on every search_notion() call.
+_SEARCH_STOP_WORDS = {
+    "when", "what", "where", "which", "with", "that", "this", "have",
+    "from", "about", "event", "judge", "society", "the", "and", "for",
+    "will", "been", "does", "their", "there", "then", "than", "some",
+}
+
+
 @AlfredAgent.tool
 async def search_notion(
     ctx: RunContext[AlfredDependencies],
@@ -899,13 +926,6 @@ async def search_notion(
         A list of matching pages with their titles and Notion URLs.
         Returns "No results found" if nothing matches.
     """
-    # Words that carry no search signal — don't bother searching these alone.
-    _STOP = {
-        "when", "what", "where", "which", "with", "that", "this", "have",
-        "from", "about", "event", "judge", "society", "the", "and", "for",
-        "will", "been", "does", "their", "there", "then", "than", "some",
-    }
-
     seen_ids: set[str] = set()
     results: list[dict] = []
 
@@ -925,7 +945,7 @@ async def search_notion(
     if not results:
         keywords = [
             w for w in re.split(r"\W+", query)
-            if len(w) >= 4 and w.lower() not in _STOP
+            if len(w) >= 4 and w.lower() not in _SEARCH_STOP_WORDS
         ]
         for kw in keywords:
             _add(await ctx.deps.bridge.search(kw))
@@ -1589,10 +1609,14 @@ async def send_slack_message(
 
     resolved = channel.strip().lstrip("@")
 
-    # Fetch members once — reused for both channel resolution and @mention rewriting
+    # Fetch members once per deps instance — reused for both channel resolution
+    # and @mention rewriting, and cached so repeated tool calls in the same
+    # conversation don't re-fetch the full workspace user list every time.
     members_cache: list = []
     try:
-        members_cache = (await ctx.deps.slack_client.users_list()).get("members") or []
+        if getattr(ctx.deps, "_slack_members_cache", None) is None:
+            ctx.deps._slack_members_cache = (await ctx.deps.slack_client.users_list()).get("members") or []
+        members_cache = ctx.deps._slack_members_cache
     except Exception as e:
         logger.warning("Slack users_list failed: %s", e)
 

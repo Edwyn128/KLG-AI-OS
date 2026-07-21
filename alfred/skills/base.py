@@ -39,7 +39,7 @@ from __future__ import annotations
 import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, ClassVar
 
 logger = logging.getLogger(__name__)
 
@@ -168,13 +168,16 @@ class Skill(ABC):
     Skills that produce large documents (novella, record-digest) should set this.
     """
 
-    required_tools: list[str] = []
+    required_tools: ClassVar[list[str]] = []
     """
     Tool names this skill may call during AI execution.
     Must be a subset of the keys in SKILL_TOOLS (alfred/agent.py).
     Scoped to least privilege — only list tools the skill actually needs.
     run_skill is never a valid entry (no recursive invocation).
     Skills that don't override this get a plain toolless completion (original behavior).
+    Declared ClassVar (not a per-instance mutable default) — this is an
+    intentionally shared class-level constant; subclasses override it by
+    reassigning the whole list at the class body, never by mutating in place.
     """
 
     async def generate(self, prompt: str, ctx: SkillContext) -> str:
