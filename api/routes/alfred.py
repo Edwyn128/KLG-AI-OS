@@ -505,7 +505,7 @@ async def get_activity(
         raw = await alfred_deps.comms_log.get_chat_activity(days=days)
     except Exception as e:
         logger.error("get_activity error: %s", e, exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="An internal error occurred. Check server logs.")
 
     entries = []
     for item in raw[:100]:
@@ -609,7 +609,7 @@ async def list_active_matters(
         return {"count": len(normalized), "category": category, "matters": normalized}
     except Exception as e:
         logger.error("list_active_matters error: %s", e, exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="An internal error occurred. Check server logs.")
 
 
 @router.get("/deadlines", summary="Get matters with upcoming deadlines")
@@ -636,7 +636,7 @@ async def get_upcoming_deadlines(
         return {"days_ahead": days, "category": category, "count": len(normalized), "matters": normalized}
     except Exception as e:
         logger.error("get_upcoming_deadlines error: %s", e, exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="An internal error occurred. Check server logs.")
 
 
 class MatterUpdateRequest(BaseModel):
@@ -690,7 +690,7 @@ async def get_matter_detail(
         return _normalize_matter(raw)
     except Exception as e:
         logger.error("get_matter_detail(%s) error: %s", matter_id, e, exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="An internal error occurred. Check server logs.")
 
 
 @router.patch("/matters/{matter_id}", summary="Update fields on a matter")
@@ -736,7 +736,7 @@ async def update_matter_fields(
         return _normalize_matter(raw)
     except Exception as e:
         logger.error("update_matter_fields(%s) error: %s", matter_id, e, exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="An internal error occurred. Check server logs.")
 
 
 @router.get("/matters/{matter_id}/tasks", summary="Get all tasks for a matter")
@@ -759,7 +759,7 @@ async def get_matter_tasks(
         return {"matter_id": matter_id, "count": len(tasks), "tasks": tasks}
     except Exception as e:
         logger.error("get_matter_tasks(%s) error: %s", matter_id, e, exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="An internal error occurred. Check server logs.")
 
 
 @router.post("/matters/{matter_id}/tasks", summary="Create a task for a matter")
@@ -791,7 +791,7 @@ async def create_matter_task(
         return task
     except Exception as e:
         logger.error("create_matter_task(%s) error: %s", matter_id, e, exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="An internal error occurred. Check server logs.")
 
 
 @router.patch("/tasks/{task_id}", summary="Update a task")
@@ -825,7 +825,7 @@ async def update_task(
         return updated or {"id": task_id, "updated": True}
     except Exception as e:
         logger.error("update_task(%s) error: %s", task_id, e, exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="An internal error occurred. Check server logs.")
 
 
 @router.delete("/tasks/{task_id}", summary="Complete/delete a task")
@@ -851,7 +851,7 @@ async def delete_task(
         return {"status": "deleted", "task_id": task_id}
     except Exception as e:
         logger.error("delete_task(%s) error: %s", task_id, e, exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="An internal error occurred. Check server logs.")
 
 
 @router.post(
@@ -890,7 +890,7 @@ async def trigger_huddle_import(request: Request) -> dict[str, Any]:
         }
     except Exception as e:
         logger.error("trigger_huddle_import error: %s", e, exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="An internal error occurred. Check server logs.")
 
 
 @router.post(
@@ -920,7 +920,7 @@ async def trigger_case_checkin(request: Request) -> dict[str, str]:
         return {"status": "success", "detail": "Check-in run complete. See server logs for per-matter results."}
     except Exception as e:
         logger.error("trigger_case_checkin error: %s", e, exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="An internal error occurred. Check server logs.")
 
 
 @router.post(
@@ -950,7 +950,7 @@ async def trigger_deadline_watch(request: Request) -> dict[str, str]:
         return {"status": "success", "message": message}
     except Exception as e:
         logger.error("trigger_deadline_watch error: %s", e, exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="An internal error occurred. Check server logs.")
 
 
 @router.post(
@@ -972,7 +972,7 @@ async def trigger_weekly_agenda(request: Request) -> dict[str, str]:
         return {"status": "success", "detail": "Weekly agenda posted. See #case-management."}
     except Exception as e:
         logger.error("trigger_weekly_agenda error: %s", e, exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="An internal error occurred. Check server logs.")
 
 
 @router.post(
@@ -994,7 +994,7 @@ async def trigger_hygiene_scan(request: Request) -> dict[str, str]:
         return {"status": "success", "detail": "Hygiene scan complete. See #case-management."}
     except Exception as e:
         logger.error("trigger_hygiene_scan error: %s", e, exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="An internal error occurred. Check server logs.")
 
 
 @router.post(
@@ -1024,7 +1024,7 @@ async def trigger_sharepoint_monitor(request: Request) -> dict[str, str]:
         return {"status": "success", "detail": summary}
     except Exception as e:
         logger.error("trigger_sharepoint_monitor error: %s", e, exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="An internal error occurred. Check server logs.")
 
 
 # =============================================================================

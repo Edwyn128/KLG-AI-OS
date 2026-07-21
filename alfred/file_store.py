@@ -138,14 +138,25 @@ def cleanup_expired(max_age_seconds: int = 3600) -> int:
 # Each base64 chunk of 40MB raw ≈ 53MB of JSON — safely under Railway's limit.
 # A 400-page scanned PDF (80–160MB) needs 2–4 chunks at 40MB each.
 
+_MAX_CHUNK_TOTAL_MB = 200  # hard cap on assembled chunked upload size
+
+
+def _sanitize_filename(filename: str) -> str:
+    """Strip path separators and non-safe characters from an uploaded filename."""
+    name = Path(filename).name  # drop any directory components
+    return "".join(c if c.isalnum() or c in "._- " else "_" for c in name) or "upload"
+
+
 def start_chunk_session(upload_id: str, filename: str, total_chunks: int) -> None:
     """Initialize a chunked upload session."""
-    temp_path = str(_TEMP_DIR / f"{upload_id}_{filename}")
+    safe_name = _sanitize_filename(filename)
+    temp_path = str(_TEMP_DIR / f"{upload_id}_{safe_name}")
     _CHUNK_SESSIONS[upload_id] = {
-        "filename": filename,
+        "filename": safe_name,
         "total_chunks": total_chunks,
         "chunks_received": 0,
         "path": temp_path,
+        "total_bytes": 0,
     }
     logger.info(
         "FileStore: chunk session %s started for '%s' (%d chunks)",
@@ -167,6 +178,15 @@ def append_chunk(upload_id: str, chunk_index: int, data_b64: str) -> dict:
         raise ValueError(f"Unknown upload session: {upload_id[:8]}")
 
     raw = base64.b64decode(data_b64)
+
+    # Enforce cumulative size cap before writing
+    session["total_bytes"] += len(raw)
+    max_bytes = _MAX_CHUNK_TOTAL_MB * 1024 * 1024
+    if session["total_bytes"] > max_bytes:
+        _CHUNK_SESSIONS.pop(upload_id, None)
+        raise ValueError(
+            f"Chunked upload exceeds the {_MAX_CHUNK_TOTAL_MB} MB limit."
+        )
 
     # Chunks must arrive in order (chunk_index 0 truncates, rest append).
     mode = "wb" if chunk_index == 0 else "ab"

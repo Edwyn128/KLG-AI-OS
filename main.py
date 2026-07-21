@@ -101,15 +101,18 @@ def _check_rate_limit(ip: str) -> bool:
 
 
 def _load_password_map() -> dict[str, str]:
-    """Parse APP_PASSWORDS JSON into {username_lower: password}. Returns {} on error."""
+    """
+    Parse APP_PASSWORDS JSON into {username_lower: password}.
+
+    Called once at startup. Returns {} on error.
+    """
     import json
     raw = settings.app_passwords.strip()
     if not raw:
         return {}
     # Railway's raw editor can wrap the value in extra quotes or add escape sequences.
-    # Handle: literal \n (two chars), actual newlines, escaped quotes, and outer string wrapping.
+    # Handle: literal \n (two chars), actual newlines, escaped quotes, outer string wrapping.
     cleaned = raw.replace('\\n', '').replace('\n', '').replace('\\"', '"')
-    # If Railway double-encoded it as a JSON string, unwrap once.
     if cleaned.startswith('"') and cleaned.endswith('"'):
         try:
             cleaned = json.loads(cleaned)
@@ -128,6 +131,10 @@ def _load_password_map() -> dict[str, str]:
         return {}
 
 
+# Parse once at import time — never changes at runtime.
+_PASSWORD_MAP: dict[str, str] = _load_password_map()
+
+
 def _verify_credentials(username: str, password: str) -> bool:
     """
     Return True if username:password is valid.
@@ -143,8 +150,7 @@ def _verify_credentials(username: str, password: str) -> bool:
         return True
 
     # Per-user password — keys stored lowercase, lookup normalized to lowercase
-    pw_map = _load_password_map()
-    expected = pw_map.get(username.lower(), "")
+    expected = _PASSWORD_MAP.get(username.lower(), "")
     if expected and secrets.compare_digest(password.encode(), expected.encode()):
         return True
 
@@ -223,6 +229,13 @@ async def lifespan(app: FastAPI):
     """
     # ── STARTUP ───────────────────────────────────────────────────────────────
     logger.info("KLG AI OS starting up...")
+
+    # Warn loudly if auth is unconfigured — anyone can reach the API.
+    if not settings.app_password and not settings.app_passwords:
+        logger.warning(
+            "AUTH DISABLED: neither APP_PASSWORD nor APP_PASSWORDS is set. "
+            "All endpoints are publicly accessible. Set at least one in Railway env vars."
+        )
 
     # 1. Initialize the Notion bridge — the app's connection to Notion.
     from notion_bridge.client import NotionBridge

@@ -1877,8 +1877,8 @@ async def run_skill(
     skill_name: str,
     instruction: str = "",
     matter_name: str = "",
-    file_tokens: list[str] = [],
-    extra: dict = {},
+    file_tokens: list[str] | None = None,
+    extra: dict | None = None,
 ) -> str:
     """
     Execute a named KLG skill workflow.
@@ -1959,6 +1959,9 @@ async def run_skill(
     """
     from alfred.skills import SKILL_REGISTRY
     from alfred.skills.base import SkillContext
+
+    file_tokens = file_tokens or []
+    extra = extra or {}
 
     skill = SKILL_REGISTRY.get(skill_name)
     if skill is None:
