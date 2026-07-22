@@ -140,6 +140,38 @@ def _load_password_map() -> dict[str, str]:
 _PASSWORD_MAP: dict[str, str] = _load_password_map()
 
 
+def _load_client_matter_map() -> dict[str, list[str]]:
+    """
+    Parse APP_CLIENT_MATTER_MAP → {username_lower: [matter_name, ...]}.
+    Called once at startup. Returns {} on error or if unset.
+    Values can be a single string or a list of strings.
+    """
+    import json
+    raw = settings.client_matter_map.strip()
+    if not raw:
+        return {}
+    cleaned = raw.replace('\\n', '').replace('\n', '').replace('\\"', '"')
+    if cleaned.startswith('"') and cleaned.endswith('"'):
+        try:
+            cleaned = json.loads(cleaned)
+        except Exception:
+            pass
+    try:
+        data = json.loads(cleaned)
+        result = {}
+        for k, v in data.items():
+            matters = v if isinstance(v, list) else [v]
+            result[str(k).strip().lower()] = [str(m).strip() for m in matters]
+        return result
+    except Exception as e:
+        logger.warning("APP_CLIENT_MATTER_MAP could not be parsed: %s", e)
+        return {}
+
+
+# Parse once at startup — never changes at runtime.
+_CLIENT_MATTER_MAP: dict[str, list[str]] = _load_client_matter_map()
+
+
 def _verify_credentials(username: str, password: str) -> bool:
     """
     Return True if username:password is valid.
@@ -241,6 +273,9 @@ async def lifespan(app: FastAPI):
             "AUTH DISABLED: neither APP_PASSWORD nor APP_PASSWORDS is set. "
             "All endpoints are publicly accessible. Set at least one in Railway env vars."
         )
+
+    if _CLIENT_MATTER_MAP:
+        logger.info("Client mode active: %d client user(s) configured.", len(_CLIENT_MATTER_MAP))
 
     # 1. Initialize the Notion bridge — the app's connection to Notion.
     from notion_bridge.client import NotionBridge

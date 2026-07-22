@@ -305,6 +305,21 @@ class Settings(BaseSettings):
     app_password (master) is always checked as a fallback.
     """
 
+    client_matter_map: str = ""
+    """
+    JSON map from client username (lowercase) to permitted matter name(s).
+    Single: {"smith_client": "Smith v. CDCR"}
+    Multi:  {"jones_client": ["Jones AOB", "Jones Reply"]}
+
+    If a username appears in this map, that session is a client session:
+    Alfred restricts every tool and endpoint to the listed matter(s) only,
+    hides firm internals, staff names, and the Bloodhound system, and
+    disables all write access.
+
+    Leave empty to disable client mode entirely (the default — all
+    authenticated users are treated as internal firm users).
+    """
+
     cron_secret: str = ""
     """
     Shared secret for Railway Cron Jobs. Set CRON_SECRET in Railway env vars.

@@ -226,6 +226,20 @@ def require_agent_trigger_role(request: Request) -> str:
     return username
 
 
+def get_client_matters(username: str) -> list[str] | None:
+    """
+    Return the permitted matter names for a client user, or None if this is
+    an internal firm user. None means no restrictions apply.
+    """
+    from main import _CLIENT_MATTER_MAP
+    return _CLIENT_MATTER_MAP.get(username.lower())
+
+
+def get_client_scope(request: Request) -> list[str] | None:
+    """FastAPI dependency: returns permitted matter names for client users, None for firm users."""
+    return get_client_matters(get_verified_username(request))
+
+
 # =============================================================================
 # ROUTES
 # =============================================================================
@@ -292,6 +306,8 @@ async def chat_with_alfred(
     )
 
     try:
+        import dataclasses
+
         from pydantic_ai.messages import ModelMessagesTypeAdapter
 
         model_override = resolve_alfred_model(request.model)
@@ -301,22 +317,39 @@ async def chat_with_alfred(
 
         effective_message = _inject_file_context(request.message, request.file_tokens)
 
-        # Inject Alfred Notes persistent memory as context prefix.
-        if alfred_deps.alfred_notes:
+        client_matters = get_client_matters(verified_user)
+        scoped_deps = dataclasses.replace(
+            alfred_deps,
+            client_matters=client_matters,
+            _current_user=verified_user,
+        )
+
+        # Inject Alfred Notes — scoped to client's matter for client sessions.
+        if scoped_deps.alfred_notes:
             try:
-                notes_ctx = await alfred_deps.alfred_notes.recall_for_context(limit=12)
+                recall_matter = client_matters[0] if client_matters else ""
+                notes_ctx = await scoped_deps.alfred_notes.recall_for_context(
+                    matter=recall_matter, limit=12
+                )
                 if notes_ctx:
                     effective_message = f"{notes_ctx}\n\n---\n\n{effective_message}"
             except Exception:
                 pass
 
-        # Store verified user identity on deps so save_note can attribute correctly.
-        alfred_deps._current_user = verified_user  # type: ignore[attr-defined]
+        # Resolve matter page ID for client sessions — used to tag CommsLog entries.
+        client_matter_page_id = ""
+        if client_matters:
+            try:
+                _m = await scoped_deps.project_pages.find_matter(client_matters[0])
+                if _m:
+                    client_matter_page_id = _m.get("id", "")
+            except Exception:
+                pass
 
         from alfred.agent import run_with_fallback
         result = await run_with_fallback(
             effective_message,
-            deps=alfred_deps,
+            deps=scoped_deps,
             model_override=model_override,
             model_settings=thinking_settings,
             message_history=message_history,
@@ -339,16 +372,17 @@ async def chat_with_alfred(
             history=new_history,
         )
 
-        if alfred_deps.comms_log:
+        if scoped_deps.comms_log:
             try:
                 from config import settings as _settings
-                await alfred_deps.comms_log.log_interaction(
+                await scoped_deps.comms_log.log_interaction(
                     user=request.user,
                     agent="alfred",
                     message=request.message,
                     response=result.output,
                     tools_used=tools_used,
                     model=request.model or _settings.alfred_model,
+                    matter_page_id=client_matter_page_id,
                 )
             except Exception as _log_err:
                 logger.warning("comms_log.log_interaction failed: %s", _log_err)
@@ -443,7 +477,34 @@ async def chat_with_alfred_stream(
             effective_message = _inject_file_context(request.message, request.file_tokens)
 
             import dataclasses
-            scoped_deps = dataclasses.replace(alfred_deps, _current_user=verified_user)
+            client_matters = get_client_matters(verified_user)
+            scoped_deps = dataclasses.replace(
+                alfred_deps,
+                client_matters=client_matters,
+                _current_user=verified_user,
+            )
+
+            # Inject Alfred Notes — scoped to client's matter for client sessions.
+            if scoped_deps.alfred_notes:
+                try:
+                    recall_matter = client_matters[0] if client_matters else ""
+                    notes_ctx = await scoped_deps.alfred_notes.recall_for_context(
+                        matter=recall_matter, limit=12
+                    )
+                    if notes_ctx:
+                        effective_message = f"{notes_ctx}\n\n---\n\n{effective_message}"
+                except Exception as _notes_err:
+                    logger.warning("Alfred Notes recall failed: %s", _notes_err)
+
+            # Resolve matter page ID for client sessions — used to tag CommsLog entries.
+            client_matter_page_id = ""
+            if client_matters:
+                try:
+                    _m = await scoped_deps.project_pages.find_matter(client_matters[0])
+                    if _m:
+                        client_matter_page_id = _m.get("id", "")
+                except Exception:
+                    pass
 
             async with AlfredAgent.iter(
                 effective_message,
@@ -492,15 +553,16 @@ async def chat_with_alfred_stream(
             except Exception:
                 pass
 
-            if alfred_deps.comms_log:
+            if scoped_deps.comms_log:
                 try:
-                    await alfred_deps.comms_log.log_interaction(
+                    await scoped_deps.comms_log.log_interaction(
                         user=verified_user,
                         agent="alfred",
                         message=request.message,
                         response=full_response,
                         tools_used=tools_used,
                         model=request.model or _settings.alfred_model,
+                        matter_page_id=client_matter_page_id,
                     )
                 except Exception as _log_err:
                     logger.warning("comms_log.log_interaction failed: %s", _log_err)
@@ -606,6 +668,21 @@ async def get_activity(
     return {"count": len(entries), "entries": entries, "days": days}
 
 
+@router.get("/auth/me", summary="Return the authenticated user's identity and role")
+async def auth_me(http_request: Request) -> dict:
+    """
+    Return the calling user's verified identity and client-mode status.
+    Called by the frontend after login to determine which UI panels to show.
+    """
+    username = get_verified_username(http_request) or "Team"
+    client_matters = get_client_matters(username)
+    return {
+        "username": username,
+        "is_client": client_matters is not None,
+        "allowed_matters": client_matters or [],
+    }
+
+
 def _normalize_matter(d: dict) -> dict:
     """Map Notion Title-Case property keys to the snake_case shape the frontend expects."""
     def _assignee(val) -> str:
@@ -645,6 +722,7 @@ def _normalize_matter(d: dict) -> dict:
 async def list_active_matters(
     category: str = "Case Project",
     alfred_deps=Depends(get_alfred_deps),
+    client_scope: list[str] | None = Depends(get_client_scope),
 ) -> dict[str, Any]:
     """
     Return active matters from the Notion Projects database.
@@ -664,6 +742,11 @@ async def list_active_matters(
         cat = None if category.lower() == "all" else category
         matters = await alfred_deps.project_pages.get_all_active_matters(category=cat)
         normalized = [_normalize_matter(m) for m in matters]
+        if client_scope is not None:
+            normalized = [m for m in normalized if any(
+                s.lower() in (m.get("name") or m.get("Project name") or "").lower()
+                for s in client_scope
+            )]
         return {"count": len(normalized), "category": category, "matters": normalized}
     except Exception as e:
         logger.error("list_active_matters error: %s", e, exc_info=True)
@@ -675,6 +758,7 @@ async def get_upcoming_deadlines(
     days: int = 7,
     category: str = "Case Project",
     alfred_deps=Depends(get_alfred_deps),
+    client_scope: list[str] | None = Depends(get_client_scope),
 ) -> dict[str, Any]:
     """
     Return matters with deadlines in the next N days.
@@ -691,6 +775,11 @@ async def get_upcoming_deadlines(
             days=days, category=cat
         )
         normalized = [_normalize_matter(m) for m in matters]
+        if client_scope is not None:
+            normalized = [m for m in normalized if any(
+                s.lower() in (m.get("name") or m.get("Project name") or "").lower()
+                for s in client_scope
+            )]
         return {"days_ahead": days, "category": category, "count": len(normalized), "matters": normalized}
     except Exception as e:
         logger.error("get_upcoming_deadlines error: %s", e, exc_info=True)
@@ -735,6 +824,7 @@ class TaskUpdateRequest(BaseModel):
 async def get_matter_detail(
     matter_id: str,
     alfred_deps=Depends(get_alfred_deps),
+    client_scope: list[str] | None = Depends(get_client_scope),
 ) -> dict[str, Any]:
     """
     Return full Notion properties for a single matter page.
@@ -745,7 +835,14 @@ async def get_matter_detail(
     """
     try:
         raw = await alfred_deps.bridge.get_page(matter_id)
-        return _normalize_matter(raw)
+        matter = _normalize_matter(raw)
+        if client_scope is not None:
+            matter_name = (matter.get("name") or matter.get("Project name") or "").lower()
+            if not any(s.lower() in matter_name for s in client_scope):
+                raise HTTPException(status_code=403, detail="Access restricted.")
+        return matter
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error("get_matter_detail(%s) error: %s", matter_id, e, exc_info=True)
         raise HTTPException(status_code=500, detail="An internal error occurred. Check server logs.")
@@ -756,6 +853,7 @@ async def update_matter_fields(
     matter_id: str,
     req: MatterUpdateRequest,
     alfred_deps=Depends(get_alfred_deps),
+    client_scope: list[str] | None = Depends(get_client_scope),
 ) -> dict[str, Any]:
     """
     Update one or more structured fields on a matter's Notion page.
@@ -763,6 +861,9 @@ async def update_matter_fields(
     Maps frontend snake_case field names back to Notion Title-Case property names.
     Only provided (non-None) fields are updated — all others are left unchanged.
     """
+    if client_scope is not None:
+        raise HTTPException(status_code=403, detail="Write access is not available in client sessions.")
+
     properties: dict[str, Any] = {}
 
     if req.status is not None:
@@ -801,6 +902,7 @@ async def update_matter_fields(
 async def get_matter_tasks(
     matter_id: str,
     alfred_deps=Depends(get_alfred_deps),
+    client_scope: list[str] | None = Depends(get_client_scope),
 ) -> dict[str, Any]:
     """
     Return all tasks stored inside a matter's Notion page.
@@ -812,9 +914,17 @@ async def get_matter_tasks(
     from notion_bridge.tasks import TaskPages
 
     try:
+        if client_scope is not None:
+            raw = await alfred_deps.bridge.get_page(matter_id)
+            matter_name = (raw.get("Project name") or raw.get("name") or "").lower()
+            if not any(s.lower() in matter_name for s in client_scope):
+                raise HTTPException(status_code=403, detail="Access restricted.")
+
         task_pages = alfred_deps.task_pages or TaskPages(alfred_deps.bridge)
         tasks = await task_pages.get_tasks_for_matter(matter_id)
         return {"matter_id": matter_id, "count": len(tasks), "tasks": tasks}
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error("get_matter_tasks(%s) error: %s", matter_id, e, exc_info=True)
         raise HTTPException(status_code=500, detail="An internal error occurred. Check server logs.")
@@ -825,6 +935,7 @@ async def create_matter_task(
     matter_id: str,
     req: TaskCreateRequest,
     alfred_deps=Depends(get_alfred_deps),
+    client_scope: list[str] | None = Depends(get_client_scope),
 ) -> dict[str, Any]:
     """
     Create a new task for a matter.
@@ -832,6 +943,9 @@ async def create_matter_task(
     If the matter page has an inline child database, creates a row in it.
     Otherwise, appends a to-do checkbox block to the page body.
     """
+    if client_scope is not None:
+        raise HTTPException(status_code=403, detail="Write access is not available in client sessions.")
+
     from notion_bridge.tasks import TaskPages
 
     try:
@@ -857,6 +971,7 @@ async def update_task(
     task_id: str,
     req: TaskUpdateRequest,
     alfred_deps=Depends(get_alfred_deps),
+    client_scope: list[str] | None = Depends(get_client_scope),
 ) -> dict[str, Any]:
     """
     Update one or more fields on a task.
@@ -864,6 +979,9 @@ async def update_task(
     Pass is_block=True for tasks stored as to-do blocks (name + status only);
     pass is_block=False (default) for tasks stored in an inline database (full fields).
     """
+    if client_scope is not None:
+        raise HTTPException(status_code=403, detail="Write access is not available in client sessions.")
+
     from notion_bridge.tasks import TaskPages
 
     try:
@@ -891,6 +1009,7 @@ async def delete_task(
     task_id: str,
     is_block: bool = False,
     alfred_deps=Depends(get_alfred_deps),
+    client_scope: list[str] | None = Depends(get_client_scope),
 ) -> dict[str, str]:
     """
     Mark a task as Done (soft-delete).
@@ -901,6 +1020,9 @@ async def delete_task(
     Query params:
       is_block: true if the task is stored as a to-do block rather than a DB row.
     """
+    if client_scope is not None:
+        raise HTTPException(status_code=403, detail="Write access is not available in client sessions.")
+
     from notion_bridge.tasks import TaskPages
 
     try:

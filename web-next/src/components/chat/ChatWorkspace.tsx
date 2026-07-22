@@ -11,7 +11,7 @@ function genId(): string {
 }
 
 export function ChatWorkspace() {
-  const { user } = useAuthStore()
+  const { user, isClient } = useAuthStore()
   const { setSkillsOpen } = useUIStore()
   const {
     alfredMessages,
@@ -217,13 +217,15 @@ export function ChatWorkspace() {
           <span className="material-symbols-outlined">delete_sweep</span>
         </button>
 
-        <button
-          className={styles.clearBtn}
-          onClick={() => setSkillsOpen(true)}
-          title="Open skills"
-        >
-          <span className="material-symbols-outlined">bolt</span>
-        </button>
+        {!isClient && (
+          <button
+            className={styles.clearBtn}
+            onClick={() => setSkillsOpen(true)}
+            title="Open skills"
+          >
+            <span className="material-symbols-outlined">bolt</span>
+          </button>
+        )}
       </div>
 
       {/* Message list */}

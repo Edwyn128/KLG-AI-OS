@@ -41,6 +41,8 @@ export interface KLGUser {
   name: string
   role: string
   admin: boolean
+  isClient?: boolean
+  allowedMatters?: string[]
 }
 
 // ── Matter ───────────────────────────────────────────────────────────────────

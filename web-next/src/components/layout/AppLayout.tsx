@@ -1,4 +1,5 @@
 import { useUIStore } from '@/store/uiStore'
+import { useAuthStore } from '@/store/authStore'
 import { Header } from './Header'
 import { WorkspaceTabs } from './WorkspaceTabs'
 import { DashboardWorkspace } from '@/components/dashboard/DashboardWorkspace'
@@ -8,6 +9,7 @@ import styles from './AppLayout.module.css'
 
 export function AppLayout() {
   const { activeWorkspace } = useUIStore()
+  const { isClient } = useAuthStore()
 
   return (
     <div className={styles.shell}>
@@ -17,7 +19,9 @@ export function AppLayout() {
         {activeWorkspace === 'dashboard' && <DashboardWorkspace />}
         {activeWorkspace === 'chat'      && <ChatWorkspace />}
       </main>
-      <SkillsLauncher />
+      {/* Skills execute firm-internal workflows (Notion writes, Slack posts) —
+          not available to client sessions. */}
+      {!isClient && <SkillsLauncher />}
     </div>
   )
 }

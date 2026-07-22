@@ -171,6 +171,10 @@ class AlfredDependencies:
     this is not set.
     """
 
+    client_matters: list[str] | None = None
+    # None = internal firm session (unrestricted)
+    # list = client session — tools enforce this allowlist
+
     _current_user: str | None = None
     """
     Verified username for the in-flight request, used by tools (e.g. save_note)
@@ -534,6 +538,36 @@ AlfredAgent: Agent[AlfredDependencies, str] = Agent(
 )
 
 
+@AlfredAgent.system_prompt
+async def _client_mode_system_prompt(ctx: RunContext[AlfredDependencies]) -> str:
+    """Append client-mode restrictions when the session is a client session."""
+    if not ctx.deps.client_matters:
+        return ""
+    matters_str = " and ".join(f'"{m}"' for m in ctx.deps.client_matters)
+    return f"""
+
+━━━ CLIENT SESSION — OVERRIDE ALL PRIOR SCOPE ━━━
+
+You are serving an external client of Kowal Law Group, not a firm employee.
+
+PERMITTED SCOPE: You may only discuss the following matter(s): {matters_str}
+Do not reference, name, or surface any other client, matter, or case.
+
+WHAT YOU MAY DO:
+- Answer questions about the status, tasks, deadlines, and progress for {matters_str}
+- Explain legal process and procedure in plain, accessible language
+- Summarize what is known from the project page for this matter
+
+WHAT YOU MUST NOT DO:
+- Name or describe any KLG staff member by name
+- Reference, hint at, or acknowledge any other client or case
+- Use tools that return firm-wide data (you will receive "not available" if you try)
+- Create, update, or delete any Notion content
+- Post to Slack or send messages anywhere
+
+TONE: Professional, warm, plain English. You represent the firm to this client.
+If you do not know something, say so plainly rather than guessing.
+""".strip()
 
 
 # ── Provider fallback ────────────────────────────────────────────────────────
@@ -846,6 +880,11 @@ async def find_and_summarize_matter(
             f"if you want me to create a new project page."
         )
 
+    if ctx.deps.client_matters is not None:
+        matter_name_found = (matter.get("Project name") or matter.get("name") or "").lower()
+        if not any(permitted.lower() in matter_name_found for permitted in ctx.deps.client_matters):
+            return "You are not authorized to access that matter."
+
     summary = await ctx.deps.project_pages.get_matter_summary(matter["id"])
     return summary
 
@@ -870,6 +909,9 @@ async def get_upcoming_deadlines(
         Each entry shows the matter name, deadline date, status, and priority.
         Returns "No matters with deadlines in the next N days" if none found.
     """
+    if ctx.deps.client_matters is not None:
+        return "This information is not available in your session."
+
     matters = await ctx.deps.project_pages.get_matters_with_upcoming_deadlines(days_ahead)
 
     if not matters:
@@ -926,6 +968,9 @@ async def search_notion(
         A list of matching pages with their titles and Notion URLs.
         Returns "No results found" if nothing matches.
     """
+    if ctx.deps.client_matters is not None:
+        return "This information is not available in your session."
+
     seen_ids: set[str] = set()
     results: list[dict] = []
 
@@ -1020,6 +1065,9 @@ async def get_bloodhound_watch_list(
         status, and KLG nexus note. Returns "Watch List is empty" if nothing
         is being tracked.
     """
+    if ctx.deps.client_matters is not None:
+        return "This information is not available in your session."
+
     cases = await ctx.deps.watch_list.get_active_cases(tier=tier)
 
     if not cases:
@@ -1090,6 +1138,9 @@ async def log_action_to_matter(
     Returns:
         Confirmation that the note was logged, with the matter's Notion URL.
     """
+    if ctx.deps.client_matters is not None:
+        return "This information is not available in your session."
+
     matter = await ctx.deps.project_pages.find_matter(matter_name)
 
     if not matter:
@@ -1193,6 +1244,9 @@ async def update_matter_status(
     Returns:
         Confirmation of the change, showing old and new status, with Notion URL.
     """
+    if ctx.deps.client_matters is not None:
+        return "This information is not available in your session."
+
     matter = await ctx.deps.project_pages.find_matter(matter_name)
 
     if not matter:
@@ -1273,6 +1327,9 @@ async def update_matter(
     Returns:
         Confirmation of all changes made, with the matter's Notion URL.
     """
+    if ctx.deps.client_matters is not None:
+        return "This information is not available in your session."
+
     matter = await ctx.deps.project_pages.find_matter(matter_name)
 
     if not matter:
@@ -1352,6 +1409,9 @@ async def save_note(
     Returns:
         Confirmation that the note was saved, or an error if Alfred Notes is not configured.
     """
+    if ctx.deps.client_matters is not None:
+        return "This information is not available in your session."
+
     if not ctx.deps.alfred_notes:
         return (
             "Alfred Notes is not configured. "
@@ -1399,6 +1459,12 @@ async def recall_notes(
     Returns:
         Formatted list of matching notes, or a message if none are found.
     """
+    if ctx.deps.client_matters is not None:
+        if not matter or not any(
+            permitted.lower() in matter.lower() for permitted in ctx.deps.client_matters
+        ):
+            return "This information is not available in your session."
+
     if not ctx.deps.alfred_notes:
         return "Alfred Notes is not configured (NOTION_ALFRED_NOTES_DB_ID not set)."
 
@@ -1456,6 +1522,9 @@ async def create_new_matter(
     Returns:
         Confirmation with the new matter's Notion URL and next steps.
     """
+    if ctx.deps.client_matters is not None:
+        return "This information is not available in your session."
+
     from alfred.skills.klg_matter_intake import KLGMatterIntake
     from alfred.skills.base import SkillContext
 
@@ -1601,6 +1670,9 @@ async def send_slack_message(
     Returns:
         Confirmation that the message was sent, or an error description.
     """
+    if ctx.deps.client_matters is not None:
+        return "This information is not available in your session."
+
     if not ctx.deps.slack_client:
         return (
             "Slack is not configured on this deployment. "
@@ -1720,6 +1792,9 @@ async def deep_research_with_chatgpt(
         ChatGPT's research memo as a string. Note: this output should be reviewed
         by an attorney before relying on it — citations must be verified independently.
     """
+    if ctx.deps.client_matters is not None:
+        return "This information is not available in your session."
+
     if not settings.openai_api_key:
         return (
             "OpenAI integration is not configured. "
@@ -1805,6 +1880,9 @@ async def web_search(
         Web results with titles, URLs, and content summaries. Includes a
         synthesized answer when Tavily can generate one.
     """
+    if ctx.deps.client_matters is not None:
+        return "This information is not available in your session."
+
     if not settings.tavily_api_key:
         return (
             "Web search is not configured. "
@@ -1981,6 +2059,9 @@ async def run_skill(
     Returns:
         The skill's output as a string, including any Notion page URLs and next steps.
     """
+    if ctx.deps.client_matters is not None:
+        return "This information is not available in your session."
+
     from alfred.skills import SKILL_REGISTRY
     from alfred.skills.base import SkillContext
 
@@ -2079,6 +2160,11 @@ async def get_matter_tasks(
     if not matter:
         return f"No matter found matching '{matter_name}'. Try a different search term."
 
+    if ctx.deps.client_matters is not None:
+        matter_name_found = (matter.get("Project name") or matter.get("name") or "").lower()
+        if not any(permitted.lower() in matter_name_found for permitted in ctx.deps.client_matters):
+            return "You are not authorized to access that matter."
+
     task_pages = TaskPages(ctx.deps.bridge)
     tasks = await task_pages.get_tasks_for_matter(matter["id"])
 
@@ -2136,6 +2222,9 @@ async def create_matter_task(
     Returns:
         Confirmation that the task was created, or an error message if it failed.
     """
+    if ctx.deps.client_matters is not None:
+        return "This information is not available in your session."
+
     from notion_bridge.tasks import TaskPages
 
     matter = await ctx.deps.project_pages.find_matter(matter_name)
@@ -2187,6 +2276,9 @@ async def seed_matter_tasks(
     Returns:
         Summary of tasks created and Slack notification status.
     """
+    if ctx.deps.client_matters is not None:
+        return "This information is not available in your session."
+
     from notion_bridge.tasks import (
         TaskPages, APPELLATE_TASKS_DB_ID, TRIAL_COURT_TASKS_DB_ID, _NOTION_USER_NAMES
     )
@@ -2304,6 +2396,9 @@ async def update_matter_task(
     Returns:
         Confirmation of what was updated, or an error if the task was not found.
     """
+    if ctx.deps.client_matters is not None:
+        return "This information is not available in your session."
+
     from notion_bridge.tasks import TaskPages
 
     matter = await ctx.deps.project_pages.find_matter(matter_name)

@@ -193,6 +193,7 @@ class CommsLog:
         response: str,
         tools_used: list[str],
         model: str = "",
+        matter_page_id: str = "",
     ) -> None:
         """Log an Alfred/Bloodhound chat interaction to the Comms Log DB."""
         if not self._db_id:
@@ -201,15 +202,18 @@ class CommsLog:
         agent_label = "Bloodhound" if agent.lower() == "bloodhound" else "Alfred"
         title = f"{agent_label} chat — {user}"
         try:
+            properties: dict[str, Any] = {
+                "Name": {"title": [{"text": {"content": title}}]},
+                "Email Text": {"rich_text": [{"text": {"content": message[:2000]}}]},
+                "Summary": {"rich_text": [{"text": {"content": response[:2000]}}]},
+                "Notes": {"rich_text": [{"text": {"content": f"Tools: {tools_str} | Model: {model} | Agent: {agent}"}}]},
+                "Actions": {"select": {"name": "N/A"}},
+            }
+            if matter_page_id:
+                properties["Projects"] = {"relation": [{"id": matter_page_id}]}
             await self._bridge.create_page(
                 database_id=self._db_id,
-                properties={
-                    "Name": {"title": [{"text": {"content": title}}]},
-                    "Email Text": {"rich_text": [{"text": {"content": message[:2000]}}]},
-                    "Summary": {"rich_text": [{"text": {"content": response[:2000]}}]},
-                    "Notes": {"rich_text": [{"text": {"content": f"Tools: {tools_str} | Model: {model} | Agent: {agent}"}}]},
-                    "Actions": {"select": {"name": "N/A"}},
-                },
+                properties=properties,
             )
         except Exception as e:
             logger.warning("CommsLog.log_interaction failed (non-fatal): %s", e)
