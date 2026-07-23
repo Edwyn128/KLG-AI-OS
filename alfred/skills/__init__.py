@@ -42,6 +42,16 @@ ADDING A NEW SKILL
 
 from alfred.skills.base import Skill, SkillResult, skill_generate, skill_read_file_text, skill_fetch_sharepoint
 from alfred.skills.klg_case_assessment import KLGCaseAssessment
+from alfred.skills.klg_case_novella import KLGCaseNovella
+from alfred.skills.klg_record_digest import KLGRecordDigest
+from alfred.skills.klg_opposition_separate_statement import KLGOppositionSeparateStatement
+from alfred.skills.klg_dz_overlay import KLGDZOverlay
+from alfred.skills.klg_notebooklm_handoff import KLGNotebookLMHandoff
+from alfred.skills.klg_court_doc_renamer import KLGCourtDocRenamer
+from alfred.skills.klg_authority_library import KLGAuthorityLibrary
+from alfred.skills.klg_appendix_cites import KLGAppendixCites
+from alfred.skills.klg_content_research import KLGContentResearch
+from alfred.skills.klg_oral_argument_full import KLGOralArgumentFull
 from alfred.skills.klg_matter_intake import KLGMatterIntake
 from alfred.skills.klg_deep_research_prompts import KLGDeepResearchPrompts
 from alfred.skills.klg_conflict_waiver import KLGConflictWaiver
@@ -85,6 +95,16 @@ SKILL_REGISTRY: dict[str, Skill] = {
     KLGPrebillAudit.name:            KLGPrebillAudit(),
     KLGResearchCompilation.name:     KLGResearchCompilation(),
     KLGBriefAssembly.name:           KLGBriefAssembly(),
+    KLGCaseNovella.name:             KLGCaseNovella(),
+    KLGRecordDigest.name:            KLGRecordDigest(),
+    KLGOppositionSeparateStatement.name: KLGOppositionSeparateStatement(),
+    KLGDZOverlay.name:               KLGDZOverlay(),
+    KLGNotebookLMHandoff.name:       KLGNotebookLMHandoff(),
+    KLGCourtDocRenamer.name:         KLGCourtDocRenamer(),
+    KLGAuthorityLibrary.name:        KLGAuthorityLibrary(),
+    KLGAppendixCites.name:           KLGAppendixCites(),
+    KLGContentResearch.name:         KLGContentResearch(),
+    KLGOralArgumentFull.name:        KLGOralArgumentFull(),
 }
 
 __all__ = [
@@ -111,4 +131,14 @@ __all__ = [
     "KLGPrebillAudit",
     "KLGResearchCompilation",
     "KLGBriefAssembly",
+    "KLGCaseNovella",
+    "KLGRecordDigest",
+    "KLGOppositionSeparateStatement",
+    "KLGDZOverlay",
+    "KLGNotebookLMHandoff",
+    "KLGCourtDocRenamer",
+    "KLGAuthorityLibrary",
+    "KLGAppendixCites",
+    "KLGContentResearch",
+    "KLGOralArgumentFull",
 ]
