@@ -6,8 +6,9 @@
 import { useAuthStore } from '@/store/authStore'
 import type { MatterListResponse, DeadlineItem, Matter, Task } from '@/types'
 
-const AUTH_STORAGE_KEY_USER = 'klg_user'
-const AUTH_STORAGE_KEY_PASS = 'klg_password'
+const AUTH_STORAGE_KEY_USER  = 'klg_user'
+const AUTH_STORAGE_KEY_PASS  = 'klg_password'
+const AUTH_STORAGE_KEY_TOKEN = 'klg_session_token'
 
 // Read auth directly from localStorage so this works outside React context.
 export function getStoredUser(): string {
@@ -16,18 +17,31 @@ export function getStoredUser(): string {
 export function getStoredPassword(): string {
   return localStorage.getItem(AUTH_STORAGE_KEY_PASS) ?? ''
 }
+export function getStoredToken(): string {
+  return localStorage.getItem(AUTH_STORAGE_KEY_TOKEN) ?? ''
+}
 export function saveCredentials(user: string, password: string): void {
   localStorage.setItem(AUTH_STORAGE_KEY_USER, user)
   localStorage.setItem(AUTH_STORAGE_KEY_PASS, password)
 }
+export function saveToken(token: string, username: string): void {
+  localStorage.setItem(AUTH_STORAGE_KEY_TOKEN, token)
+  localStorage.setItem(AUTH_STORAGE_KEY_USER, username)
+  localStorage.removeItem(AUTH_STORAGE_KEY_PASS)
+}
 export function clearCredentials(): void {
   localStorage.removeItem(AUTH_STORAGE_KEY_PASS)
+  localStorage.removeItem(AUTH_STORAGE_KEY_TOKEN)
 }
 
 function buildAuthHeader(): string | null {
-  const user = getStoredUser()
+  // Prefer OAuth JWT session token over Basic Auth
+  const token = getStoredToken()
+  if (token) return `Bearer ${token}`
+
   const pass = getStoredPassword()
   if (!pass) return null
+  const user = getStoredUser()
   const credentials = user && user !== 'Team' ? `${user}:${pass}` : `klg:${pass}`
   return 'Basic ' + btoa(credentials)
 }

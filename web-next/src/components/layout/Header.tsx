@@ -5,7 +5,7 @@ import styles from './Header.module.css'
 
 export function Header() {
   const { user, isAuthenticated, logout } = useAuthStore()
-  const { isOnline, clock, setClock, setOnline } = useUIStore()
+  const { isOnline, clock, setClock, setOnline, compact, toggleCompact } = useUIStore()
 
   useEffect(() => {
     function tick() {
@@ -41,6 +41,14 @@ export function Header() {
       <div className={styles.right}>
         <span className={styles.clock}>{clock}</span>
         <span className={`${styles.statusDot} ${isOnline ? styles.online : styles.offline}`} title={isOnline ? 'Connected' : 'Offline'} />
+        <button
+          className={`${styles.compactBtn}${compact ? ' ' + styles.active : ''}`}
+          onClick={toggleCompact}
+          title={compact ? 'Switch to full layout' : 'Switch to compact layout'}
+          aria-label="Toggle compact layout"
+        >
+          {compact ? '⊞' : '⊟'}
+        </button>
         {isAuthenticated && (
           <button className={styles.userBtn} onClick={logout} title="Sign out">
             <span className={styles.userInitial}>{user[0] ?? '?'}</span>

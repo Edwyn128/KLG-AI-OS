@@ -3,7 +3,8 @@
   align-items: center;
   justify-content: space-between;
   padding: 0 20px;
-  height: 52px;
+  height: var(--header-h, 52px);
+  transition: height 0.2s var(--ease);
   background:              var(--glass-bg);
   backdrop-filter:         var(--glass-blur);
   -webkit-backdrop-filter: var(--glass-blur);
@@ -94,6 +95,34 @@
 .userName {
   font-size: 13px;
   color: var(--text-secondary);
+}
+
+.compactBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  cursor: pointer;
+  color: var(--text-muted);
+  font-size: 14px;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+  flex-shrink: 0;
+}
+
+.compactBtn:hover {
+  color: var(--text-secondary);
+  border-color: var(--border);
+  background: var(--bg-hover);
+}
+
+.compactBtn.active {
+  color: var(--accent);
+  border-color: var(--accent-dim);
 }
 
 @media (max-width: 600px) {

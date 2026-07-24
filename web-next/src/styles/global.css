@@ -71,6 +71,22 @@
   --glass-shadow:    0 0 48px rgba(0,0,0,0.6), 0 1px 0 rgba(184,200,222,0.06);
   --radius-glass:    16px;
   --panel-width:     50vw;
+
+  /* Layout density — overridden in html[data-compact] below */
+  --header-h:    52px;
+  --tab-pad-y:   8px;
+  --tab-pad-x:   14px;
+  --tab-fs:      12px;
+  --tab-icon-fs: 16px;
+}
+
+/* Compact mode — toggled by Header button, persisted in localStorage. */
+html[data-compact] {
+  --header-h:    40px;
+  --tab-pad-y:   4px;
+  --tab-pad-x:   10px;
+  --tab-fs:      11px;
+  --tab-icon-fs: 14px;
 }
 
 @keyframes panelIn {
