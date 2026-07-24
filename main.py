@@ -42,8 +42,12 @@ and for not hitting Notion/Slack rate limits unnecessarily.
 from __future__ import annotations
 
 import base64
+import hashlib as _hashlib
+import hmac
+import json
 import logging
 import secrets
+import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -79,7 +83,43 @@ logger = logging.getLogger(__name__)
 # /slack/events — Slack verifies itself via HMAC signing secret
 #
 _AUTH_EXEMPT = {"/", "/health", "/slack/events"}
-_AUTH_EXEMPT_PREFIXES = ("/static/", "/assets/")
+_AUTH_EXEMPT_PREFIXES = ("/static/", "/assets/", "/auth/microsoft")
+
+
+# =============================================================================
+# JWT SESSION TOKENS — minimal HS256, no external dependency
+# =============================================================================
+
+def _b64url_enc(data: bytes) -> str:
+    return base64.urlsafe_b64encode(data).rstrip(b"=").decode()
+
+
+def _b64url_dec(s: str) -> bytes:
+    pad = (4 - len(s) % 4) % 4
+    return base64.urlsafe_b64decode(s + "=" * pad)
+
+
+def _jwt_encode(payload: dict, secret: str) -> str:
+    header = _b64url_enc(json.dumps({"alg": "HS256", "typ": "JWT"}, separators=(",", ":")).encode())
+    body = _b64url_enc(json.dumps(payload, separators=(",", ":")).encode())
+    signing_input = f"{header}.{body}"
+    sig = hmac.new(secret.encode(), signing_input.encode(), _hashlib.sha256).digest()
+    return f"{signing_input}.{_b64url_enc(sig)}"
+
+
+def _jwt_decode(token: str, secret: str) -> dict:
+    """Decode and verify HS256 JWT. Raises ValueError on invalid or expired token."""
+    parts = token.split(".")
+    if len(parts) != 3:
+        raise ValueError("bad JWT format")
+    h, p, s = parts
+    expected = hmac.new(secret.encode(), f"{h}.{p}".encode(), _hashlib.sha256).digest()
+    if not hmac.compare_digest(_b64url_enc(expected), s):
+        raise ValueError("bad JWT signature")
+    payload = json.loads(_b64url_dec(p))
+    if payload.get("exp", 0) < time.time():
+        raise ValueError("JWT expired")
+    return payload
 
 # Simple in-memory rate limiter (per IP, per minute).
 _rate_counts: dict[str, list[float]] = {}
@@ -224,8 +264,17 @@ class _BasicAuthMiddleware(BaseHTTPMiddleware):
         ):
             return await call_next(request)
 
-        # Validate Basic Auth credentials
         auth_header = request.headers.get("Authorization", "")
+
+        # Accept Bearer JWT (issued by /auth/microsoft/callback)
+        if auth_header.startswith("Bearer ") and settings.alfred_session_secret:
+            try:
+                _jwt_decode(auth_header[7:], settings.alfred_session_secret)
+                return await call_next(request)
+            except Exception:
+                pass
+
+        # Accept Basic Auth credentials (legacy / client mode)
         if auth_header.startswith("Basic "):
             try:
                 decoded = base64.b64decode(auth_header[6:]).decode("utf-8")
@@ -456,6 +505,11 @@ app.add_middleware(
 # =============================================================================
 # ROUTES
 # =============================================================================
+
+# OAuth / SSO routes — exempt from Basic Auth, handled by the router itself
+from api.routes.auth import router as auth_router
+
+app.include_router(auth_router)
 
 # Alfred routes (chat, matters, deadlines, agent triggers)
 from api.routes.alfred import router as alfred_router

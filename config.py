@@ -320,6 +320,37 @@ class Settings(BaseSettings):
     authenticated users are treated as internal firm users).
     """
 
+    microsoft_client_id: str = ""
+    """
+    Azure AD app registration client ID for Microsoft OAuth sign-in.
+    Create at portal.azure.com → App registrations → New registration.
+    Redirect URI to add: <APP_PUBLIC_URL>/auth/microsoft/callback
+    Required permissions: openid, profile, email, User.Read
+    Leave empty to disable "Sign in with Microsoft" on the login page.
+    """
+
+    microsoft_tenant_id: str = "common"
+    """
+    Azure AD tenant ID (GUID) or "common" for multi-tenant / personal accounts.
+    For a single law firm, set this to your firm's Azure tenant ID so only
+    @kowallaw.com accounts can sign in. Find it in Azure Portal → Overview.
+    Default "common" accepts any Microsoft account (fine for dev/testing).
+    """
+
+    microsoft_client_secret: str = ""
+    """
+    Azure AD app client secret. Create in App registrations → Certificates & secrets.
+    Required together with microsoft_client_id to complete the OAuth flow.
+    """
+
+    alfred_session_secret: str = ""
+    """
+    Random secret used to sign Alfred's session JWT tokens (issued after OAuth login).
+    Generate with: python -c "import secrets; print(secrets.token_hex(32))"
+    Set ALFRED_SESSION_SECRET in Railway env vars. Must be at least 32 chars.
+    If empty, Microsoft SSO is disabled even if the client credentials are set.
+    """
+
     cron_secret: str = ""
     """
     Shared secret for Railway Cron Jobs. Set CRON_SECRET in Railway env vars.
