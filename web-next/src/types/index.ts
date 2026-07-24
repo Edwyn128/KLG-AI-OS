@@ -2,7 +2,7 @@
 // KLG AI OS — TypeScript types
 // =============================================================================
 
-export type Workspace = 'dashboard' | 'chat'
+export type Workspace = 'dashboard' | 'chat' | 'bloodhound'
 
 export type Agent = 'alfred' | 'bloodhound'
 
@@ -33,6 +33,22 @@ export interface Skill {
   params?: SkillParam[]
   requiresFile?: boolean
   fileHint?: string
+}
+
+// ── Bloodhound Watch List ─────────────────────────────────────────────────────
+
+export interface WatchCase {
+  id: string
+  case_name: string
+  court: string
+  tier: string
+  issue_areas: string[]
+  status: 'Watching' | 'Engaged' | 'Closed'
+  procedural_posture: string
+  next_deadline: string | null
+  nexus_note: string
+  docket_no: string
+  url: string
 }
 
 // ── User ─────────────────────────────────────────────────────────────────────

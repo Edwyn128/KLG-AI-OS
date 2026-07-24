@@ -1,0 +1,306 @@
+.container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+/* ── Top bar ─────────────────────────────────────────────────────────────── */
+
+.topBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 20px;
+  background: var(--glass-bg-light);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border-bottom: 1px solid var(--glass-border);
+  flex-shrink: 0;
+  gap: 12px;
+}
+
+.topBarLeft {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.topBarTitle {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+  letter-spacing: 0.04em;
+}
+
+.topBarSub {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.topBarRight {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.scanBadge {
+  font-size: 11px;
+  color: var(--ok);
+  background: var(--ok-dim);
+  border: 1px solid var(--ok);
+  border-radius: 4px;
+  padding: 2px 8px;
+}
+
+.scanBtn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+
+.scanBtn:hover { opacity: 0.88; }
+.scanBtn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* ── Body ────────────────────────────────────────────────────────────────── */
+
+.body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px 20px 32px;
+}
+
+/* ── Empty state ─────────────────────────────────────────────────────────── */
+
+.emptyState {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 60px 20px;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.emptyState .material-symbols-outlined {
+  font-size: 40px;
+  opacity: 0.5;
+}
+
+.emptyState p { font-size: 14px; margin: 0; }
+
+.emptyHint {
+  font-size: 12px !important;
+  color: var(--text-dim) !important;
+  max-width: 360px;
+}
+
+/* ── Tier group ──────────────────────────────────────────────────────────── */
+
+.tierGroup {
+  margin-bottom: 8px;
+}
+
+.tierHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 12px;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  color: var(--text-secondary);
+  transition: background 0.12s;
+  text-align: left;
+}
+
+.tierHeader:hover { background: var(--bg-hover); }
+
+.tierLabel {
+  flex: 1;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.tierCount {
+  font-size: 11px;
+  color: var(--text-dim);
+  background: var(--bg-input);
+  border-radius: 10px;
+  padding: 1px 7px;
+}
+
+.tierBody {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 0 4px 8px;
+}
+
+/* ── Case card ───────────────────────────────────────────────────────────── */
+
+.card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  transition: border-color 0.15s;
+}
+
+.card:hover { border-color: rgba(184, 200, 222, 0.3); }
+
+.cardHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  padding: 10px 12px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+}
+
+.cardMain {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
+}
+
+.caseName {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+  line-height: 1.3;
+}
+
+.cardMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.cardRight {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.metaChip {
+  font-size: 11px;
+  color: var(--text-muted);
+  background: var(--bg-input);
+  border-radius: 4px;
+  padding: 1px 6px;
+}
+
+.deadlineChip {
+  color: var(--warning);
+  background: var(--warning-dim);
+}
+
+.statusBadge {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  border-radius: 4px;
+  padding: 2px 7px;
+  text-transform: uppercase;
+}
+
+.statusWatching {
+  color: var(--ok);
+  background: var(--ok-dim);
+}
+
+.statusEngaged {
+  color: var(--accent-bright);
+  background: var(--accent-dim);
+}
+
+.statusClosed {
+  color: var(--text-dim);
+  background: var(--bg-input);
+}
+
+/* ── Issue chips ─────────────────────────────────────────────────────────── */
+
+.issueRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 0 12px 8px;
+}
+
+.issueChip {
+  font-size: 10px;
+  color: var(--steel);
+  background: var(--steel-dim);
+  border: 1px solid var(--steel-glow);
+  border-radius: 10px;
+  padding: 1px 8px;
+}
+
+/* ── Expanded card body ──────────────────────────────────────────────────── */
+
+.cardBody {
+  padding: 8px 12px 12px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.detailRow {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.detailLabel {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  min-width: 72px;
+  flex-shrink: 0;
+  padding-top: 1px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.detailVal {
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.notionLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.notionLink:hover { color: var(--accent-bright); }

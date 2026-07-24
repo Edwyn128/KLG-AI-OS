@@ -4,7 +4,7 @@
 // =============================================================================
 
 import { useAuthStore } from '@/store/authStore'
-import type { MatterListResponse, DeadlineItem, Matter, Task } from '@/types'
+import type { MatterListResponse, DeadlineItem, Matter, Task, WatchCase } from '@/types'
 
 const AUTH_STORAGE_KEY_USER  = 'klg_user'
 const AUTH_STORAGE_KEY_PASS  = 'klg_password'
@@ -142,6 +142,20 @@ export async function patchTask(taskId: string, fields: Partial<Task> & { is_blo
 export async function deleteTask(taskId: string, isBlock = false): Promise<void> {
   const res = await apiFetch(`/alfred/tasks/${taskId}?is_block=${isBlock}`, { method: 'DELETE' })
   if (!res.ok) throw new Error('Failed to delete task')
+}
+
+export async function fetchWatchList(tier?: string): Promise<WatchCase[]> {
+  const url = tier ? `/bloodhound/watch-list?tier=${tier}` : '/bloodhound/watch-list'
+  const res = await apiFetch(url)
+  if (!res.ok) throw new Error('Failed to fetch Watch List')
+  const data = await res.json()
+  return Array.isArray(data) ? data : (data.cases ?? [])
+}
+
+export async function triggerBloodhoundScan(): Promise<{ added_count: number; new_signals: number }> {
+  const res = await apiFetch('/bloodhound/scan', { method: 'POST' })
+  if (!res.ok) throw new Error('Bloodhound scan failed')
+  return res.json()
 }
 
 /**

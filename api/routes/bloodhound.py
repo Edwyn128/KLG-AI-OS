@@ -185,6 +185,57 @@ async def run_surveillance_scan(
 
 
 # =============================================================================
+# WATCH LIST READ ENDPOINT
+# =============================================================================
+
+def _normalize_watch_case(c: dict) -> dict:
+    """Normalize a raw Notion Watch List page dict to a clean frontend shape."""
+    issue_areas = c.get("Issue Area") or []
+    if isinstance(issue_areas, str):
+        issue_areas = [issue_areas] if issue_areas else []
+    elif not isinstance(issue_areas, list):
+        issue_areas = []
+
+    next_deadline = c.get("Next Deadline")
+    if isinstance(next_deadline, dict):
+        next_deadline = next_deadline.get("start")
+
+    return {
+        "id": c.get("id", ""),
+        "case_name": c.get("Case Name") or "",
+        "court": c.get("Court") or "",
+        "tier": c.get("Tier") or "",
+        "issue_areas": [str(a) for a in issue_areas if a],
+        "status": c.get("Status") or "Watching",
+        "procedural_posture": c.get("Procedural Posture") or "",
+        "next_deadline": str(next_deadline) if next_deadline else None,
+        "nexus_note": c.get("KLG Nexus Note") or "",
+        "docket_no": c.get("Docket No.") or "",
+        "url": c.get("url") or "",
+    }
+
+
+@router.get("/watch-list", summary="Return the active Bloodhound Watch List")
+async def get_watch_list(
+    deps=Depends(get_deps),
+    tier: str | None = None,
+) -> dict:
+    """
+    Return all active (non-Closed) Watch List cases from Notion,
+    optionally filtered by tier ("1", "2", or "3").
+
+    Cases are sorted by tier then case name.
+    """
+    try:
+        cases = await deps.watch_list.get_active_cases(tier=tier)
+        normalized = [_normalize_watch_case(c) for c in cases]
+        return {"count": len(normalized), "cases": normalized}
+    except Exception as e:
+        logger.error("get_watch_list error: %s", e, exc_info=True)
+        raise HTTPException(status_code=500, detail="An internal error occurred. Check server logs.")
+
+
+# =============================================================================
 # SCHEDULER-CALLABLE WRAPPER
 # Imported by agents/scheduler.py for the daily cron job.
 # Mirrors the endpoint logic but accepts deps directly instead of via Request.
