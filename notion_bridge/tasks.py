@@ -24,6 +24,7 @@ KLG shared task-template database IDs:
 from __future__ import annotations
 
 import logging
+import re
 from typing import Any
 
 from notion_bridge.client import NotionBridge
@@ -34,16 +35,56 @@ logger = logging.getLogger(__name__)
 APPELLATE_TASKS_DB_ID   = "69e011f7-740e-41ee-be6b-f5673b36c392"
 TRIAL_COURT_TASKS_DB_ID = "deeacdf5-1c50-450b-bbc2-f6c14989aed2"
 
-# Notion user ID → display name (used in Slack seeding notifications)
+# Notion user ID → display name
 _NOTION_USER_NAMES: dict[str, str] = {
     "b30c2eb6-779d-4d96-bdb9-2c3e81dced29": "Brittney",
     "d3dcab1b-be5a-4f73-b205-1b28e895742f": "Tim",
     "126d872b-594c-81f4-adf0-00020f9443eb": "Edwyn",
 }
 
+# Display name → Notion user UUID (for Notion API people filters, which require UUIDs)
+_DISPLAY_TO_NOTION_ID: dict[str, str] = {v: k for k, v in _NOTION_USER_NAMES.items()}
+
+
+def _parse_duration(val: Any) -> int | None:
+    """
+    Parse a duration value to total minutes.
+
+    Handles:
+      - int/float (assumed already in minutes)
+      - strings like "30m", "2h", "1h 30m", "30 min", "2 hours", "90 minutes"
+    Returns None if unparseable.
+    """
+    if val is None:
+        return None
+    if isinstance(val, (int, float)):
+        return int(val) if val else None
+    s = str(val).lower().strip()
+    if not s:
+        return None
+    total = 0
+    h_match = re.search(r"(\d+)\s*h", s)
+    m_match = re.search(r"(\d+)\s*m(?!o)", s)  # 'm' but not 'mo' (month)
+    if h_match:
+        total += int(h_match.group(1)) * 60
+    if m_match:
+        total += int(m_match.group(1))
+    # Fallback: bare number — treat as minutes
+    if not h_match and not m_match:
+        bare = re.search(r"(\d+)", s)
+        if bare:
+            total = int(bare.group(1))
+    return total if total else None
+
 
 def _normalize_task(task_id: str, data: dict, *, is_block: bool = False) -> dict:
-    """Normalize a task from a DB row or a to_do block to a consistent frontend shape."""
+    """
+    Normalize a task from a page_to_dict flat row or a to_do block to a consistent shape.
+
+    IMPORTANT: `data` must be the flat dict returned by page_to_dict / query_database —
+    NOT the raw Notion "properties" sub-dict. query_database already flattens properties
+    to the top level, so callers should pass the row directly, not row.get("properties").
+    """
     if is_block:
         text = ""
         for rt in data.get("to_do", {}).get("rich_text", []):
@@ -57,6 +98,7 @@ def _normalize_task(task_id: str, data: dict, *, is_block: bool = False) -> dict
             "assignee": "",
             "deadline": None,
             "eta": None,
+            "start_date": None,
             "duration": None,
             "priority": "",
             "is_block": True,
@@ -70,17 +112,20 @@ def _normalize_task(task_id: str, data: dict, *, is_block: bool = False) -> dict
     def _date(val: Any) -> str | None:
         if not val:
             return None
-        # strip range notation ("2026-08-01 → 2026-08-15")
-        return str(val).split(" → ")[0]
+        # Strip range notation ("2026-08-01 → 2026-08-15")
+        return str(val).split(" → ")[0].split("→")[0].strip()
 
-    status = data.get("Status") or data.get("status") or "To Do"
+    # Title field: template DBs call it "Task", matter child DBs call it "Name"
     name = (
-        data.get("Name")
+        data.get("Task")
+        or data.get("Name")
         or data.get("Task name")
         or data.get("Task Name")
         or data.get("name")
         or ""
     )
+
+    status = data.get("Status") or data.get("status") or "To Do"
 
     completed_at = None
     if "done" in str(status).lower() or "complete" in str(status).lower():
@@ -96,7 +141,9 @@ def _normalize_task(task_id: str, data: dict, *, is_block: bool = False) -> dict
         "eta": _date(data.get("ETA") or data.get("eta")),
         "start_date": _date(data.get("Start Date") or data.get("start_date")),
         "completed_at": completed_at,
-        "duration": data.get("Duration") or data.get("Expected Duration") or data.get("duration"),
+        "duration": _parse_duration(
+            data.get("Duration") or data.get("Expected Duration") or data.get("duration")
+        ),
         "priority": data.get("Priority") or data.get("priority") or "",
         "is_block": False,
     }
@@ -227,6 +274,150 @@ class TaskPages:
             if b.get("type") == "to_do" and b.get("id")
         ]
 
+    async def tasks_by_assignee(self, db_id: str, display_name: str) -> list[dict]:
+        """
+        Return tasks from a template DB assigned to a specific person.
+
+        Uses the Notion user UUID for the filter (the API requires UUID, not display name).
+        Falls back to fetching all tasks and filtering by assignee name if the UUID is unknown.
+        """
+        try:
+            user_id = _DISPLAY_TO_NOTION_ID.get(display_name)
+
+            if user_id:
+                filter_body: dict | None = {
+                    "property": "Assignee",
+                    "people": {"contains": user_id},
+                }
+            else:
+                filter_body = None
+
+            rows = await self._bridge.query_database(db_id, filter=filter_body)
+
+            result = []
+            for row in rows:
+                # If we couldn't filter in Notion, filter client-side by name
+                if not user_id:
+                    assignee_val = row.get("Assignee") or ""
+                    assignee_str = (
+                        ", ".join(str(v) for v in assignee_val)
+                        if isinstance(assignee_val, list)
+                        else str(assignee_val)
+                    )
+                    if display_name.lower() not in assignee_str.lower():
+                        continue
+                normalized = _normalize_task(row["id"], row)
+                result.append(normalized)
+            return result
+        except Exception as exc:
+            logger.warning("tasks_by_assignee error for %s: %s", display_name, exc)
+            return []
+
+    async def all_tasks_with_matter(self, db_id: str) -> list[dict]:
+        """
+        Return ALL tasks from a template DB, each annotated with matter_name from Projects.
+
+        query_database returns flat dicts (page_to_dict already applied), so:
+          - Task name is at row["Task"] or row["Name"]
+          - Projects relation is at row["Projects"] — a list of page UUID strings
+        """
+        try:
+            rows = await self._bridge.query_database(db_id)
+
+            # Collect unique matter IDs from the Projects relation field.
+            # page_to_dict extracts relation properties to a list of ID strings at the top level.
+            matter_ids: set[str] = set()
+            for row in rows:
+                related = row.get("Projects") or []
+                if isinstance(related, list):
+                    for mid in related:
+                        if mid:
+                            matter_ids.add(mid)
+
+            # Resolve matter names in parallel (one get_page per unique matter)
+            matter_names: dict[str, str] = {}
+            if matter_ids:
+                import asyncio
+
+                async def _resolve(mid: str) -> None:
+                    try:
+                        page = await self._bridge.get_page(mid)
+                        # page is already a flat dict; "Project name" is the title field
+                        matter_names[mid] = page.get("Project name") or ""
+                    except Exception:
+                        matter_names[mid] = ""
+
+                await asyncio.gather(*[_resolve(mid) for mid in matter_ids])
+
+            result = []
+            for row in rows:
+                task = _normalize_task(row["id"], row)
+                # Attach matter_name and matter_id from the Projects relation
+                related = row.get("Projects") or []
+                matter_id = related[0] if isinstance(related, list) and related else ""
+                task["matter_name"] = matter_names.get(matter_id, "")
+                task["matter_id"] = matter_id
+                result.append(task)
+            return result
+        except Exception as exc:
+            logger.warning("all_tasks_with_matter error for db %s: %s", db_id, exc)
+            return []
+
+    async def seed_from_template(
+        self,
+        template_db_id: str,
+        matter_id: str,
+    ) -> list[dict]:
+        """
+        Seed tasks for a new matter from a KLG shared task-template database.
+
+        Reads all rows in template_db_id and clones each one as a new row in
+        the same database with the Projects relation set to matter_id. Status
+        is always reset to "Not started" regardless of the template row's state.
+
+        Idempotent: if any rows already link to matter_id, returns them without
+        creating duplicates.
+        """
+        # ── Duplicate guard ───────────────────────────────────────────────────
+        existing = await self._bridge.query_database(
+            database_id=template_db_id,
+            filter={"property": "Projects", "relation": {"contains": matter_id}},
+        )
+        if existing:
+            logger.info(
+                "seed_from_template: %d tasks already exist for matter %s — skipping.",
+                len(existing), matter_id[:8],
+            )
+            return [_normalize_task(r["id"], r, is_block=False) for r in existing if r.get("id")]
+
+        # ── Read template rows ────────────────────────────────────────────────
+        template_rows = await self._bridge.query_database(database_id=template_db_id)
+        if not template_rows:
+            logger.warning("seed_from_template: no template rows found in DB %s", template_db_id[:8])
+            return []
+
+        created: list[dict] = []
+        for row in template_rows:
+            props = _build_seed_properties(row, matter_id)
+            try:
+                raw = await self._bridge.create_page(
+                    database_id=template_db_id,
+                    properties=props,
+                )
+                if raw.get("id"):
+                    created.append(_normalize_task(raw["id"], raw, is_block=False))
+            except Exception as e:
+                logger.warning(
+                    "seed_from_template: failed to create task '%s': %s",
+                    row.get("Task") or row.get("Name") or "?", e,
+                )
+
+        logger.info(
+            "seed_from_template: created %d/%d tasks for matter %s.",
+            len(created), len(template_rows), matter_id[:8],
+        )
+        return created
+
     async def create_task(
         self,
         matter_id: str,
@@ -305,135 +496,11 @@ class TaskPages:
             "assignee": "",
             "deadline": None,
             "eta": None,
+            "start_date": None,
             "duration": None,
             "priority": "",
             "is_block": True,
         }
-
-    async def tasks_by_assignee(self, db_id: str, display_name: str) -> list[dict]:
-        """Return all tasks from a template DB assigned to a specific person (by display name)."""
-        try:
-            filter_body = {
-                "property": "Assignee",
-                "people": {"contains": display_name},
-            }
-            rows = await self.bridge.query_database(db_id, filter=filter_body)
-            result = []
-            for row in rows:
-                props = row.get("properties", {})
-                normalized = _normalize_task(row["id"], props)
-                # Add last_edited_time for completed_at derivation
-                normalized["last_edited_time"] = row.get("last_edited_time")
-                result.append(normalized)
-            return result
-        except Exception as exc:
-            logger.warning("tasks_by_assignee error for %s: %s", display_name, exc)
-            return []
-
-    async def all_tasks_with_matter(self, db_id: str) -> list[dict]:
-        """Return ALL tasks from a template DB, each annotated with matter_name from Projects relation."""
-        try:
-            rows = await self.bridge.query_database(db_id)
-            # Collect unique matter IDs for name resolution
-            matter_ids: set[str] = set()
-            for row in rows:
-                for rel in row.get("properties", {}).get("Projects", {}).get("relation", []):
-                    matter_ids.add(rel["id"])
-
-            # Resolve matter names in parallel
-            matter_names: dict[str, str] = {}
-            if matter_ids:
-                import asyncio
-                async def _resolve(mid: str) -> None:
-                    try:
-                        page = await self.bridge.get_page(mid)
-                        title_prop = (
-                            page.get("properties", {})
-                            .get("Project name", {})
-                            .get("title", [{}])
-                        )
-                        matter_names[mid] = title_prop[0].get("plain_text", "") if title_prop else ""
-                    except Exception:
-                        matter_names[mid] = ""
-                await asyncio.gather(*[_resolve(mid) for mid in matter_ids])
-
-            result = []
-            for row in rows:
-                props = row.get("properties", {})
-                task = _normalize_task(row["id"], props)
-                task["last_edited_time"] = row.get("last_edited_time")
-                # Attach matter name from first Projects relation
-                relations = props.get("Projects", {}).get("relation", [])
-                matter_id = relations[0]["id"] if relations else ""
-                task["matter_name"] = matter_names.get(matter_id, "")
-                task["matter_id"] = matter_id
-                result.append(task)
-            return result
-        except Exception as exc:
-            logger.warning("all_tasks_with_matter error for db %s: %s", db_id, exc)
-            return []
-
-    async def seed_from_template(
-        self,
-        template_db_id: str,
-        matter_id: str,
-    ) -> list[dict]:
-        """
-        Seed tasks for a new matter from a KLG shared task-template database.
-
-        Reads all rows in template_db_id and clones each one as a new row in
-        the same database with the Projects relation set to matter_id. Status
-        is always reset to "Not started" regardless of the template row's state.
-
-        Idempotent: if any rows already link to matter_id, returns them without
-        creating duplicates.
-
-        Args:
-            template_db_id: APPELLATE_TASKS_DB_ID or TRIAL_COURT_TASKS_DB_ID.
-            matter_id:      Dashed UUID of the new matter's Notion page.
-
-        Returns:
-            List of newly created task dicts (or existing ones if already seeded).
-        """
-        # ── Duplicate guard ───────────────────────────────────────────────────
-        existing = await self._bridge.query_database(
-            database_id=template_db_id,
-            filter={"property": "Projects", "relation": {"contains": matter_id}},
-        )
-        if existing:
-            logger.info(
-                "seed_from_template: %d tasks already exist for matter %s — skipping.",
-                len(existing), matter_id[:8],
-            )
-            return [_normalize_task(r["id"], r, is_block=False) for r in existing if r.get("id")]
-
-        # ── Read template rows ────────────────────────────────────────────────
-        template_rows = await self._bridge.query_database(database_id=template_db_id)
-        if not template_rows:
-            logger.warning("seed_from_template: no template rows found in DB %s", template_db_id[:8])
-            return []
-
-        created: list[dict] = []
-        for row in template_rows:
-            props = _build_seed_properties(row, matter_id)
-            try:
-                raw = await self._bridge.create_page(
-                    database_id=template_db_id,
-                    properties=props,
-                )
-                if raw.get("id"):
-                    created.append(_normalize_task(raw["id"], raw, is_block=False))
-            except Exception as e:
-                logger.warning(
-                    "seed_from_template: failed to create task '%s': %s",
-                    row.get("Task") or row.get("Name") or "?", e,
-                )
-
-        logger.info(
-            "seed_from_template: created %d/%d tasks for matter %s.",
-            len(created), len(template_rows), matter_id[:8],
-        )
-        return created
 
     async def update_task(
         self,
@@ -452,16 +519,13 @@ class TaskPages:
         Update a task. Routes to block update or page property update based on is_block.
         """
         if is_block:
-            block_props: dict[str, Any] = {}
             to_do_data: dict[str, Any] = {}
             if name is not None:
                 to_do_data["rich_text"] = [{"type": "text", "text": {"content": name}}]
             if status is not None:
                 to_do_data["checked"] = status.lower() in ("done", "complete", "completed")
             if to_do_data:
-                block_props["to_do"] = to_do_data
-            if block_props:
-                updated = await self._bridge.update_block(task_id, **block_props)
+                updated = await self._bridge.update_block(task_id, to_do=to_do_data)
                 return _normalize_task(task_id, updated, is_block=True)
             return {}
 
