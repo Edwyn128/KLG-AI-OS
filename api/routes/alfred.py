@@ -729,17 +729,23 @@ def _normalize_matter(d: dict) -> dict:
     }
 
 
-# Statuses that indicate an open, in-progress matter.
-# Anything NOT in this set (Done, Closed, Canceled, etc.) is treated as archived
-# and hidden from the default matters list unless ?archived=true is passed.
-_ACTIVE_STATUSES = {
-    "in progress", "active", "open", "planning",
-    "review needed", "backlog", "paused",
+# Statuses that definitively mean a matter is closed/done.
+# Anything NOT in this set is treated as active and shown by default.
+# Using a denylist is safer than an allowlist — custom status option names in
+# Notion won't accidentally hide active matters we don't know the name of.
+_INACTIVE_STATUSES = {
+    "done", "closed", "canceled", "cancelled", "archived",
+    "complete", "completed", "inactive", "withdrawn", "settled",
+    "rejected", "dropped", "lost",
 }
 
 
 def _is_active(matter: dict) -> bool:
-    return (matter.get("status") or "").strip().lower() in _ACTIVE_STATUSES
+    status = (matter.get("status") or "").strip().lower()
+    # No status set → show it (don't hide untagged matters)
+    if not status:
+        return True
+    return status not in _INACTIVE_STATUSES
 
 
 @router.get("/matters", summary="List active matters by category")
@@ -803,6 +809,8 @@ async def get_upcoming_deadlines(
             days=days, category=cat
         )
         normalized = [_normalize_matter(m) for m in matters]
+        # Exclude closed/done matters — a deadline date on a closed case is noise
+        normalized = [m for m in normalized if _is_active(m)]
         if client_scope is not None:
             normalized = [m for m in normalized if any(
                 s.lower() in (m.get("name") or m.get("Project name") or "").lower()

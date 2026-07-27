@@ -91,8 +91,8 @@ export async function fetchMatters(archived = false): Promise<MatterListResponse
   return res.json()
 }
 
-export async function fetchDeadlines(): Promise<DeadlineItem[]> {
-  const res = await apiFetch('/alfred/deadlines')
+export async function fetchDeadlines(days = 30): Promise<DeadlineItem[]> {
+  const res = await apiFetch(`/alfred/deadlines?days=${days}`)
   if (!res.ok) throw new Error('Failed to fetch deadlines')
   const data = await res.json()
   // Endpoint returns { matters: [...], count, days_ahead, category }
