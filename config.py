@@ -174,6 +174,17 @@ class Settings(BaseSettings):
     matter-specific email threads, and pinned items needing attention.
     """
 
+    notion_users_db_id: str = ""
+    """
+    KLG Users database ID — stores per-user role flags and permissions.
+    Create a Notion database called "KLG Users" with: Name (title),
+    Display Name (text), Role (select), Email (email), is_admin (checkbox),
+    is_super_admin (checkbox), is_accounting (checkbox), Active (checkbox),
+    and task-permission checkboxes. Share with the Notion integration, then
+    set NOTION_USERS_DB_ID in Railway env vars.
+    Leave empty to fall back to the hardcoded role sets in main.py.
+    """
+
     notion_alfred_notes_db_id: str = ""
     """
     Alfred Notes database ID — Alfred's persistent cross-session memory layer.

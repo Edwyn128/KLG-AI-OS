@@ -1,5 +1,7 @@
 import { useState } from 'react'
 import { useMatterStore } from '@/store/matterStore'
+import { useUIStore } from '@/store/uiStore'
+import { useChatStore } from '@/store/chatStore'
 import { patchMatter, patchTask, deleteTask as apiDeleteTask, createTask } from '@/api/client'
 import type { Task, Matter } from '@/types'
 import styles from './MatterDetailPanel.module.css'
@@ -150,10 +152,17 @@ function EditableDate({
 
 // ── Task row ─────────────────────────────────────────────────────────────────
 
-function TaskRow({ task }: { task: Task }) {
+function TaskRow({ task, matterName }: { task: Task; matterName?: string }) {
   const { updateTaskOptimistic } = useMatterStore()
+  const { setWorkspace } = useUIStore()
+  const { setDraftInput } = useChatStore()
   const [editingName, setEditingName] = useState(false)
   const [nameVal, setNameVal] = useState(task.name)
+
+  function handleAI() {
+    setDraftInput(`Alfred, help me with this task: "${task.name}"${matterName ? ` on the ${matterName} matter` : ''}.`)
+    setWorkspace('chat')
+  }
 
   async function toggleDone() {
     const newStatus = task.status === 'Done' ? 'To Do' : 'Done'
@@ -220,12 +229,16 @@ function TaskRow({ task }: { task: Task }) {
           </span>
         )}
         <div className={styles.taskMeta}>
-          {task.assignee && <span className={styles.taskChip}>{task.assignee}</span>}
-          {task.deadline && <span className={styles.taskChip}>{formatDate(task.deadline)}</span>}
+          {task.assignee && <span className={styles.taskChip}>{task.assignee.split(/[,\s]+/)[0]}</span>}
+          {task.eta && <span className={styles.taskChipMuted} title="ETA">ETA {formatDate(task.eta)}</span>}
+          {task.deadline && <span className={styles.taskChip} title="Deadline">{formatDate(task.deadline)}</span>}
           {task.duration && <span className={styles.taskChipMuted}>{task.duration}m</span>}
         </div>
       </div>
 
+      <button className={styles.sparkBtn} onClick={handleAI} title="Ask Alfred about this task" aria-label="AI assist">
+        ✨
+      </button>
       <button className={styles.taskDelete} onClick={handleDelete} aria-label="Complete task" title="Mark done">
         <span className="material-symbols-outlined">close</span>
       </button>
@@ -347,9 +360,9 @@ function MetaGrid({ matter }: { matter: Matter }) {
 // ── Task group ────────────────────────────────────────────────────────────────
 
 function TaskGroup({
-  stage, tasks, matterId, defaultOpen,
+  stage, tasks, matterId, matterName, defaultOpen,
 }: {
-  stage: string; tasks: Task[]; matterId: string; defaultOpen: boolean
+  stage: string; tasks: Task[]; matterId: string; matterName?: string; defaultOpen: boolean
 }) {
   const [open, setOpen] = useState(defaultOpen)
   const doneCount = tasks.filter(t => t.status === 'Done').length
@@ -366,7 +379,7 @@ function TaskGroup({
       {open && (
         <div className={styles.taskGroupBody}>
           {tasks.map(t => (
-            <TaskRow key={t.id} task={t} />
+            <TaskRow key={t.id} task={t} matterName={matterName} />
           ))}
           <AddTaskRow matterId={matterId} stage={stage} />
         </div>
@@ -437,6 +450,7 @@ export function MatterDetailPanel() {
             stage={stage}
             tasks={grouped[stage] ?? []}
             matterId={selectedMatter.id}
+            matterName={selectedMatter.name}
             defaultOpen={i === 0}
           />
         ))}

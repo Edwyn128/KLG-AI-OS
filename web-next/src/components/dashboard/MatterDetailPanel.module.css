@@ -341,6 +341,23 @@
 .taskDelete .material-symbols-outlined { font-size: 14px; }
 .taskDelete:hover { color: #e05c5c; }
 
+.sparkBtn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 13px;
+  opacity: 0;
+  padding: 1px 3px;
+  border-radius: 4px;
+  line-height: 1;
+  flex-shrink: 0;
+  transition: opacity 0.15s;
+  margin-right: 2px;
+}
+
+.taskRow:hover .sparkBtn { opacity: 0.7; }
+.sparkBtn:hover { opacity: 1 !important; background: var(--bg-hover); }
+
 /* ── Add task ─────────────────────────────────────────── */
 
 .addTaskBtn {

@@ -2,7 +2,7 @@
 // KLG AI OS — TypeScript types
 // =============================================================================
 
-export type Workspace = 'dashboard' | 'chat' | 'bloodhound'
+export type Workspace = 'today' | 'matters' | 'chat' | 'deadlines' | 'bloodhound' | 'admin' | 'accounting'
 
 export type Agent = 'alfred' | 'bloodhound'
 
@@ -93,9 +93,12 @@ export interface Task {
   assignee?: string
   deadline?: string | null
   eta?: string | null
+  start_date?: string | null
+  completed_at?: string | null
   duration?: number | null
   priority?: string
   matter_id?: string
+  matter_name?: string
   is_block?: boolean
 }
 

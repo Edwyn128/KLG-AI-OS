@@ -74,20 +74,81 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 10px;
-  color: var(--text-muted);
-  font-size: 13px;
+  gap: 16px;
+  padding: 32px 24px;
+  text-align: center;
 }
 
-.empty .material-symbols-outlined {
-  font-size: 36px !important;
-  opacity: 0.3;
+.emptyAvatar {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: var(--accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 20px rgba(178, 34, 52, 0.35);
+  flex-shrink: 0;
+}
+
+.emptyAvatar .material-symbols-outlined {
+  font-size: 30px !important;
+  color: #fff;
+  font-variation-settings: 'FILL' 1, 'wght' 400;
+}
+
+.emptyHeading {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: -0.3px;
+}
+
+.emptySubtext {
+  font-size: 13px;
+  color: var(--text-muted);
+  max-width: 320px;
+  line-height: 1.55;
+}
+
+.quickChips {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  max-width: 400px;
+  margin-top: 4px;
+}
+
+.quickChip {
+  padding: 7px 14px;
+  border-radius: 20px;
+  border: 1px solid var(--glass-border);
+  background: var(--glass-bg);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s, color 0.12s, transform 0.1s;
+}
+
+.quickChip:hover:not(:disabled) {
+  background: var(--bg-hover);
+  border-color: var(--accent);
+  color: var(--text-primary);
+  transform: translateY(-1px);
+}
+
+.quickChip:disabled {
+  opacity: 0.4;
+  cursor: default;
 }
 
 .message {
   display: flex;
   flex-direction: column;
   max-width: 80%;
+  gap: 3px;
 }
 
 .user {
@@ -100,25 +161,34 @@
   align-items: flex-start;
 }
 
+.senderName {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  padding: 0 4px;
+}
+
 .bubble {
   padding: 10px 14px;
   border-radius: 12px;
   font-size: 13px;
-  line-height: 1.5;
+  line-height: 1.55;
   white-space: pre-wrap;
   word-break: break-word;
 }
 
 .user .bubble {
-  background: var(--bg-hover);
-  border: 1px solid var(--glass-border);
-  color: var(--text-primary);
+  background: var(--accent);
+  color: #fff;
   border-bottom-right-radius: 4px;
+  box-shadow: 0 2px 8px rgba(178, 34, 52, 0.25);
 }
 
 .alfred .bubble {
   background: var(--glass-bg);
   border: 1px solid var(--glass-border);
+  border-left: 2px solid var(--accent);
   color: var(--text-primary);
   border-bottom-left-radius: 4px;
 }

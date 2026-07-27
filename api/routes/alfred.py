@@ -212,6 +212,13 @@ def get_verified_username(request: Request) -> str:
 # Must match the casing used in APP_PASSWORDS keys (case-insensitive compare applied below).
 _AGENT_TRIGGER_ALLOWED = {"tim", "stu", "edwyn"}
 
+# Super-admin users: access to the Admin workspace + user management endpoints.
+# Only "stu" for now — displayed as "Admin" in the UI.
+_SUPER_ADMIN_USERS = {"stu"}
+
+# Accounting users: access to the Accounting workspace.
+_ACCOUNTING_USERS = {"stu", "tim", "edwyn"}
+
 
 def require_agent_trigger_role(request: Request) -> str:
     """
@@ -676,10 +683,14 @@ async def auth_me(http_request: Request) -> dict:
     """
     username = get_verified_username(http_request) or "Team"
     client_matters = get_client_matters(username)
+    un = username.lower()
     return {
         "username": username,
         "is_client": client_matters is not None,
         "allowed_matters": client_matters or [],
+        "is_admin": un in _AGENT_TRIGGER_ALLOWED,
+        "is_super_admin": un in _SUPER_ADMIN_USERS,
+        "is_accounting": un in _ACCOUNTING_USERS,
     }
 
 
@@ -718,9 +729,23 @@ def _normalize_matter(d: dict) -> dict:
     }
 
 
+# Statuses that indicate an open, in-progress matter.
+# Anything NOT in this set (Done, Closed, Canceled, etc.) is treated as archived
+# and hidden from the default matters list unless ?archived=true is passed.
+_ACTIVE_STATUSES = {
+    "in progress", "active", "open", "planning",
+    "review needed", "backlog", "paused",
+}
+
+
+def _is_active(matter: dict) -> bool:
+    return (matter.get("status") or "").strip().lower() in _ACTIVE_STATUSES
+
+
 @router.get("/matters", summary="List active matters by category")
 async def list_active_matters(
     category: str = "Case Project",
+    archived: bool = False,
     alfred_deps=Depends(get_alfred_deps),
     client_scope: list[str] | None = Depends(get_client_scope),
 ) -> dict[str, Any]:
@@ -747,6 +772,9 @@ async def list_active_matters(
                 s.lower() in (m.get("name") or m.get("Project name") or "").lower()
                 for s in client_scope
             )]
+        # Hide closed/done/canceled matters unless explicitly requested
+        if not archived:
+            normalized = [m for m in normalized if _is_active(m)]
         return {"count": len(normalized), "category": category, "matters": normalized}
     except Exception as e:
         logger.error("list_active_matters error: %s", e, exc_info=True)
@@ -1031,6 +1059,113 @@ async def delete_task(
         return {"status": "deleted", "task_id": task_id}
     except Exception as e:
         logger.error("delete_task(%s) error: %s", task_id, e, exc_info=True)
+        raise HTTPException(status_code=500, detail="An internal error occurred. Check server logs.")
+
+
+@router.get("/today/tasks", summary="Tasks assigned to the current user across all template DBs")
+async def today_tasks(
+    http_request: Request,
+    alfred_deps=Depends(get_alfred_deps),
+) -> dict[str, Any]:
+    """Return tasks from both template DBs that are assigned to the authenticated user."""
+    from notion_bridge.tasks import TaskPages, APPELLATE_TASKS_DB_ID, TRIAL_COURT_TASKS_DB_ID
+    import asyncio
+
+    username = get_verified_username(http_request) or "Team"
+    # Map login username to Notion display name
+    _LOGIN_TO_DISPLAY = {"tim": "Tim", "edwyn": "Edwyn", "brittney": "Brittney",
+                         "william": "William", "ted": "Ted", "stu": "Stu", "richard": "Richard"}
+    display_name = _LOGIN_TO_DISPLAY.get(username.lower(), username.title())
+
+    try:
+        tp = TaskPages(alfred_deps.bridge)
+        appellate, trial = await asyncio.gather(
+            tp.tasks_by_assignee(APPELLATE_TASKS_DB_ID, display_name),
+            tp.tasks_by_assignee(TRIAL_COURT_TASKS_DB_ID, display_name),
+        )
+        all_tasks = sorted(appellate + trial, key=lambda t: t.get("deadline") or "9999")
+        return {"user": display_name, "tasks": all_tasks, "count": len(all_tasks)}
+    except Exception as e:
+        logger.error("today_tasks error: %s", e, exc_info=True)
+        return {"user": display_name, "tasks": [], "count": 0}
+
+
+@router.get("/today/briefing", summary="Alfred-generated daily focus briefing for the current user")
+async def today_briefing(
+    http_request: Request,
+    alfred_deps=Depends(get_alfred_deps),
+) -> dict[str, Any]:
+    """Generate a personalised 3-bullet focus summary using upcoming deadlines and assigned tasks."""
+    from datetime import datetime, timezone
+    from notion_bridge.tasks import TaskPages, APPELLATE_TASKS_DB_ID, TRIAL_COURT_TASKS_DB_ID
+    import asyncio
+
+    username = get_verified_username(http_request) or "Team"
+    _LOGIN_TO_DISPLAY = {"tim": "Tim", "edwyn": "Edwyn", "brittney": "Brittney",
+                         "william": "William", "ted": "Ted", "stu": "Stu", "richard": "Richard"}
+    display_name = _LOGIN_TO_DISPLAY.get(username.lower(), username.title())
+
+    try:
+        tp = TaskPages(alfred_deps.bridge)
+        appellate, trial, matters = await asyncio.gather(
+            tp.tasks_by_assignee(APPELLATE_TASKS_DB_ID, display_name),
+            tp.tasks_by_assignee(TRIAL_COURT_TASKS_DB_ID, display_name),
+            alfred_deps.project_pages.get_all_active_matters(),
+        )
+        assigned_tasks = [t for t in (appellate + trial) if t.get("status", "").lower() != "done"]
+        deadlines = sorted(
+            [m for m in [_normalize_matter(m) for m in matters] if _is_active(m) and m.get("days_until") is not None],
+            key=lambda m: m.get("days_until", 9999),
+        )[:5]
+
+        task_lines = "\n".join(f"- {t['name']} ({t.get('stage','')}, deadline: {t.get('deadline','none')})"
+                               for t in assigned_tasks[:10]) or "No pending tasks found."
+        deadline_lines = "\n".join(f"- {m['name']}: {m.get('next_court_deadline') or m.get('target_date','no date')} ({m.get('days_until','')} days)"
+                                   for m in deadlines) or "No upcoming deadlines."
+
+        today_str = datetime.now(timezone.utc).strftime("%A, %B %d, %Y")
+        prompt = (
+            f"You are Alfred, KLG's AI assistant. Today is {today_str}.\n"
+            f"You are generating a morning focus briefing for {display_name}.\n\n"
+            f"ASSIGNED TASKS:\n{task_lines}\n\n"
+            f"UPCOMING MATTER DEADLINES:\n{deadline_lines}\n\n"
+            f"Write a concise 3-bullet focus summary for {display_name}'s day. "
+            f"Be specific about matter names and dates. Plain text only, no headers, no markdown."
+        )
+
+        from pydantic_ai import Agent
+        from alfred.model_factory import build_model
+        from config import settings
+        agent: Agent[None, str] = Agent(model=build_model(settings.alfred_model), output_type=str)
+        result = await agent.run(prompt)
+        return {"focus": result.output, "user": display_name}
+    except Exception as e:
+        logger.error("today_briefing error: %s", e, exc_info=True)
+        return {"focus": f"Unable to generate briefing: {e}", "user": display_name}
+
+
+@router.get("/deadlines/tasks", summary="All tasks across both template DBs with matter context")
+async def all_deadlines_tasks(
+    client_scope: list[str] | None = Depends(get_client_scope),
+    alfred_deps=Depends(get_alfred_deps),
+) -> dict[str, Any]:
+    """Return all tasks from both KLG task template DBs, each annotated with matter_name."""
+    if client_scope is not None:
+        raise HTTPException(status_code=403, detail="Not available in client sessions.")
+
+    from notion_bridge.tasks import TaskPages, APPELLATE_TASKS_DB_ID, TRIAL_COURT_TASKS_DB_ID
+    import asyncio
+
+    try:
+        tp = TaskPages(alfred_deps.bridge)
+        appellate, trial = await asyncio.gather(
+            tp.all_tasks_with_matter(APPELLATE_TASKS_DB_ID),
+            tp.all_tasks_with_matter(TRIAL_COURT_TASKS_DB_ID),
+        )
+        all_tasks = appellate + trial
+        return {"tasks": all_tasks, "count": len(all_tasks)}
+    except Exception as e:
+        logger.error("all_deadlines_tasks error: %s", e, exc_info=True)
         raise HTTPException(status_code=500, detail="An internal error occurred. Check server logs.")
 
 

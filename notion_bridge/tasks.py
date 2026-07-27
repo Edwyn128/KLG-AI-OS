@@ -82,6 +82,10 @@ def _normalize_task(task_id: str, data: dict, *, is_block: bool = False) -> dict
         or ""
     )
 
+    completed_at = None
+    if "done" in str(status).lower() or "complete" in str(status).lower():
+        completed_at = data.get("last_edited_time")
+
     return {
         "id": task_id,
         "name": name,
@@ -90,7 +94,9 @@ def _normalize_task(task_id: str, data: dict, *, is_block: bool = False) -> dict
         "assignee": _assignee(data.get("Assignee") or data.get("assignee") or ""),
         "deadline": _date(data.get("Deadline") or data.get("deadline")),
         "eta": _date(data.get("ETA") or data.get("eta")),
-        "duration": data.get("Duration") or data.get("duration"),
+        "start_date": _date(data.get("Start Date") or data.get("start_date")),
+        "completed_at": completed_at,
+        "duration": data.get("Duration") or data.get("Expected Duration") or data.get("duration"),
         "priority": data.get("Priority") or data.get("priority") or "",
         "is_block": False,
     }
@@ -303,6 +309,69 @@ class TaskPages:
             "priority": "",
             "is_block": True,
         }
+
+    async def tasks_by_assignee(self, db_id: str, display_name: str) -> list[dict]:
+        """Return all tasks from a template DB assigned to a specific person (by display name)."""
+        try:
+            filter_body = {
+                "property": "Assignee",
+                "people": {"contains": display_name},
+            }
+            rows = await self.bridge.query_database(db_id, filter=filter_body)
+            result = []
+            for row in rows:
+                props = row.get("properties", {})
+                normalized = _normalize_task(row["id"], props)
+                # Add last_edited_time for completed_at derivation
+                normalized["last_edited_time"] = row.get("last_edited_time")
+                result.append(normalized)
+            return result
+        except Exception as exc:
+            logger.warning("tasks_by_assignee error for %s: %s", display_name, exc)
+            return []
+
+    async def all_tasks_with_matter(self, db_id: str) -> list[dict]:
+        """Return ALL tasks from a template DB, each annotated with matter_name from Projects relation."""
+        try:
+            rows = await self.bridge.query_database(db_id)
+            # Collect unique matter IDs for name resolution
+            matter_ids: set[str] = set()
+            for row in rows:
+                for rel in row.get("properties", {}).get("Projects", {}).get("relation", []):
+                    matter_ids.add(rel["id"])
+
+            # Resolve matter names in parallel
+            matter_names: dict[str, str] = {}
+            if matter_ids:
+                import asyncio
+                async def _resolve(mid: str) -> None:
+                    try:
+                        page = await self.bridge.get_page(mid)
+                        title_prop = (
+                            page.get("properties", {})
+                            .get("Project name", {})
+                            .get("title", [{}])
+                        )
+                        matter_names[mid] = title_prop[0].get("plain_text", "") if title_prop else ""
+                    except Exception:
+                        matter_names[mid] = ""
+                await asyncio.gather(*[_resolve(mid) for mid in matter_ids])
+
+            result = []
+            for row in rows:
+                props = row.get("properties", {})
+                task = _normalize_task(row["id"], props)
+                task["last_edited_time"] = row.get("last_edited_time")
+                # Attach matter name from first Projects relation
+                relations = props.get("Projects", {}).get("relation", [])
+                matter_id = relations[0]["id"] if relations else ""
+                task["matter_name"] = matter_names.get(matter_id, "")
+                task["matter_id"] = matter_id
+                result.append(task)
+            return result
+        except Exception as exc:
+            logger.warning("all_tasks_with_matter error for db %s: %s", db_id, exc)
+            return []
 
     async def seed_from_template(
         self,

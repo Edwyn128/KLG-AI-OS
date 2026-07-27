@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { fetchMatters, fetchMatterDetail, fetchMatterTasks } from '@/api/client'
 import { useMatterStore } from '@/store/matterStore'
+import { useAuthStore } from '@/store/authStore'
 import type { Matter } from '@/types'
 import { MatterDetailPanel } from './MatterDetailPanel'
 import styles from './DashboardWorkspace.module.css'
@@ -40,7 +41,9 @@ export function DashboardWorkspace() {
   const [matters, setMatters] = useState<Matter[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [showArchived, setShowArchived] = useState(false)
 
+  const { isAdmin, isSuperAdmin } = useAuthStore()
   const { selectedMatter, setSelectedMatter, setTasks, setTasksLoading } = useMatterStore()
 
   useEffect(() => {
@@ -48,7 +51,7 @@ export function DashboardWorkspace() {
     setLoading(true)
     setError(null)
 
-    fetchMatters()
+    fetchMatters(showArchived)
       .then(res => {
         if (cancelled) return
         setMatters(res.matters)
@@ -62,7 +65,7 @@ export function DashboardWorkspace() {
       })
 
     return () => { cancelled = true }
-  }, [])
+  }, [showArchived])
 
   async function handleSelectMatter(m: Matter) {
     setSelectedMatter(m)
@@ -136,6 +139,19 @@ export function DashboardWorkspace() {
     <div className={styles.container}>
       {/* Left: matter list */}
       <div className={styles.listPanel}>
+        {/* Admin-only: show archived toggle */}
+        {(isAdmin || isSuperAdmin) && (
+          <div className={styles.archiveToggleRow}>
+            <label className={styles.archiveToggle}>
+              <input
+                type="checkbox"
+                checked={showArchived}
+                onChange={e => setShowArchived(e.target.checked)}
+              />
+              <span>Show archived matters</span>
+            </label>
+          </div>
+        )}
         {/* Upcoming deadlines strip */}
         {deadlines.length > 0 && (
           <div className={styles.deadlineStrip}>

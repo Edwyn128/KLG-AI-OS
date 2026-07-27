@@ -2,10 +2,14 @@ import { useUIStore } from '@/store/uiStore'
 import { useAuthStore } from '@/store/authStore'
 import { Header } from './Header'
 import { WorkspaceTabs } from './WorkspaceTabs'
-import { DashboardWorkspace } from '@/components/dashboard/DashboardWorkspace'
-import { ChatWorkspace } from '@/components/chat/ChatWorkspace'
+import { TodayWorkspace }      from '@/components/today/TodayWorkspace'
+import { DashboardWorkspace }  from '@/components/dashboard/DashboardWorkspace'
+import { ChatWorkspace }       from '@/components/chat/ChatWorkspace'
+import { DeadlinesWorkspace }  from '@/components/deadlines/DeadlinesWorkspace'
 import { BloodhoundWorkspace } from '@/components/bloodhound/BloodhoundWorkspace'
-import { SkillsLauncher } from '@/components/skills/SkillsLauncher'
+import { AccountingWorkspace } from '@/components/accounting/AccountingWorkspace'
+import { AdminWorkspace }      from '@/components/admin/AdminWorkspace'
+import { SkillsLauncher }      from '@/components/skills/SkillsLauncher'
 import styles from './AppLayout.module.css'
 
 export function AppLayout() {
@@ -17,12 +21,15 @@ export function AppLayout() {
       <Header />
       <WorkspaceTabs />
       <main className={styles.workspace}>
-        {activeWorkspace === 'dashboard'  && <DashboardWorkspace />}
+        {activeWorkspace === 'today'      && <TodayWorkspace />}
+        {activeWorkspace === 'matters'    && <DashboardWorkspace />}
         {activeWorkspace === 'chat'       && <ChatWorkspace />}
+        {activeWorkspace === 'deadlines'  && <DeadlinesWorkspace />}
         {activeWorkspace === 'bloodhound' && <BloodhoundWorkspace />}
+        {activeWorkspace === 'accounting' && <AccountingWorkspace />}
+        {activeWorkspace === 'admin'      && <AdminWorkspace />}
       </main>
-      {/* Skills execute firm-internal workflows (Notion writes, Slack posts) —
-          not available to client sessions. */}
+      {/* Skills execute firm-internal workflows — not available to client sessions. */}
       {!isClient && <SkillsLauncher />}
     </div>
   )

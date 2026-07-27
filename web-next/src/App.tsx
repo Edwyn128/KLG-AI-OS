@@ -6,12 +6,13 @@ import { LoginModal } from '@/components/auth/LoginModal'
 
 export function App() {
   const { hydrate, isAuthenticated, showLogin } = useAuthStore()
-  const { hydrateCompact } = useUIStore()
+  const { hydrateCompact, hydrateTheme } = useUIStore()
 
   useEffect(() => {
     hydrate()
     hydrateCompact()
-  }, [hydrate, hydrateCompact])
+    hydrateTheme()
+  }, [hydrate, hydrateCompact, hydrateTheme])
 
   return (
     <>

@@ -4,8 +4,9 @@ import { useUIStore } from '@/store/uiStore'
 import styles from './Header.module.css'
 
 export function Header() {
-  const { user, isAuthenticated, logout } = useAuthStore()
-  const { isOnline, clock, setClock, setOnline, compact, toggleCompact } = useUIStore()
+  const { user, isAuthenticated, logout, isSuperAdmin } = useAuthStore()
+  const { isOnline, clock, setClock, setOnline, compact, toggleCompact, theme, toggleTheme } = useUIStore()
+  const displayName = isSuperAdmin ? 'Admin' : user
 
   useEffect(() => {
     function tick() {
@@ -49,10 +50,20 @@ export function Header() {
         >
           {compact ? '⊞' : '⊟'}
         </button>
+        <button
+          className={`${styles.compactBtn}${theme === 'light' ? ' ' + styles.active : ''}`}
+          onClick={toggleTheme}
+          title={theme === 'light' ? 'Switch to dark mode' : 'Switch to light mode'}
+          aria-label="Toggle theme"
+        >
+          <span className="material-symbols-outlined" style={{ fontSize: 16 }}>
+            {theme === 'light' ? 'dark_mode' : 'light_mode'}
+          </span>
+        </button>
         {isAuthenticated && (
           <button className={styles.userBtn} onClick={logout} title="Sign out">
-            <span className={styles.userInitial}>{user[0] ?? '?'}</span>
-            <span className={styles.userName}>{user}</span>
+            <span className={styles.userInitial}>{displayName[0]?.toUpperCase() ?? '?'}</span>
+            <span className={styles.userName}>{displayName}</span>
           </button>
         )}
       </div>

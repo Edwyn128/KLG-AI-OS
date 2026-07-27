@@ -14,6 +14,8 @@ interface AuthState {
   isAdmin: boolean
   isActivityAdmin: boolean
   isClient: boolean
+  isSuperAdmin: boolean   // Stu only — Admin tab + user management
+  isAccounting: boolean   // Accounting tab access
   allowedMatters: string[]
 
   // Actions
@@ -32,7 +34,12 @@ function _resolveClientMode() {
       const r = await apiFetch('/alfred/auth/me')
       if (r.ok) {
         const me = await r.json()
-        useAuthStore.setState({ isClient: me.is_client ?? false, allowedMatters: me.allowed_matters ?? [] })
+        useAuthStore.setState({
+          isClient:     me.is_client     ?? false,
+          allowedMatters: me.allowed_matters ?? [],
+          isSuperAdmin: me.is_super_admin ?? false,
+          isAccounting: me.is_accounting  ?? false,
+        })
       }
     } catch {}
   })()
@@ -45,6 +52,8 @@ export const useAuthStore = create<AuthState>((set) => ({
   isAdmin: false,
   isActivityAdmin: false,
   isClient: false,
+  isSuperAdmin: false,
+  isAccounting: false,
   allowedMatters: [],
 
   setUser: (name) => set({ user: name }),
@@ -82,6 +91,8 @@ export const useAuthStore = create<AuthState>((set) => ({
       isAdmin: false,
       isActivityAdmin: false,
       isClient: false,
+      isSuperAdmin: false,
+      isAccounting: false,
       allowedMatters: [],
     })
   },

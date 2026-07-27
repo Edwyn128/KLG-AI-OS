@@ -17,7 +17,7 @@ function resolvePrompt(prompt: string, matterName: string | undefined, params: R
 }
 
 export function SkillsLauncher() {
-  const { skillsOpen, setSkillsOpen, setWorkspace } = useUIStore()
+  const { skillsOpen, setSkillsOpen, setWorkspace, activeWorkspace } = useUIStore()
   const { setSkillTrigger } = useChatStore()
   const { selectedMatter } = useMatterStore()
 
@@ -251,14 +251,17 @@ export function SkillsLauncher() {
         </div>
       )}
 
-      <button
-        className={`${styles.fab} ${skillsOpen ? styles.fabOpen : ''}`}
-        onClick={() => skillsOpen ? handleClose() : setSkillsOpen(true)}
-        aria-label={skillsOpen ? 'Close skills' : 'Open skills'}
-        title="Skills"
-      >
-        <span className="material-symbols-outlined">bolt</span>
-      </button>
+      {/* Hide FAB on chat — the toolbar has its own bolt button there */}
+      {activeWorkspace !== 'chat' && (
+        <button
+          className={`${styles.fab} ${skillsOpen ? styles.fabOpen : ''}`}
+          onClick={() => skillsOpen ? handleClose() : setSkillsOpen(true)}
+          aria-label={skillsOpen ? 'Close skills' : 'Open skills'}
+          title="Skills"
+        >
+          <span className="material-symbols-outlined">bolt</span>
+        </button>
+      )}
     </>
   )
 }

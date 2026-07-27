@@ -10,6 +10,13 @@ function genId(): string {
   return `msg_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`
 }
 
+const QUICK_PROMPTS = [
+  "What's due this week?",
+  "Summarize my active matters",
+  "What can you help me with?",
+  "Run a research skill",
+]
+
 export function ChatWorkspace() {
   const { user, isClient } = useAuthStore()
   const { setSkillsOpen } = useUIStore()
@@ -232,8 +239,25 @@ export function ChatWorkspace() {
       <div className={styles.messages}>
         {alfredMessages.length === 0 ? (
           <div className={styles.empty}>
-            <span className="material-symbols-outlined">smart_toy</span>
-            <p>Send a message to Alfred</p>
+            <div className={styles.emptyAvatar}>
+              <span className="material-symbols-outlined">smart_toy</span>
+            </div>
+            <div className={styles.emptyHeading}>Alfred</div>
+            <div className={styles.emptySubtext}>
+              Your KLG AI assistant — ask me about matters, deadlines, research, or drafting.
+            </div>
+            <div className={styles.quickChips}>
+              {QUICK_PROMPTS.map(q => (
+                <button
+                  key={q}
+                  className={styles.quickChip}
+                  onClick={() => sendMessage(q)}
+                  disabled={isLoading}
+                >
+                  {q}
+                </button>
+              ))}
+            </div>
           </div>
         ) : (
           alfredMessages.map((msg: ChatMessage) => (
@@ -241,6 +265,7 @@ export function ChatWorkspace() {
               key={msg.id}
               className={`${styles.message} ${msg.role === 'user' ? styles.user : styles.alfred}`}
             >
+              <span className={styles.senderName}>{msg.name}</span>
               <div className={styles.bubble}>
                 {msg.text}
                 {msg.isStreaming && <span className={styles.cursor}>|</span>}

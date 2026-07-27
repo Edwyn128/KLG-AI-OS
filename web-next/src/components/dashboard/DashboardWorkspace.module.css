@@ -20,6 +20,29 @@
   overflow: hidden;
 }
 
+/* ── Archive toggle (admin only) ─────────────────────── */
+
+.archiveToggleRow {
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--glass-border);
+  flex-shrink: 0;
+}
+
+.archiveToggle {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 11px;
+  color: var(--text-muted);
+  cursor: pointer;
+  user-select: none;
+}
+
+.archiveToggle input[type="checkbox"] {
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
 /* ── Deadline strip ───────────────────────────────────── */
 
 .deadlineStrip {

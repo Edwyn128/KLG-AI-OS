@@ -531,6 +531,11 @@ from api.routes.cases import router as cases_router
 
 app.include_router(cases_router)
 
+# Admin routes (user management — super-admin only)
+from api.routes.admin import router as admin_router
+
+app.include_router(admin_router)
+
 # Health check endpoint — auth-exempt, used by Railway to verify the container is alive
 @app.get("/health", tags=["System"])
 async def health_check():

@@ -2,6 +2,20 @@ import { create } from 'zustand'
 import type { Workspace } from '@/types'
 
 const COMPACT_KEY = 'klg_compact'
+const THEME_KEY   = 'klg_theme'
+
+function loadTheme(): 'dark' | 'light' {
+  try { return localStorage.getItem(THEME_KEY) === 'light' ? 'light' : 'dark' } catch { return 'dark' }
+}
+
+function applyTheme(v: 'dark' | 'light'): void {
+  if (typeof document === 'undefined') return
+  if (v === 'light') {
+    document.documentElement.setAttribute('data-theme', 'light')
+  } else {
+    document.documentElement.removeAttribute('data-theme')
+  }
+}
 
 function loadCompact(): boolean {
   try { return localStorage.getItem(COMPACT_KEY) === '1' } catch { return false }
@@ -22,6 +36,7 @@ interface UIState {
   isOnline:        boolean
   clock:           string
   compact:         boolean
+  theme:           'dark' | 'light'
 
   setWorkspace:   (ws: Workspace) => void
   setSkillsOpen:  (open: boolean) => void
@@ -29,14 +44,17 @@ interface UIState {
   setClock:       (time: string) => void
   toggleCompact:  () => void
   hydrateCompact: () => void
+  toggleTheme:    () => void
+  hydrateTheme:   () => void
 }
 
 export const useUIStore = create<UIState>((set, get) => ({
-  activeWorkspace: 'dashboard',
+  activeWorkspace: 'today',
   skillsOpen:      false,
   isOnline:        true,
   clock:           '',
   compact:         false,
+  theme:           'dark',
 
   setWorkspace:  (ws)     => set({ activeWorkspace: ws }),
   setSkillsOpen: (open)   => set({ skillsOpen: open }),
@@ -54,5 +72,18 @@ export const useUIStore = create<UIState>((set, get) => ({
     const v = loadCompact()
     applyCompact(v)
     set({ compact: v })
+  },
+
+  toggleTheme: () => {
+    const next: 'dark' | 'light' = get().theme === 'dark' ? 'light' : 'dark'
+    try { localStorage.setItem(THEME_KEY, next) } catch {}
+    applyTheme(next)
+    set({ theme: next })
+  },
+
+  hydrateTheme: () => {
+    const v = loadTheme()
+    applyTheme(v)
+    set({ theme: v })
   },
 }))

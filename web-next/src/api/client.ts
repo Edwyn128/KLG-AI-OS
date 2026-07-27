@@ -85,8 +85,8 @@ export async function apiFetch(path: string, options: FetchOptions = {}): Promis
   return response
 }
 
-export async function fetchMatters(): Promise<MatterListResponse> {
-  const res = await apiFetch('/alfred/matters')
+export async function fetchMatters(archived = false): Promise<MatterListResponse> {
+  const res = await apiFetch(archived ? '/alfred/matters?archived=true' : '/alfred/matters')
   if (!res.ok) throw new Error('Failed to fetch matters')
   return res.json()
 }
@@ -142,6 +142,58 @@ export async function patchTask(taskId: string, fields: Partial<Task> & { is_blo
 export async function deleteTask(taskId: string, isBlock = false): Promise<void> {
   const res = await apiFetch(`/alfred/tasks/${taskId}?is_block=${isBlock}`, { method: 'DELETE' })
   if (!res.ok) throw new Error('Failed to delete task')
+}
+
+export interface KLGUser {
+  id: string; name: string; display_name: string; role: string; email: string
+  is_admin: boolean; is_super_admin: boolean; is_accounting: boolean
+  can_create_matters: boolean; can_edit_matters: boolean
+  can_create_tasks: boolean; can_edit_tasks: boolean
+  can_complete_tasks: boolean; can_delete_tasks: boolean
+  active: boolean; allowed_matters: string
+}
+
+export async function fetchAdminUsers(): Promise<KLGUser[]> {
+  const res = await apiFetch('/admin/users')
+  if (!res.ok) throw new Error('Failed to fetch users')
+  const data = await res.json()
+  return data.users ?? []
+}
+
+export async function createAdminUser(fields: Partial<KLGUser> & { name: string }): Promise<KLGUser> {
+  const res = await apiFetch('/admin/users', { method: 'POST', body: JSON.stringify(fields) })
+  if (!res.ok) throw new Error('Failed to create user')
+  return res.json()
+}
+
+export async function patchAdminUser(id: string, fields: Partial<KLGUser>): Promise<KLGUser> {
+  const res = await apiFetch(`/admin/users/${id}`, { method: 'PATCH', body: JSON.stringify(fields) })
+  if (!res.ok) throw new Error('Failed to update user')
+  return res.json()
+}
+
+export async function deleteAdminUser(id: string): Promise<void> {
+  const res = await apiFetch(`/admin/users/${id}`, { method: 'DELETE' })
+  if (!res.ok) throw new Error('Failed to deactivate user')
+}
+
+export async function fetchTodayTasks(): Promise<{ user: string; tasks: Task[] }> {
+  const res = await apiFetch('/alfred/today/tasks')
+  if (!res.ok) throw new Error('Failed to fetch today tasks')
+  return res.json()
+}
+
+export async function fetchTodayBriefing(): Promise<{ focus: string; user: string }> {
+  const res = await apiFetch('/alfred/today/briefing')
+  if (!res.ok) throw new Error('Failed to fetch today briefing')
+  return res.json()
+}
+
+export async function fetchAllTasks(): Promise<(Task & { matter_name: string })[]> {
+  const res = await apiFetch('/alfred/deadlines/tasks')
+  if (!res.ok) throw new Error('Failed to fetch all tasks')
+  const data = await res.json()
+  return Array.isArray(data) ? data : (data.tasks ?? [])
 }
 
 export async function fetchWatchList(tier?: string): Promise<WatchCase[]> {

@@ -1,0 +1,386 @@
+/* ── Container ──────────────────────────────────────────── */
+
+.container {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 20px 24px 16px;
+  gap: 14px;
+}
+
+/* ── Greeting bar ───────────────────────────────────────── */
+
+.greetingBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+}
+
+.greetingText {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.greeting {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.todayDate {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Two-column body ────────────────────────────────────── */
+
+.body {
+  flex: 1;
+  display: flex;
+  gap: 16px;
+  overflow: hidden;
+  min-height: 0;
+}
+
+.briefingCol {
+  flex: 0 0 380px;
+  min-width: 260px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.dataCol {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  overflow-y: auto;
+}
+
+/* ── Card ───────────────────────────────────────────────── */
+
+.card {
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-glass, 10px);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.briefingCol .card {
+  flex: 1;
+  overflow-y: auto;
+}
+
+.cardLabel {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--accent);
+  flex-shrink: 0;
+}
+
+/* ── Briefing card internals ────────────────────────────── */
+
+.briefingText {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow-y: auto;
+}
+
+.briefingLine {
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--text-secondary);
+  margin: 0;
+}
+
+.briefingEmpty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--text-muted);
+  text-align: center;
+  padding: 16px;
+}
+
+.briefingEmpty .material-symbols-outlined { font-size: 28px; opacity: 0.4; }
+.briefingEmpty p { font-size: 12px; margin: 0; }
+
+/* ── Skeleton shimmer ───────────────────────────────────── */
+
+.briefingSkeleton {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 4px 0;
+}
+
+.skeletonLine {
+  height: 14px;
+  border-radius: 4px;
+  background: linear-gradient(
+    90deg,
+    var(--glass-border) 25%,
+    rgba(184,200,222,0.12) 50%,
+    var(--glass-border) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.4s ease-in-out infinite;
+}
+
+.listSkeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.skeletonRow {
+  height: 28px;
+  border-radius: 5px;
+  background: linear-gradient(
+    90deg,
+    var(--glass-border) 25%,
+    rgba(184,200,222,0.12) 50%,
+    var(--glass-border) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.4s ease-in-out infinite;
+}
+
+@keyframes shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* ── Ask Alfred button ──────────────────────────────────── */
+
+.askBtn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: transparent;
+  border: 1px solid var(--accent);
+  color: var(--accent);
+  border-radius: 6px;
+  padding: 6px 12px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  align-self: flex-start;
+  flex-shrink: 0;
+}
+
+.askBtn:hover {
+  background: var(--accent);
+  color: #fff;
+}
+
+/* ── Deadline list ──────────────────────────────────────── */
+
+.deadlineList {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.deadlineRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 0;
+}
+
+.dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.dotRed   { background: #e05c5c; }
+.dotAmber { background: #ffc144; }
+.dotGreen { background: #4caf7a; }
+
+.deadlineName {
+  flex: 1;
+  font-size: 12px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.deadlineDate {
+  font-size: 11px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.daysAway {
+  font-size: 10px;
+  opacity: 0.75;
+}
+
+.emptyNote {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin: 0;
+  text-align: center;
+  padding: 8px 0;
+}
+
+/* ── Task list ──────────────────────────────────────────── */
+
+.taskList {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.taskCount {
+  margin-left: auto;
+  font-size: 9px;
+  font-weight: 400;
+  color: var(--text-muted);
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.taskRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  border-radius: 5px;
+}
+
+.taskRow:hover { background: var(--bg-hover); padding-left: 4px; margin-left: -4px; }
+
+.taskIcon {
+  font-size: 15px !important;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.taskIconDone { color: #4caf7a; }
+
+.taskInfo {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.taskName {
+  font-size: 12px;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.taskNameDone {
+  color: var(--text-muted);
+  text-decoration: line-through;
+}
+
+.taskMatter {
+  font-size: 10px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.taskDue {
+  font-size: 10px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.taskDueUrgent { color: #e05c5c; font-weight: 600; }
+
+.sparkBtn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 14px;
+  opacity: 0.55;
+  padding: 2px 4px;
+  border-radius: 4px;
+  line-height: 1;
+  flex-shrink: 0;
+  transition: opacity 0.15s;
+}
+
+.sparkBtn:hover { opacity: 1; background: var(--bg-hover); }
+
+/* ── Done section ───────────────────────────────────────── */
+
+.doneSection {
+  margin-top: 4px;
+}
+
+.doneSummary {
+  font-size: 11px;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 2px 0;
+  user-select: none;
+  list-style: none;
+}
+
+.doneSummary::-webkit-details-marker { display: none; }
+
+.taskRowDone {
+  opacity: 0.65;
+}
+
+/* ── Responsive ─────────────────────────────────────────── */
+
+@media (max-width: 768px) {
+  .body {
+    flex-direction: column;
+    overflow-y: auto;
+  }
+
+  .briefingCol {
+    flex: none;
+    min-width: unset;
+  }
+
+  .briefingCol .card {
+    flex: none;
+    max-height: 320px;
+  }
+
+  .container {
+    padding: 14px 16px;
+    overflow-y: auto;
+  }
+}
