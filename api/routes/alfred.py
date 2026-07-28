@@ -1070,29 +1070,52 @@ async def delete_task(
         raise HTTPException(status_code=500, detail="An internal error occurred. Check server logs.")
 
 
-@router.get("/today/tasks", summary="Tasks assigned to the current user across all template DBs")
+@router.get("/today/tasks", summary="Tasks assigned to the current user from their matter project pages")
 async def today_tasks(
     http_request: Request,
     alfred_deps=Depends(get_alfred_deps),
 ) -> dict[str, Any]:
-    """Return tasks from both template DBs that are assigned to the authenticated user."""
-    from notion_bridge.tasks import TaskPages, APPELLATE_TASKS_DB_ID, TRIAL_COURT_TASKS_DB_ID
+    """Return tasks from active matter project pages assigned to the authenticated user."""
+    from notion_bridge.tasks import TaskPages
     import asyncio
 
     username = get_verified_username(http_request) or "Team"
-    # Map login username to Notion display name
     _LOGIN_TO_DISPLAY = {"tim": "Tim", "edwyn": "Edwyn", "brittney": "Brittney",
                          "william": "William", "ted": "Ted", "stu": "Stu", "richard": "Richard"}
     display_name = _LOGIN_TO_DISPLAY.get(username.lower(), username.title())
 
     try:
-        tp = TaskPages(alfred_deps.bridge)
-        appellate, trial = await asyncio.gather(
-            tp.tasks_by_assignee(APPELLATE_TASKS_DB_ID, display_name),
-            tp.tasks_by_assignee(TRIAL_COURT_TASKS_DB_ID, display_name),
-        )
-        all_tasks = sorted(appellate + trial, key=lambda t: t.get("deadline") or "9999")
-        return {"user": display_name, "tasks": all_tasks, "count": len(all_tasks)}
+        matters = await alfred_deps.project_pages.get_all_active_matters(category="Case Project")
+        active_matters = [m for m in [_normalize_matter(m) for m in matters] if _is_active(m)]
+
+        task_pages = alfred_deps.task_pages or TaskPages(alfred_deps.bridge)
+
+        async def _fetch_matter_tasks(matter: dict) -> list[dict]:
+            matter_id = matter.get("id") or ""
+            matter_name = matter.get("name") or ""
+            if not matter_id:
+                return []
+            try:
+                tasks = await task_pages.get_tasks_for_matter(matter_id)
+                for task in tasks:
+                    task["matter_name"] = matter_name
+                    task["matter_id"] = matter_id
+                return tasks
+            except Exception as exc:
+                logger.warning("today_tasks: could not fetch tasks for '%s': %s", matter_name, exc)
+                return []
+
+        results = await asyncio.gather(*[_fetch_matter_tasks(m) for m in active_matters])
+        all_tasks = [t for tasks in results for t in tasks]
+
+        # Filter to tasks assigned to the current user (case-insensitive substring match)
+        assigned = [
+            t for t in all_tasks
+            if display_name.lower() in (t.get("assignee") or "").lower()
+        ]
+        assigned.sort(key=lambda t: t.get("deadline") or "9999")
+
+        return {"user": display_name, "tasks": assigned, "count": len(assigned)}
     except Exception as e:
         logger.error("today_tasks error: %s", e, exc_info=True)
         return {"user": display_name, "tasks": [], "count": 0}
@@ -1105,7 +1128,6 @@ async def today_briefing(
 ) -> dict[str, Any]:
     """Generate a personalised 3-bullet focus summary using upcoming deadlines and assigned tasks."""
     from datetime import datetime, timezone
-    from notion_bridge.tasks import TaskPages, APPELLATE_TASKS_DB_ID, TRIAL_COURT_TASKS_DB_ID
     import asyncio
 
     username = get_verified_username(http_request) or "Team"
@@ -1114,13 +1136,32 @@ async def today_briefing(
     display_name = _LOGIN_TO_DISPLAY.get(username.lower(), username.title())
 
     try:
-        tp = TaskPages(alfred_deps.bridge)
-        appellate, trial, matters = await asyncio.gather(
-            tp.tasks_by_assignee(APPELLATE_TASKS_DB_ID, display_name),
-            tp.tasks_by_assignee(TRIAL_COURT_TASKS_DB_ID, display_name),
-            alfred_deps.project_pages.get_all_active_matters(),
-        )
-        assigned_tasks = [t for t in (appellate + trial) if t.get("status", "").lower() != "done"]
+        from notion_bridge.tasks import TaskPages as _TaskPages
+        tp = alfred_deps.task_pages or _TaskPages(alfred_deps.bridge)
+        raw_matters = await alfred_deps.project_pages.get_all_active_matters()
+        active_matters = [m for m in [_normalize_matter(m) for m in raw_matters] if _is_active(m)]
+
+        async def _fetch_for_briefing(matter: dict) -> list[dict]:
+            mid = matter.get("id") or ""
+            mname = matter.get("name") or ""
+            if not mid:
+                return []
+            try:
+                tasks = await tp.get_tasks_for_matter(mid)
+                for t in tasks:
+                    t["matter_name"] = mname
+                return tasks
+            except Exception:
+                return []
+
+        task_results = await asyncio.gather(*[_fetch_for_briefing(m) for m in active_matters])
+        all_fetched = [t for ts in task_results for t in ts]
+        assigned_tasks = [
+            t for t in all_fetched
+            if display_name.lower() in (t.get("assignee") or "").lower()
+            and t.get("status", "").lower() != "done"
+        ]
+        matters = raw_matters
         deadlines = sorted(
             [m for m in [_normalize_matter(m) for m in matters] if _is_active(m) and m.get("days_until") is not None],
             key=lambda m: m.get("days_until", 9999),
@@ -1152,39 +1193,56 @@ async def today_briefing(
         return {"focus": f"Unable to generate briefing: {e}", "user": display_name}
 
 
-@router.get("/deadlines/tasks", summary="All tasks across both template DBs with matter context")
+@router.get("/deadlines/tasks", summary="All tasks from active matter project pages")
 async def all_deadlines_tasks(
     client_scope: list[str] | None = Depends(get_client_scope),
     alfred_deps=Depends(get_alfred_deps),
 ) -> dict[str, Any]:
-    """Return all tasks from both KLG task template DBs, each annotated with matter_name."""
+    """
+    Return all tasks from active matter project pages, each annotated with matter_name.
+
+    Reads tasks directly from the Notion Projects database — the same source
+    as the Matters tab. Tasks live inside each matter page (inline child
+    database or to-do blocks).
+    """
     if client_scope is not None:
         raise HTTPException(status_code=403, detail="Not available in client sessions.")
 
-    from notion_bridge.tasks import TaskPages, APPELLATE_TASKS_DB_ID, TRIAL_COURT_TASKS_DB_ID
+    from notion_bridge.tasks import TaskPages
     import asyncio
 
-    tp = TaskPages(alfred_deps.bridge)
-    # return_exceptions=True lets one DB fail without blocking the other
-    results = await asyncio.gather(
-        tp.all_tasks_with_matter(APPELLATE_TASKS_DB_ID),
-        tp.all_tasks_with_matter(TRIAL_COURT_TASKS_DB_ID),
-        return_exceptions=True,
-    )
+    try:
+        matters = await alfred_deps.project_pages.get_all_active_matters(category="Case Project")
+        active_matters = [m for m in [_normalize_matter(m) for m in matters] if _is_active(m)]
 
-    all_tasks: list[dict] = []
-    errors: list[str] = []
-    db_labels = ["Appellate", "TrialCourt"]
-    for label, res in zip(db_labels, results):
-        if isinstance(res, Exception):
-            msg = f"{label} DB: {type(res).__name__}: {res}"
-            logger.error("all_deadlines_tasks — %s", msg, exc_info=res)
-            errors.append(msg)
-        else:
-            all_tasks.extend(res)
+        task_pages = alfred_deps.task_pages or TaskPages(alfred_deps.bridge)
 
-    logger.info("all_deadlines_tasks: returning %d tasks, %d errors", len(all_tasks), len(errors))
-    return {"tasks": all_tasks, "count": len(all_tasks), "errors": errors}
+        async def _fetch(matter: dict) -> list[dict]:
+            matter_id = matter.get("id") or ""
+            matter_name = matter.get("name") or ""
+            if not matter_id:
+                return []
+            try:
+                tasks = await task_pages.get_tasks_for_matter(matter_id)
+                for task in tasks:
+                    task["matter_name"] = matter_name
+                    task["matter_id"] = matter_id
+                return tasks
+            except Exception as exc:
+                logger.warning(
+                    "all_deadlines_tasks: could not fetch tasks for '%s' (%s): %s",
+                    matter_name, matter_id[:8], exc,
+                )
+                return []
+
+        results = await asyncio.gather(*[_fetch(m) for m in active_matters])
+        all_tasks = [t for tasks in results for t in tasks]
+
+        logger.info("all_deadlines_tasks: %d matters, %d tasks total", len(active_matters), len(all_tasks))
+        return {"tasks": all_tasks, "count": len(all_tasks), "errors": []}
+    except Exception as e:
+        logger.error("all_deadlines_tasks error: %s", e, exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.post(
