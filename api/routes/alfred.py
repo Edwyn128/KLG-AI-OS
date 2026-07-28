@@ -1164,17 +1164,27 @@ async def all_deadlines_tasks(
     from notion_bridge.tasks import TaskPages, APPELLATE_TASKS_DB_ID, TRIAL_COURT_TASKS_DB_ID
     import asyncio
 
-    try:
-        tp = TaskPages(alfred_deps.bridge)
-        appellate, trial = await asyncio.gather(
-            tp.all_tasks_with_matter(APPELLATE_TASKS_DB_ID),
-            tp.all_tasks_with_matter(TRIAL_COURT_TASKS_DB_ID),
-        )
-        all_tasks = appellate + trial
-        return {"tasks": all_tasks, "count": len(all_tasks)}
-    except Exception as e:
-        logger.error("all_deadlines_tasks error: %s", e, exc_info=True)
-        raise HTTPException(status_code=500, detail="An internal error occurred. Check server logs.")
+    tp = TaskPages(alfred_deps.bridge)
+    # return_exceptions=True lets one DB fail without blocking the other
+    results = await asyncio.gather(
+        tp.all_tasks_with_matter(APPELLATE_TASKS_DB_ID),
+        tp.all_tasks_with_matter(TRIAL_COURT_TASKS_DB_ID),
+        return_exceptions=True,
+    )
+
+    all_tasks: list[dict] = []
+    errors: list[str] = []
+    db_labels = ["Appellate", "TrialCourt"]
+    for label, res in zip(db_labels, results):
+        if isinstance(res, Exception):
+            msg = f"{label} DB: {type(res).__name__}: {res}"
+            logger.error("all_deadlines_tasks — %s", msg, exc_info=res)
+            errors.append(msg)
+        else:
+            all_tasks.extend(res)
+
+    logger.info("all_deadlines_tasks: returning %d tasks, %d errors", len(all_tasks), len(errors))
+    return {"tasks": all_tasks, "count": len(all_tasks), "errors": errors}
 
 
 @router.post(

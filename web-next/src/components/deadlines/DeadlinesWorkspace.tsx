@@ -73,7 +73,7 @@ export function DeadlinesWorkspace() {
 
   const [groupBy, setGroupBy] = useState<GroupMode>('matter_stage')
   const [filter, setFilter] = useState<FilterMode>('all')
-  const [showCompleted, setShowCompleted] = useState(false)
+  const [showCompleted, setShowCompleted] = useState(true)
   const [search, setSearch] = useState('')
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
   const [activeAI, setActiveAI] = useState<string | null>(null)

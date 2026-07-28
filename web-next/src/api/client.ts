@@ -193,7 +193,12 @@ export async function fetchAllTasks(): Promise<(Task & { matter_name: string })[
   const res = await apiFetch('/alfred/deadlines/tasks')
   if (!res.ok) throw new Error('Failed to fetch all tasks')
   const data = await res.json()
-  return Array.isArray(data) ? data : (data.tasks ?? [])
+  const tasks = Array.isArray(data) ? data : (data.tasks ?? [])
+  // Surface Notion errors when no tasks came back — helps diagnose DB access issues
+  if (tasks.length === 0 && (data.errors as string[] | undefined)?.length) {
+    throw new Error(`Task database error: ${(data.errors as string[]).join('; ')}`)
+  }
+  return tasks
 }
 
 export async function fetchWatchList(tier?: string): Promise<WatchCase[]> {

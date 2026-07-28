@@ -320,48 +320,51 @@ class TaskPages:
         query_database returns flat dicts (page_to_dict already applied), so:
           - Task name is at row["Task"] or row["Name"]
           - Projects relation is at row["Projects"] — a list of page UUID strings
+
+        Raises: any exception from query_database (e.g. Notion API errors, wrong DB ID).
+        Callers should use asyncio.gather(return_exceptions=True) to handle per-DB failures.
         """
-        try:
-            rows = await self._bridge.query_database(db_id)
+        import asyncio
 
-            # Collect unique matter IDs from the Projects relation field.
-            # page_to_dict extracts relation properties to a list of ID strings at the top level.
-            matter_ids: set[str] = set()
-            for row in rows:
-                related = row.get("Projects") or []
-                if isinstance(related, list):
-                    for mid in related:
-                        if mid:
-                            matter_ids.add(mid)
+        # Let query_database exceptions propagate — callers must handle them.
+        rows = await self._bridge.query_database(db_id)
+        logger.info("all_tasks_with_matter(%s): got %d rows", db_id[:8], len(rows))
 
-            # Resolve matter names in parallel (one get_page per unique matter)
-            matter_names: dict[str, str] = {}
-            if matter_ids:
-                import asyncio
+        # Collect unique matter IDs from the Projects relation field.
+        # page_to_dict extracts relation properties to a list of ID strings at the top level.
+        matter_ids: set[str] = set()
+        for row in rows:
+            related = row.get("Projects") or []
+            if isinstance(related, list):
+                for mid in related:
+                    if mid:
+                        matter_ids.add(mid)
 
-                async def _resolve(mid: str) -> None:
-                    try:
-                        page = await self._bridge.get_page(mid)
-                        # page is already a flat dict; "Project name" is the title field
-                        matter_names[mid] = page.get("Project name") or ""
-                    except Exception:
-                        matter_names[mid] = ""
+        # Resolve matter names in parallel (one get_page per unique matter).
+        # Individual lookup failures are caught here — a failed lookup gives "" not a crash.
+        matter_names: dict[str, str] = {}
+        if matter_ids:
+            async def _resolve(mid: str) -> None:
+                try:
+                    page = await self._bridge.get_page(mid)
+                    # page is already a flat dict; "Project name" is the title field
+                    matter_names[mid] = page.get("Project name") or ""
+                except Exception as e:
+                    logger.warning("all_tasks_with_matter: could not resolve matter %s: %s", mid[:8], e)
+                    matter_names[mid] = ""
 
-                await asyncio.gather(*[_resolve(mid) for mid in matter_ids])
+            await asyncio.gather(*[_resolve(mid) for mid in matter_ids])
 
-            result = []
-            for row in rows:
-                task = _normalize_task(row["id"], row)
-                # Attach matter_name and matter_id from the Projects relation
-                related = row.get("Projects") or []
-                matter_id = related[0] if isinstance(related, list) and related else ""
-                task["matter_name"] = matter_names.get(matter_id, "")
-                task["matter_id"] = matter_id
-                result.append(task)
-            return result
-        except Exception as exc:
-            logger.warning("all_tasks_with_matter error for db %s: %s", db_id, exc)
-            return []
+        result = []
+        for row in rows:
+            task = _normalize_task(row["id"], row)
+            # Attach matter_name and matter_id from the Projects relation
+            related = row.get("Projects") or []
+            matter_id = related[0] if isinstance(related, list) and related else ""
+            task["matter_name"] = matter_names.get(matter_id, "")
+            task["matter_id"] = matter_id
+            result.append(task)
+        return result
 
     async def seed_from_template(
         self,
