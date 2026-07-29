@@ -3,6 +3,7 @@ import { fetchMatters } from '@/api/client'
 import { useUIStore } from '@/store/uiStore'
 import { useChatStore } from '@/store/chatStore'
 import { useAuthStore } from '@/store/authStore'
+import { useMatterStore } from '@/store/matterStore'
 import type { Matter } from '@/types'
 import styles from './DeadlinesWorkspace.module.css'
 
@@ -44,6 +45,7 @@ export function DeadlinesWorkspace() {
   const { user } = useAuthStore()
   const { setWorkspace } = useUIStore()
   const { setDraftInput } = useChatStore()
+  const { setSelectedMatter } = useMatterStore()
 
   const [matters, setMatters] = useState<Matter[]>([])
   const [loading, setLoading] = useState(true)
@@ -182,11 +184,25 @@ export function DeadlinesWorkspace() {
               className={`${styles.matterRow} ${urgencyClass(matter.days_until)}`}
             >
               <span className={`${styles.colName} ${styles.matterName}`}>
-                {matter.url ? (
-                  <a href={matter.url} target="_blank" rel="noreferrer" className={styles.matterLink}>
-                    {matter.name}
+                <button
+                  className={styles.matterBtn}
+                  onClick={() => { setSelectedMatter(matter); setWorkspace('matters') }}
+                  title="Open in Matters"
+                >
+                  {matter.name}
+                </button>
+                {matter.url && (
+                  <a
+                    href={matter.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className={styles.notionLink}
+                    title="Open in Notion"
+                    onClick={e => e.stopPropagation()}
+                  >
+                    <span className="material-symbols-outlined">open_in_new</span>
                   </a>
-                ) : matter.name}
+                )}
               </span>
 
               <span className={`${styles.colStage} ${styles.cell}`}>
