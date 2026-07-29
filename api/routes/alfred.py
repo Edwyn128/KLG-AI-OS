@@ -717,7 +717,7 @@ def _normalize_matter(d: dict) -> dict:
         "id": d.get("id"),
         "url": d.get("url"),
         "name": d.get("Project name", ""),
-        "status": d.get("Status", ""),
+        "status": d.get("Matter Status") or d.get("Status", ""),
         "priority": d.get("Priority", ""),
         "category": d.get("Category", ""),
         "case_stage": d.get("Case Stage", ""),
