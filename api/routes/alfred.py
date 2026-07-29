@@ -1245,6 +1245,35 @@ async def all_deadlines_tasks(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get("/debug/matter-blocks/{matter_id}", summary="[DEBUG] Raw block types for a matter page")
+async def debug_matter_blocks(
+    matter_id: str,
+    alfred_deps=Depends(get_alfred_deps),
+    _auth: str = Depends(require_auth),
+) -> dict[str, Any]:
+    """
+    Returns the raw top-level block types found inside a matter page.
+    Used to diagnose why get_tasks_for_matter returns empty.
+    Remove after diagnosis is complete.
+    """
+    blocks = await alfred_deps.bridge.get_page_blocks(matter_id)
+    return {
+        "matter_id": matter_id,
+        "block_count": len(blocks),
+        "blocks": [
+            {
+                "id": b.get("id", "")[:8],
+                "type": b.get("type"),
+                "has_children": b.get("has_children", False),
+                # Include child_database title if present
+                "title": (b.get("child_database") or {}).get("title", "")
+                         or (b.get("child_page") or {}).get("title", ""),
+            }
+            for b in blocks
+        ],
+    }
+
+
 @router.post(
     "/agents/huddle-import",
     summary="Manually trigger the Slack huddle → Notion import",
