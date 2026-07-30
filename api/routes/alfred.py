@@ -791,6 +791,18 @@ async def list_active_matters(
         raise HTTPException(status_code=500, detail="An internal error occurred. Check server logs.")
 
 
+@router.get("/debug/schema", summary="Return property names and types for the Projects database (staff only)")
+async def debug_schema(
+    alfred_deps=Depends(get_alfred_deps),
+    client_scope: list[str] | None = Depends(get_client_scope),
+) -> dict[str, Any]:
+    if client_scope is not None:
+        raise HTTPException(status_code=403, detail="Not available in client sessions.")
+    from config import settings
+    props = await alfred_deps.project_pages._bridge.get_database_properties(settings.notion_projects_db_id)
+    return {"properties": props}
+
+
 @router.get("/deadlines", summary="Get matters with upcoming deadlines")
 async def get_upcoming_deadlines(
     days: int = 7,

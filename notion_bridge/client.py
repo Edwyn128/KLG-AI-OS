@@ -340,6 +340,16 @@ class NotionBridge:
         return results
 
     @_notion_retry
+    async def get_database_properties(self, database_id: str) -> dict[str, str]:
+        """Return {property_name: property_type} for every property in the database."""
+        response = await self._client.request(
+            path=f"databases/{database_id}",
+            method="GET",
+        )
+        props = response.get("properties", {})
+        return {name: info.get("type", "unknown") for name, info in props.items()}
+
+    @_notion_retry
     async def search(self, query: str, filter_type: str = "page") -> list[dict[str, Any]]:
         """
         Full-text search across all pages and databases the integration can access.
