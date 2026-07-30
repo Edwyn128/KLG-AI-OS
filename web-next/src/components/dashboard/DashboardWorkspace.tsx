@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { fetchMatters, fetchMatterDetail, fetchMatterTasks } from '@/api/client'
 import { useMatterStore } from '@/store/matterStore'
 import { useAuthStore } from '@/store/authStore'
@@ -44,7 +44,8 @@ export function DashboardWorkspace() {
   const [showArchived, setShowArchived] = useState(false)
 
   const { isAdmin, isSuperAdmin } = useAuthStore()
-  const { selectedMatter, setSelectedMatter, setTasks, setTasksLoading } = useMatterStore()
+  const { selectedMatter, setSelectedMatter, setTasks, setTasksLoading, tasks, tasksLoading } = useMatterStore()
+  const listRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -83,6 +84,22 @@ export function DashboardWorkspace() {
       setTasksLoading(false)
     }
   }
+
+  // When this workspace opens with a pre-selected matter (navigated from Deadlines),
+  // fetch its tasks if they haven't been loaded yet.
+  useEffect(() => {
+    if (selectedMatter && tasks.length === 0 && !tasksLoading) {
+      handleSelectMatter(selectedMatter)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedMatter?.id])
+
+  // Scroll the selected matter row into view once the list is rendered.
+  useEffect(() => {
+    if (!selectedMatter || !listRef.current) return
+    const el = listRef.current.querySelector<HTMLElement>(`[data-matter-id="${selectedMatter.id}"]`)
+    if (el) el.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+  }, [selectedMatter?.id, loading])
 
   if (loading) {
     return (
@@ -174,13 +191,14 @@ export function DashboardWorkspace() {
         )}
 
         {/* Grouped matter list */}
-        <div className={styles.matterList}>
+        <div className={styles.matterList} ref={listRef}>
           {orderedStages.map(stage => (
             <div key={stage} className={styles.stageGroup}>
               <div className={styles.stageHeader}>{stage}</div>
               {grouped[stage].map(m => (
                 <button
                   key={m.id}
+                  data-matter-id={m.id}
                   className={`${styles.matterRow} ${selectedMatter?.id === m.id ? styles.matterRowActive : ''}`}
                   onClick={() => handleSelectMatter(m)}
                 >
