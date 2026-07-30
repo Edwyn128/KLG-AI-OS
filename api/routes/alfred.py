@@ -332,6 +332,7 @@ async def chat_with_alfred(
             alfred_deps,
             client_matters=client_matters,
             _current_user=verified_user,
+            file_attachments=[],
         )
 
         # Inject Alfred Notes — scoped to client's matter for client sessions.
@@ -577,7 +578,7 @@ async def chat_with_alfred_stream(
                 except Exception as _log_err:
                     logger.warning("comms_log.log_interaction failed: %s", _log_err)
 
-            yield f"data: {json.dumps({'done': True, 'tools_used': tools_used, 'history': new_history})}\n\n"
+            yield f"data: {json.dumps({'done': True, 'tools_used': tools_used, 'history': new_history, 'file_attachments': scoped_deps.file_attachments})}\n\n"
 
         except Exception as e:
             logger.error("Alfred stream error for '%s': %s", request.user, e, exc_info=True)

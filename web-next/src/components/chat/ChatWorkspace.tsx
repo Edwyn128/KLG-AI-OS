@@ -111,7 +111,7 @@ export function ChatWorkspace() {
                 accumulated += event.delta
                 updateStreamingMessage(alfredMsgId, accumulated)
               } else if ('done' in event) {
-                finalizeMessage(alfredMsgId, event.tools_used)
+                finalizeMessage(alfredMsgId, event.tools_used, event.file_attachments)
                 setAlfredHistory(event.history)
                 setLoading(false)
               } else if ('error' in event) {
@@ -135,7 +135,7 @@ export function ChatWorkspace() {
         const data = await res.json()
         const responseText: string = data.response ?? data.error ?? 'No response received.'
         updateStreamingMessage(alfredMsgId, responseText)
-        finalizeMessage(alfredMsgId, data.tools_used ?? [])
+        finalizeMessage(alfredMsgId, data.tools_used ?? [], data.file_attachments ?? [])
         setAlfredHistory(data.history ?? [])
         setLoading(false)
       }
@@ -274,6 +274,21 @@ export function ChatWorkspace() {
                 <div className={styles.toolsUsed}>
                   {msg.toolsUsed.map(t => (
                     <span key={t} className={styles.toolChip}>{t}</span>
+                  ))}
+                </div>
+              )}
+              {msg.fileAttachments && msg.fileAttachments.length > 0 && (
+                <div className={styles.fileAttachments}>
+                  {msg.fileAttachments.map((f, i) => (
+                    <a
+                      key={i}
+                      className={styles.fileDownload}
+                      href={`data:${f.mime_type};base64,${f.content_b64}`}
+                      download={f.filename}
+                    >
+                      <span className="material-symbols-outlined" style={{ fontSize: 13 }}>download</span>
+                      {f.filename}
+                    </a>
                   ))}
                 </div>
               )}

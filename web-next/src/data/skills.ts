@@ -2,6 +2,33 @@ import type { Skill } from '@/types'
 
 export const KLG_SKILLS: Skill[] = [
   {
+    id: 'case-assessment',
+    name: 'Case Assessment',
+    category: 'RESEARCH',
+    icon: '🔎',
+    mode: 'analysis',
+    time: '10–20 min',
+    owner: 'Tim / Edwyn',
+    desc: 'Assess a client inquiry against full matter context — Notion history, Comms Log, SharePoint documents, and live web research — then draft a recommended reply for attorney review.',
+    checklist: [
+      'Alfred pulls the full matter summary from Notion',
+      'Alfred reviews recent Comms Log interactions for context',
+      'Alfred searches SharePoint for relevant documents',
+      'Alfred runs a confidentiality-scrubbed web search for new authority',
+      'Alfred drafts a recommended client reply with next steps',
+      'Attorney reviews and edits before sending',
+    ],
+    prompt: 'Alfred, run klg-case-assessment on {{matter}}: {{instruction}}',
+    params: [
+      {
+        key: 'instruction',
+        label: 'Client inquiry or assessment focus',
+        placeholder: 'e.g. Client asking about appeal timeline and next steps after the court denied our motion',
+        required: true,
+      },
+    ],
+  },
+  {
     id: 'case-research',
     name: 'Case Research',
     category: 'RESEARCH',

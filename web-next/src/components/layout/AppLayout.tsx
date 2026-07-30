@@ -10,6 +10,7 @@ import { BloodhoundWorkspace } from '@/components/bloodhound/BloodhoundWorkspace
 import { AccountingWorkspace } from '@/components/accounting/AccountingWorkspace'
 import { AdminWorkspace }      from '@/components/admin/AdminWorkspace'
 import { SkillsLauncher }      from '@/components/skills/SkillsLauncher'
+import { SkillsWorkspace }     from '@/components/skills/SkillsWorkspace'
 import styles from './AppLayout.module.css'
 
 export function AppLayout() {
@@ -28,6 +29,7 @@ export function AppLayout() {
         {activeWorkspace === 'bloodhound' && <BloodhoundWorkspace />}
         {activeWorkspace === 'accounting' && <AccountingWorkspace />}
         {activeWorkspace === 'admin'      && <AdminWorkspace />}
+        {activeWorkspace === 'skills'     && <SkillsWorkspace />}
       </main>
       {/* Skills execute firm-internal workflows — not available to client sessions. */}
       {!isClient && <SkillsLauncher />}

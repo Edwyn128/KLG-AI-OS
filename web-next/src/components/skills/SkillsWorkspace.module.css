@@ -1,15 +1,252 @@
-.placeholder {
+/* ── Shell ────────────────────────────────────────── */
+
+.workspace {
   flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* ── Header / filters ─────────────────────────────── */
+
+.header {
+  padding: 12px 16px 8px;
+  border-bottom: 1px solid var(--glass-border);
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.searchRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: 6px;
+  padding: 6px 10px;
+  transition: border-color 0.15s;
+}
+
+.searchRow:focus-within {
+  border-color: var(--accent);
+}
+
+.searchInput {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  font-size: 13px;
+  color: var(--text-primary);
+  font-family: inherit;
+}
+
+.searchInput::placeholder { color: var(--text-muted); }
+
+.clearSearch {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  padding: 0;
+  transition: color 0.1s;
+}
+
+.clearSearch:hover { color: var(--text-secondary); }
+
+.cats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.catChip {
+  padding: 3px 10px;
+  border-radius: 12px;
+  border: 1px solid var(--glass-border);
+  background: transparent;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-family: inherit;
+  transition: color 0.1s, border-color 0.1s, background 0.1s;
+}
+
+.catChip:hover { color: var(--text-secondary); border-color: var(--text-muted); }
+
+.catActive {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.catActive:hover { color: #fff; border-color: var(--accent); }
+
+/* ── Skill grid ───────────────────────────────────── */
+
+.grid {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px 16px 20px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(256px, 1fr));
+  gap: 10px;
+  align-content: start;
+}
+
+.empty {
+  grid-column: 1 / -1;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 12px;
+  gap: 10px;
+  padding: 60px 24px;
   color: var(--text-muted);
-  font-size: 14px;
+  font-size: 13px;
 }
 
-.placeholder span {
-  font-size: 40px !important;
-  opacity: 0.3;
+.empty .material-symbols-outlined { font-size: 36px; opacity: 0.35; }
+
+/* ── Skill card ───────────────────────────────────── */
+
+.card {
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: 8px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  transition: border-color 0.15s, box-shadow 0.15s;
 }
+
+.card:hover {
+  border-color: rgba(178, 34, 52, 0.25);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
+}
+
+.cardExpanded {
+  border-color: rgba(178, 34, 52, 0.4);
+  box-shadow: 0 2px 16px rgba(0, 0, 0, 0.14);
+}
+
+.cardTop {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.cardIcon {
+  font-size: 20px;
+  flex-shrink: 0;
+  line-height: 1.2;
+}
+
+.cardInfo {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.cardName {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-primary);
+  line-height: 1.3;
+}
+
+.cardMeta {
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+.launchBtn {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding: 4px 10px;
+  border-radius: 5px;
+  border: 1px solid var(--accent);
+  background: transparent;
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  flex-shrink: 0;
+  white-space: nowrap;
+  transition: background 0.12s, color 0.12s;
+}
+
+.launchBtn:hover {
+  background: var(--accent);
+  color: #fff;
+}
+
+.launchBtn .material-symbols-outlined { font-size: 13px !important; }
+
+.cardDesc {
+  font-size: 11px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  margin: 0;
+}
+
+.fileHint {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+/* ── Param row ────────────────────────────────────── */
+
+.paramRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 2px;
+}
+
+.paramInput {
+  flex: 1;
+  background: var(--glass-bg-light);
+  border: 1px solid var(--glass-border);
+  border-radius: 5px;
+  padding: 6px 9px;
+  font-size: 12px;
+  color: var(--text-primary);
+  font-family: inherit;
+  outline: none;
+  transition: border-color 0.12s;
+}
+
+.paramInput:focus { border-color: var(--accent); }
+
+.sendBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+  border-radius: 5px;
+  border: none;
+  background: var(--accent);
+  color: #fff;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+
+.sendBtn:hover { background: #8b1a27; }
+.sendBtn .material-symbols-outlined { font-size: 16px !important; }

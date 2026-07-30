@@ -2,7 +2,7 @@
 // KLG AI OS — TypeScript types
 // =============================================================================
 
-export type Workspace = 'today' | 'matters' | 'chat' | 'deadlines' | 'bloodhound' | 'admin' | 'accounting'
+export type Workspace = 'today' | 'matters' | 'chat' | 'deadlines' | 'bloodhound' | 'admin' | 'accounting' | 'skills'
 
 export type Agent = 'alfred' | 'bloodhound'
 
@@ -102,6 +102,14 @@ export interface Task {
   is_block?: boolean
 }
 
+// ── File attachments ──────────────────────────────────────────────────────────
+
+export interface FileAttachment {
+  filename: string
+  content_b64: string
+  mime_type: string
+}
+
 // ── Chat ─────────────────────────────────────────────────────────────────────
 
 export type MessageRole = 'user' | 'alfred' | 'bloodhound'
@@ -112,7 +120,7 @@ export interface ChatMessage {
   text: string
   name: string
   toolsUsed?: string[]
-  attachments?: string[]
+  fileAttachments?: FileAttachment[]
   isStreaming?: boolean
 }
 
@@ -200,6 +208,6 @@ export interface SlackMessage {
 // ── SSE Events ────────────────────────────────────────────────────────────────
 
 export interface SSEDelta   { delta: string }
-export interface SSEDone    { done: true; tools_used: string[]; history: unknown[] }
+export interface SSEDone    { done: true; tools_used: string[]; history: unknown[]; file_attachments?: FileAttachment[] }
 export interface SSEError   { error: string }
 export type SSEEvent = SSEDelta | SSEDone | SSEError

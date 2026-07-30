@@ -18,6 +18,7 @@ const TABS: TabDef[] = [
   { id: 'matters',    label: 'Matters',    icon: 'folder_open' },
   { id: 'chat',       label: 'Chat',       icon: 'chat' },
   { id: 'deadlines',  label: 'Deadlines',  icon: 'event_upcoming',       staffOnly: true },
+  { id: 'skills',     label: 'Skills',     icon: 'bolt',                 staffOnly: true },
   { id: 'bloodhound', label: 'Bloodhound', icon: 'radar',                adminOnly: true },
   { id: 'accounting', label: 'Accounting', icon: 'receipt_long',         accountingOnly: true },
   { id: 'admin',      label: 'Admin',      icon: 'admin_panel_settings', superAdminOnly: true },

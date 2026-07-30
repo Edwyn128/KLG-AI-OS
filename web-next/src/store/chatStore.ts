@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { Agent, ChatMessage, FileToken } from '@/types'
+import type { Agent, ChatMessage, FileToken, FileAttachment } from '@/types'
 
 const MODELS = [
   { value: 'claude-sonnet-4-6',  label: 'Claude Sonnet 4.6',   provider: 'anthropic' },
@@ -42,7 +42,7 @@ interface ChatState {
   setLoading: (loading: boolean) => void
   addMessage: (agent: Agent, msg: ChatMessage) => void
   updateStreamingMessage: (id: string, text: string) => void
-  finalizeMessage: (id: string, toolsUsed: string[]) => void
+  finalizeMessage: (id: string, toolsUsed: string[], fileAttachments?: FileAttachment[]) => void
   setAlfredHistory: (history: unknown[]) => void
   addPendingFile: (file: FileToken) => void
   removePendingFile: (token: string) => void
@@ -84,10 +84,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }))
   },
 
-  finalizeMessage: (id, toolsUsed) => {
+  finalizeMessage: (id, toolsUsed, fileAttachments) => {
     set(s => ({
       alfredMessages: s.alfredMessages.map(m =>
-        m.id === id ? { ...m, isStreaming: false, toolsUsed } : m
+        m.id === id
+          ? { ...m, isStreaming: false, toolsUsed, ...(fileAttachments?.length ? { fileAttachments } : {}) }
+          : m
       ),
     }))
   },

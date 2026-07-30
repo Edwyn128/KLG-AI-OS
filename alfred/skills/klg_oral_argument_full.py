@@ -217,7 +217,7 @@ information before argument.\
 class KLGOralArgumentFull(Skill):
     name = "klg-oral-argument-full"
     required_tools = ["web_search", "search_notion"]
-    long_running = True
+    long_running = False
     description = (
         "Full oral argument preparation package with panel research. Includes judge intelligence "
         "profiles (recent opinions, known positions), argument time budget, three opening statement "

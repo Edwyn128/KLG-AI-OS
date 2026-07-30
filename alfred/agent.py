@@ -184,6 +184,16 @@ class AlfredDependencies:
     requests (see H-1).
     """
 
+    file_attachments: list[dict] = field(default_factory=list)
+    """
+    Files produced by skills during this request (e.g. generated .docx briefs).
+    Populated by run_skill() when a SkillResult includes file_attachments.
+    The streaming endpoint reads this after the agent run and includes the
+    attachments in the SSE done event so the browser can offer downloads.
+    Must be reset to [] per request via dataclasses.replace(file_attachments=[])
+    to prevent cross-request contamination of the shared alfred_deps singleton.
+    """
+
 
 # =============================================================================
 # SYSTEM PROMPT
@@ -2152,6 +2162,7 @@ async def run_skill(
         return f"Skill '{skill_name}' encountered an error: {type(e).__name__}: {e}"
 
     if result.file_attachments:
+        ctx.deps.file_attachments.extend(result.file_attachments)
         logger.info(
             "run_skill: '%s' produced %d file attachment(s)",
             skill_name, len(result.file_attachments),
