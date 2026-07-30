@@ -37,108 +37,61 @@ ADDING A NEW SKILL
   1. Create a new file: alfred/skills/klg_<name>.py
   2. Define a class that inherits from Skill (alfred/skills/base.py)
   3. Implement the `execute()` method following the 5-step lifecycle
-  4. Import the class in this file and add it to SKILL_REGISTRY
+  4. Add an entry to _SKILL_MODULES below — the registry builds automatically.
 """
 
+import importlib
+import logging
+
 from alfred.skills.base import Skill, SkillResult, skill_generate, skill_read_file_text, skill_fetch_sharepoint
-from alfred.skills.klg_case_assessment import KLGCaseAssessment
-from alfred.skills.klg_case_novella import KLGCaseNovella
-from alfred.skills.klg_record_digest import KLGRecordDigest
-from alfred.skills.klg_opposition_separate_statement import KLGOppositionSeparateStatement
-from alfred.skills.klg_dz_overlay import KLGDZOverlay
-from alfred.skills.klg_notebooklm_handoff import KLGNotebookLMHandoff
-from alfred.skills.klg_court_doc_renamer import KLGCourtDocRenamer
-from alfred.skills.klg_authority_library import KLGAuthorityLibrary
-from alfred.skills.klg_appendix_cites import KLGAppendixCites
-from alfred.skills.klg_content_research import KLGContentResearch
-from alfred.skills.klg_oral_argument_full import KLGOralArgumentFull
-from alfred.skills.klg_matter_intake import KLGMatterIntake
-from alfred.skills.klg_deep_research_prompts import KLGDeepResearchPrompts
-from alfred.skills.klg_conflict_waiver import KLGConflictWaiver
-from alfred.skills.klg_podcast_guest_prep import KLGPodcastGuestPrep
-from alfred.skills.klg_style_guide_check import KLGStyleGuideCheck
-from alfred.skills.klg_cite_check import KLGCiteCheck
-from alfred.skills.klg_response_plan import KLGResponsePlan
-from alfred.skills.klg_appendix_audit import KLGAppendixAudit
-from alfred.skills.klg_brief_elevation import KLGBriefElevation
-from alfred.skills.klg_authority_map import KLGAuthorityMap
-from alfred.skills.klg_issue_framing import KLGIssueFraming
-from alfred.skills.klg_standard_of_review import KLGStandardOfReview
-from alfred.skills.klg_oral_argument_prep import KLGOralArgumentPrep
-from alfred.skills.klg_amicus_assessment import KLGAmicusAssessment
-from alfred.skills.klg_record_navigator import KLGRecordNavigator
-from alfred.skills.klg_daily_triage import KLGDailyTriage
-from alfred.skills.klg_prebill_audit import KLGPrebillAudit
-from alfred.skills.klg_research_compilation import KLGResearchCompilation
-from alfred.skills.klg_brief_assembly import KLGBriefAssembly
 
-# Registry of all available skills, keyed by name.
-# Alfred's run_skill tool looks skills up here by name.
-SKILL_REGISTRY: dict[str, Skill] = {
-    KLGCaseAssessment.name:          KLGCaseAssessment(),
-    KLGMatterIntake.name:            KLGMatterIntake(),
-    KLGDeepResearchPrompts.name:     KLGDeepResearchPrompts(),
-    KLGConflictWaiver.name:          KLGConflictWaiver(),
-    KLGPodcastGuestPrep.name:        KLGPodcastGuestPrep(),
-    KLGStyleGuideCheck.name:         KLGStyleGuideCheck(),
-    KLGCiteCheck.name:               KLGCiteCheck(),
-    KLGResponsePlan.name:            KLGResponsePlan(),
-    KLGAppendixAudit.name:           KLGAppendixAudit(),
-    KLGBriefElevation.name:          KLGBriefElevation(),
-    KLGAuthorityMap.name:            KLGAuthorityMap(),
-    KLGIssueFraming.name:            KLGIssueFraming(),
-    KLGStandardOfReview.name:        KLGStandardOfReview(),
-    KLGOralArgumentPrep.name:        KLGOralArgumentPrep(),
-    KLGAmicusAssessment.name:        KLGAmicusAssessment(),
-    KLGRecordNavigator.name:         KLGRecordNavigator(),
-    KLGDailyTriage.name:             KLGDailyTriage(),
-    KLGPrebillAudit.name:            KLGPrebillAudit(),
-    KLGResearchCompilation.name:     KLGResearchCompilation(),
-    KLGBriefAssembly.name:           KLGBriefAssembly(),
-    KLGCaseNovella.name:             KLGCaseNovella(),
-    KLGRecordDigest.name:            KLGRecordDigest(),
-    KLGOppositionSeparateStatement.name: KLGOppositionSeparateStatement(),
-    KLGDZOverlay.name:               KLGDZOverlay(),
-    KLGNotebookLMHandoff.name:       KLGNotebookLMHandoff(),
-    KLGCourtDocRenamer.name:         KLGCourtDocRenamer(),
-    KLGAuthorityLibrary.name:        KLGAuthorityLibrary(),
-    KLGAppendixCites.name:           KLGAppendixCites(),
-    KLGContentResearch.name:         KLGContentResearch(),
-    KLGOralArgumentFull.name:        KLGOralArgumentFull(),
-}
+logger = logging.getLogger(__name__)
 
-__all__ = [
-    "Skill",
-    "SkillResult",
-    "SKILL_REGISTRY",
-    "KLGCaseAssessment",
-    "KLGMatterIntake",
-    "KLGDeepResearchPrompts",
-    "KLGConflictWaiver",
-    "KLGPodcastGuestPrep",
-    "KLGStyleGuideCheck",
-    "KLGCiteCheck",
-    "KLGResponsePlan",
-    "KLGAppendixAudit",
-    "KLGBriefElevation",
-    "KLGAuthorityMap",
-    "KLGIssueFraming",
-    "KLGStandardOfReview",
-    "KLGOralArgumentPrep",
-    "KLGAmicusAssessment",
-    "KLGRecordNavigator",
-    "KLGDailyTriage",
-    "KLGPrebillAudit",
-    "KLGResearchCompilation",
-    "KLGBriefAssembly",
-    "KLGCaseNovella",
-    "KLGRecordDigest",
-    "KLGOppositionSeparateStatement",
-    "KLGDZOverlay",
-    "KLGNotebookLMHandoff",
-    "KLGCourtDocRenamer",
-    "KLGAuthorityLibrary",
-    "KLGAppendixCites",
-    "KLGContentResearch",
-    "KLGOralArgumentFull",
+# Each tuple is (module_path, ClassName). Skills are loaded individually so
+# one broken import cannot crash the entire registry.
+_SKILL_MODULES: list[tuple[str, str]] = [
+    ("alfred.skills.klg_case_assessment",           "KLGCaseAssessment"),
+    ("alfred.skills.klg_case_novella",              "KLGCaseNovella"),
+    ("alfred.skills.klg_record_digest",             "KLGRecordDigest"),
+    ("alfred.skills.klg_opposition_separate_statement", "KLGOppositionSeparateStatement"),
+    ("alfred.skills.klg_dz_overlay",                "KLGDZOverlay"),
+    ("alfred.skills.klg_notebooklm_handoff",        "KLGNotebookLMHandoff"),
+    ("alfred.skills.klg_court_doc_renamer",         "KLGCourtDocRenamer"),
+    ("alfred.skills.klg_authority_library",         "KLGAuthorityLibrary"),
+    ("alfred.skills.klg_appendix_cites",            "KLGAppendixCites"),
+    ("alfred.skills.klg_content_research",          "KLGContentResearch"),
+    ("alfred.skills.klg_oral_argument_full",        "KLGOralArgumentFull"),
+    ("alfred.skills.klg_matter_intake",             "KLGMatterIntake"),
+    ("alfred.skills.klg_deep_research_prompts",     "KLGDeepResearchPrompts"),
+    ("alfred.skills.klg_conflict_waiver",           "KLGConflictWaiver"),
+    ("alfred.skills.klg_podcast_guest_prep",        "KLGPodcastGuestPrep"),
+    ("alfred.skills.klg_style_guide_check",         "KLGStyleGuideCheck"),
+    ("alfred.skills.klg_cite_check",                "KLGCiteCheck"),
+    ("alfred.skills.klg_response_plan",             "KLGResponsePlan"),
+    ("alfred.skills.klg_appendix_audit",            "KLGAppendixAudit"),
+    ("alfred.skills.klg_brief_elevation",           "KLGBriefElevation"),
+    ("alfred.skills.klg_authority_map",             "KLGAuthorityMap"),
+    ("alfred.skills.klg_issue_framing",             "KLGIssueFraming"),
+    ("alfred.skills.klg_standard_of_review",        "KLGStandardOfReview"),
+    ("alfred.skills.klg_oral_argument_prep",        "KLGOralArgumentPrep"),
+    ("alfred.skills.klg_amicus_assessment",         "KLGAmicusAssessment"),
+    ("alfred.skills.klg_record_navigator",          "KLGRecordNavigator"),
+    ("alfred.skills.klg_daily_triage",              "KLGDailyTriage"),
+    ("alfred.skills.klg_prebill_audit",             "KLGPrebillAudit"),
+    ("alfred.skills.klg_research_compilation",      "KLGResearchCompilation"),
+    ("alfred.skills.klg_brief_assembly",            "KLGBriefAssembly"),
 ]
+
+# Registry of all successfully loaded skills, keyed by name.
+# Alfred's run_skill tool looks skills up here by name.
+SKILL_REGISTRY: dict[str, Skill] = {}
+
+for _module_path, _class_name in _SKILL_MODULES:
+    try:
+        _mod = importlib.import_module(_module_path)
+        _cls = getattr(_mod, _class_name)
+        SKILL_REGISTRY[_cls.name] = _cls()
+    except Exception as _e:
+        logger.warning("Skill '%s' failed to load and was excluded from registry: %s", _class_name, _e)
+
+__all__ = ["Skill", "SkillResult", "SKILL_REGISTRY"]
