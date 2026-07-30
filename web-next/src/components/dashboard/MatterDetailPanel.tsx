@@ -17,7 +17,6 @@ const KLG_STAGES = [
 
 const STATUS_OPTIONS = ['In progress', 'Backlog', 'Planning', 'Paused', 'Review needed', 'Done', 'Canceled']
 const PRIORITY_OPTIONS = ['Urgent', 'High', 'Medium', 'Low']
-const TEAM_OPTIONS = ['Tim', 'Edwyn', 'Stu', 'Brittney', 'William', 'Ted', 'Richard']
 
 function formatDate(dateStr?: string | null): string {
   if (!dateStr) return '—'
@@ -78,47 +77,6 @@ function EditableSelect({
   )
 }
 
-function EditableText({
-  value, onChange, label, placeholder = '—', options,
-}: {
-  value?: string; onChange: (v: string) => void; label: string; placeholder?: string; options?: string[]
-}) {
-  const [editing, setEditing] = useState(false)
-  const [draft, setDraft] = useState(value ?? '')
-  const listId = `dl-${label.replace(/\s+/g, '-').toLowerCase()}`
-
-  function commit() {
-    setEditing(false)
-    if (draft !== (value ?? '')) onChange(draft)
-  }
-
-  if (editing) {
-    return (
-      <>
-        {options && (
-          <datalist id={listId}>
-            {options.map(o => <option key={o} value={o} />)}
-          </datalist>
-        )}
-        <input
-          className={styles.inlineInput}
-          autoFocus
-          list={options ? listId : undefined}
-          value={draft}
-          onChange={e => setDraft(e.target.value)}
-          onBlur={commit}
-          onKeyDown={e => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') setEditing(false) }}
-          placeholder={placeholder}
-        />
-      </>
-    )
-  }
-  return (
-    <button className={styles.editableField} onClick={() => { setDraft(value ?? ''); setEditing(true) }} title={`Edit ${label}`}>
-      {value || <span className={styles.emptyField}>—</span>}
-    </button>
-  )
-}
 
 function EditableDate({
   value, onChange, label,
@@ -306,20 +264,31 @@ function AddTaskRow({ matterId, stage }: { matterId: string; stage: string }) {
 
 function MetaGrid({ matter }: { matter: Matter }) {
   const { updateMatterOptimistic } = useMatterStore()
+  const [editError, setEditError] = useState<string | null>(null)
 
   function makeHandler<K extends keyof Matter>(field: K) {
     return async (value: string) => {
+      setEditError(null)
       updateMatterOptimistic({ [field]: value } as Partial<Matter>)
       try {
         await patchMatter(matter.id, { [field]: value } as Partial<Matter>)
-      } catch {
+      } catch (err) {
         updateMatterOptimistic({ [field]: matter[field] } as Partial<Matter>)
+        const msg = err instanceof Error ? err.message : 'Save failed'
+        setEditError(`Could not save ${String(field)}: ${msg}`)
+        setTimeout(() => setEditError(null), 5000)
       }
     }
   }
 
   return (
     <div className={styles.metaGrid}>
+      {editError && (
+        <div className={styles.metaError}>
+          <span className="material-symbols-outlined" style={{ fontSize: 14 }}>error_outline</span>
+          {editError}
+        </div>
+      )}
       <div className={styles.metaCell}>
         <span className={styles.metaLabel}>Status</span>
         <EditableSelect value={matter.status} options={STATUS_OPTIONS} onChange={makeHandler('status')} label="Status" />
@@ -334,7 +303,14 @@ function MetaGrid({ matter }: { matter: Matter }) {
       </div>
       <div className={styles.metaCell}>
         <span className={styles.metaLabel}>Assignee</span>
-        <EditableText value={matter.assignee} options={TEAM_OPTIONS} onChange={makeHandler('assignee')} label="Assignee" />
+        {matter.url ? (
+          <a className={styles.metaLink} href={matter.url} target="_blank" rel="noopener noreferrer" title="Edit assignee in Notion">
+            {matter.assignee || '—'}
+            <span className="material-symbols-outlined" style={{ fontSize: 11, marginLeft: 3 }}>open_in_new</span>
+          </a>
+        ) : (
+          <span className={styles.metaStatic}>{matter.assignee || '—'}</span>
+        )}
       </div>
       <div className={styles.metaCell}>
         <span className={styles.metaLabel}>Court Deadline</span>
