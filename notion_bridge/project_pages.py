@@ -294,12 +294,10 @@ class ProjectPages:
             self._bridge.query_database(
                 database_id=settings.notion_projects_db_id,
                 filter=_build("Target Date"),
-                sorts=[{"property": "Target Date", "direction": "ascending"}],
             ),
             self._bridge.query_database(
                 database_id=settings.notion_projects_db_id,
                 filter=_build("Next Court Deadline"),
-                sorts=[{"property": "Next Court Deadline", "direction": "ascending"}],
             ),
         )
 
