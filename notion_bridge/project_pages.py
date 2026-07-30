@@ -46,7 +46,10 @@ from __future__ import annotations
 
 import logging
 import re
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
+from zoneinfo import ZoneInfo
+
+_PACIFIC = ZoneInfo("America/Los_Angeles")
 from typing import Any
 
 from notion_bridge.client import NotionBridge
@@ -262,8 +265,8 @@ class ProjectPages:
         Returns:
             List of matter dicts sorted by Target Date ascending (soonest first).
         """
-        today = date.today().isoformat()
-        cutoff = (date.today() + timedelta(days=days)).isoformat()
+        today = datetime.now(_PACIFIC).date().isoformat()
+        cutoff = (datetime.now(_PACIFIC).date() + timedelta(days=days)).isoformat()
 
         # Run two queries and merge — one for Target Date, one for Next Court
         # Deadline. The pinned Notion API version (2022-06-28) doesn't support

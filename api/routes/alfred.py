@@ -27,8 +27,11 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import date
+from datetime import date, datetime, timezone
 from typing import Any
+from zoneinfo import ZoneInfo
+
+_PACIFIC = ZoneInfo("America/Los_Angeles")
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from fastapi.responses import StreamingResponse
@@ -706,7 +709,7 @@ def _normalize_matter(d: dict) -> dict:
             return None
         try:
             target = date.fromisoformat(date_str[:10])
-            return (target - date.today()).days
+            return (target - datetime.now(_PACIFIC).date()).days
         except (ValueError, TypeError):
             return None
 
@@ -1172,7 +1175,7 @@ async def today_briefing(
         deadline_lines = "\n".join(f"- {m['name']}: {m.get('next_court_deadline') or m.get('target_date','no date')} ({m.get('days_until','')} days)"
                                    for m in deadlines) or "No upcoming deadlines."
 
-        today_str = datetime.now(timezone.utc).strftime("%A, %B %d, %Y")
+        today_str = datetime.now(_PACIFIC).strftime("%A, %B %d, %Y")
         prompt = (
             f"You are Alfred, KLG's AI assistant. Today is {today_str}.\n"
             f"You are generating a morning focus briefing for {display_name}.\n\n"
