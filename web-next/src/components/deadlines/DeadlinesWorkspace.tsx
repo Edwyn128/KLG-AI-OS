@@ -37,8 +37,13 @@ function hasDeadline(m: Matter): boolean {
 
 function passesFilter(m: Matter, filter: FilterMode, myName: string): boolean {
   if (filter === 'all') return true
-  // 'active' shows all matters with a deadline; grouping in the UI separates Active vs On Hold
-  if (filter === 'active') return hasDeadline(m)
+  // 'active': show all On Hold matters + Active matters that have a deadline date.
+  // On Hold matters appear even without a deadline so the full backlog is visible.
+  if (filter === 'active') {
+    const status = (m.status ?? '').toLowerCase()
+    if (status === 'on hold') return true
+    return hasDeadline(m)
+  }
   if (filter === 'mine') return (m.assignee ?? '').toLowerCase().includes(myName.toLowerCase())
   const days = m.days_until ?? null
   if (filter === 'overdue') return days != null && days < 0
