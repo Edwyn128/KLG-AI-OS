@@ -834,12 +834,15 @@ def resolve_thinking_settings(model_str: str):
     filters thinking deltas on the SSE path.
 
     Mapping:
-      "" or "claude-*"     → adaptive thinking, model-default effort
-                             (on pre-4.6 Claude models pydantic-ai translates
-                             this to a budget_tokens config automatically)
+      "" (default model)   → adaptive thinking, model-default effort
       "extended-thinking"  → deep-reasoning mode: adaptive thinking at the
                              highest supported effort, larger output ceiling,
                              for hard analytical work
+      "claude-*" explicit  → None (newer Claude models like Opus 4.8 only
+                             accept thinking.type=adaptive via output_config.effort;
+                             pydantic-ai may send the old thinking.type=enabled
+                             format for unrecognized model IDs, causing a 400.
+                             Returning None lets the model use its native defaults.)
       "gpt-*" / "gemini-*" / "sonar-*" → None (those providers manage their
                              own reasoning; an unsupported reasoning flag
                              would 400 on non-reasoning models like gpt-4o)
@@ -853,11 +856,15 @@ def resolve_thinking_settings(model_str: str):
         # max_tokens must leave headroom for thinking + answer.
         return ModelSettings(thinking="xhigh", max_tokens=32000)
 
-    if not s or s.startswith("claude"):
-        # thinking=True → {'type': 'adaptive'} on 4.6+ models. Effort is left
-        # at the model default so simple lookups stay cheap and fast.
+    if not s:
+        # Default model (Sonnet 4.6) — enable adaptive thinking explicitly.
         return ModelSettings(thinking=True, max_tokens=16000)
 
+    # Explicitly selected Claude models: do NOT pass thinking params.
+    # Newer models (Opus 4.8, Sonnet 5, Haiku 4.5, etc.) only accept
+    # thinking.type=adaptive; pydantic-ai may send the legacy enabled format
+    # for model IDs it doesn't recognise yet, causing a 400. These models
+    # reason natively — no explicit param needed.
     return None
 
 
