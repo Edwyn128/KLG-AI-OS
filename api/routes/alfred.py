@@ -259,26 +259,33 @@ def get_client_scope(request: Request) -> list[str] | None:
 
 def _parse_message_history(raw: list) -> list:
     """
-    Validate and sanitize client-supplied conversation history.
+    Validate and cap client-supplied conversation history.
 
-    Strips tool-request and tool-return parts to prevent history injection attacks.
-    Caps at 20 messages to prevent context-length errors.
-    Returns [] on any parse failure.
+    Caps at 40 messages. After capping, trims any leading ModelRequest that
+    contains only tool-return parts — these are orphaned tool results left when
+    the cap boundary splits a tool_use / tool_result pair, which causes Anthropic
+    to reject the request with "unexpected tool_use_id".
     """
     if not raw:
         return []
     try:
-        from pydantic_ai.messages import ModelMessagesTypeAdapter, ModelRequest, ModelResponse
+        from pydantic_ai.messages import ModelMessagesTypeAdapter, ModelRequest
         parsed = ModelMessagesTypeAdapter.validate_python(raw)
-        safe = [
-            m for m in parsed
-            if isinstance(m, (ModelRequest, ModelResponse))
-            and not any(
-                getattr(p, "type", "") in ("tool-return", "tool-call")
-                for p in getattr(m, "parts", [])
-            )
-        ]
-        return safe[-20:] if len(safe) > 20 else safe
+        messages = list(parsed[-40:]) if len(parsed) > 40 else list(parsed)
+        # Drop any leading ModelRequest whose parts are exclusively tool-returns
+        # (orphaned because their tool_use was truncated away).
+        while messages:
+            first = messages[0]
+            parts = getattr(first, "parts", [])
+            part_kinds = {
+                getattr(p, "part_kind", getattr(p, "type", ""))
+                for p in parts
+            }
+            if isinstance(first, ModelRequest) and parts and part_kinds <= {"tool-return"}:
+                messages.pop(0)
+            else:
+                break
+        return messages
     except Exception:
         return []
 
