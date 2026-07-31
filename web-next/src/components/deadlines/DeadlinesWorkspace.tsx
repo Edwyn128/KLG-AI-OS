@@ -37,16 +37,99 @@ function hasDeadline(m: Matter): boolean {
 
 function passesFilter(m: Matter, filter: FilterMode, myName: string): boolean {
   if (filter === 'all') return true
-  // 'active' mirrors Notion's "Matter Deadlines" view: Active status + deadline set
-  if (filter === 'active') {
-    return (m.status ?? '').toLowerCase() === 'active' && hasDeadline(m)
-  }
+  // 'active' shows all matters with a deadline; grouping in the UI separates Active vs On Hold
+  if (filter === 'active') return hasDeadline(m)
   if (filter === 'mine') return (m.assignee ?? '').toLowerCase().includes(myName.toLowerCase())
   const days = m.days_until ?? null
   if (filter === 'overdue') return days != null && days < 0
   if (filter === 'week') return days != null && days >= 0 && days <= 7
   if (filter === 'month') return days != null && days >= 0 && days <= 30
   return true
+}
+
+const GROUP_ORDER = ['active', 'on hold']
+
+function groupByStatus(matters: Matter[]): Array<{ label: string; items: Matter[] }> {
+  const map = new Map<string, Matter[]>()
+  for (const m of matters) {
+    const key = (m.status ?? 'other').toLowerCase()
+    if (!map.has(key)) map.set(key, [])
+    map.get(key)!.push(m)
+  }
+  return [...map.entries()]
+    .sort(([a], [b]) => {
+      const ai = GROUP_ORDER.indexOf(a)
+      const bi = GROUP_ORDER.indexOf(b)
+      if (ai !== -1 && bi !== -1) return ai - bi
+      if (ai !== -1) return -1
+      if (bi !== -1) return 1
+      return a.localeCompare(b)
+    })
+    .map(([key, items]) => ({
+      label: key.charAt(0).toUpperCase() + key.slice(1),
+      items,
+    }))
+}
+
+function MatterRow({
+  number, matter, onNavigate, onAI,
+}: {
+  number: number
+  matter: Matter
+  onNavigate: () => void
+  onAI: () => void
+}) {
+  return (
+    <div className={`${styles.matterRow} ${urgencyClass(matter.days_until)}`}>
+      <span className={styles.colNum}>{number}</span>
+
+      <span className={`${styles.colName} ${styles.matterName}`}>
+        <button className={styles.matterBtn} onClick={onNavigate} title="Open in Matters">
+          {matter.name}
+        </button>
+        {matter.url && (
+          <a
+            href={matter.url}
+            target="_blank"
+            rel="noreferrer"
+            className={styles.notionLink}
+            title="Open in Notion"
+            onClick={e => e.stopPropagation()}
+          >
+            <span className="material-symbols-outlined">open_in_new</span>
+          </a>
+        )}
+      </span>
+
+      <span className={`${styles.colStage} ${styles.cell}`}>{matter.case_stage || '—'}</span>
+
+      <span className={`${styles.colAssignee} ${styles.cell}`}>
+        {matter.assignee ? (
+          <span className={styles.assigneeChip}>{matter.assignee.split(/[,\s]+/)[0]}</span>
+        ) : '—'}
+      </span>
+
+      <span className={`${styles.colDeadline} ${styles.cell} ${urgencyClass(matter.days_until)}`}>
+        {formatDate(matter.next_court_deadline)}
+      </span>
+
+      <span className={`${styles.colTarget} ${styles.cell}`}>{formatDate(matter.target_date)}</span>
+
+      <span className={`${styles.colDays} ${styles.cell}`}>
+        {matter.days_until != null ? (
+          <span className={`${styles.daysBadge} ${urgencyClass(matter.days_until)}`}>
+            {daysLabel(matter.days_until)}
+          </span>
+        ) : '—'}
+      </span>
+
+      <span className={styles.colAi}>
+        <button className={styles.sparkBtn} onClick={onAI} title="Ask Alfred about this matter">
+          ✨
+        </button>
+      </span>
+    </div>
+  )
 }
 
 export function DeadlinesWorkspace() {
@@ -170,6 +253,7 @@ export function DeadlinesWorkspace() {
 
       {/* ── Column headers ───────────────────────────────── */}
       <div className={styles.colHeaders}>
+        <span className={styles.colNum}>#</span>
         <span className={styles.colName}>MATTER</span>
         <span className={styles.colStage}>STAGE</span>
         <span className={styles.colAssignee}>ASSIGNEE</span>
@@ -186,72 +270,28 @@ export function DeadlinesWorkspace() {
             <span className="material-symbols-outlined">event_available</span>
             <p>No matters match the current filters.</p>
           </div>
-        ) : (
-          filtered.map(matter => (
-            <div
-              key={matter.id}
-              className={`${styles.matterRow} ${urgencyClass(matter.days_until)}`}
-            >
-              <span className={`${styles.colName} ${styles.matterName}`}>
-                <button
-                  className={styles.matterBtn}
-                  onClick={() => { setSelectedMatter(matter); setWorkspace('matters') }}
-                  title="Open in Matters"
-                >
-                  {matter.name}
-                </button>
-                {matter.url && (
-                  <a
-                    href={matter.url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className={styles.notionLink}
-                    title="Open in Notion"
-                    onClick={e => e.stopPropagation()}
-                  >
-                    <span className="material-symbols-outlined">open_in_new</span>
-                  </a>
-                )}
-              </span>
-
-              <span className={`${styles.colStage} ${styles.cell}`}>
-                {matter.case_stage || '—'}
-              </span>
-
-              <span className={`${styles.colAssignee} ${styles.cell}`}>
-                {matter.assignee ? (
-                  <span className={styles.assigneeChip}>
-                    {matter.assignee.split(/[,\s]+/)[0]}
-                  </span>
-                ) : '—'}
-              </span>
-
-              <span className={`${styles.colDeadline} ${styles.cell} ${urgencyClass(matter.days_until)}`}>
-                {formatDate(matter.next_court_deadline)}
-              </span>
-
-              <span className={`${styles.colTarget} ${styles.cell}`}>
-                {formatDate(matter.target_date)}
-              </span>
-
-              <span className={`${styles.colDays} ${styles.cell}`}>
-                {matter.days_until != null ? (
-                  <span className={`${styles.daysBadge} ${urgencyClass(matter.days_until)}`}>
-                    {daysLabel(matter.days_until)}
-                  </span>
-                ) : '—'}
-              </span>
-
-              <span className={styles.colAi}>
-                <button
-                  className={styles.sparkBtn}
-                  onClick={() => handleAI(matter)}
-                  title="Ask Alfred about this matter"
-                >
-                  ✨
-                </button>
-              </span>
+        ) : filter === 'active' ? (
+          // Grouped view: Active → On Hold, numbered within each group
+          groupByStatus(filtered).map(({ label, items }) => (
+            <div key={label}>
+              <div className={styles.groupHeader}>
+                <span className={styles.groupChevron}>▼</span>
+                <span className={styles.groupLabel}>{label}</span>
+                <span className={styles.groupCount}>{items.length}</span>
+              </div>
+              {items.map((matter, i) => (
+                <MatterRow key={matter.id} number={i + 1} matter={matter}
+                  onNavigate={() => { setSelectedMatter(matter); setWorkspace('matters') }}
+                  onAI={() => handleAI(matter)} />
+              ))}
             </div>
+          ))
+        ) : (
+          // Flat numbered list for all other filters
+          filtered.map((matter, i) => (
+            <MatterRow key={matter.id} number={i + 1} matter={matter}
+              onNavigate={() => { setSelectedMatter(matter); setWorkspace('matters') }}
+              onAI={() => handleAI(matter)} />
           ))
         )}
       </div>
