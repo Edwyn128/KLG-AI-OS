@@ -31,18 +31,36 @@ function urgencyClass(days?: number | null): string {
   return ''
 }
 
+// Statuses that mean a matter is definitively closed — mirrors the backend denylist.
+const INACTIVE_STATUSES = new Set([
+  'done', 'closed', 'canceled', 'cancelled', 'archived',
+  'complete', 'completed', 'inactive', 'withdrawn', 'settled',
+  'rejected', 'dropped', 'lost',
+])
+
 function hasDeadline(m: Matter): boolean {
   return !!(m.target_date || m.next_court_deadline)
 }
 
+// Normalize Notion status strings to canonical group keys.
+// Handles capitalization variants ("On hold", "On Hold", "ON HOLD") and
+// maps empty/null (untagged matters) to "active" so they don't float off
+// into a mystery group.
+function statusKey(m: Matter): string {
+  const s = (m.status ?? '').trim().toLowerCase()
+  if (s.includes('hold')) return 'on hold'
+  if (s === '' || s.includes('active')) return 'active'
+  return s
+}
+
 function passesFilter(m: Matter, filter: FilterMode, myName: string): boolean {
   if (filter === 'all') return true
-  // 'active': show all On Hold matters + Active matters that have a deadline date.
-  // On Hold matters appear even without a deadline so the full backlog is visible.
   if (filter === 'active') {
-    const status = (m.status ?? '').toLowerCase()
-    if (status === 'on hold') return true
-    return hasDeadline(m)
+    // Show every matter the backend considers non-inactive.
+    // The backend already filters out done/closed/archived matters before
+    // sending — this mirrors that check so the two stay in sync.
+    const s = (m.status ?? '').trim().toLowerCase()
+    return s === '' || !INACTIVE_STATUSES.has(s)
   }
   if (filter === 'mine') return (m.assignee ?? '').toLowerCase().includes(myName.toLowerCase())
   const days = m.days_until ?? null
@@ -57,7 +75,7 @@ const GROUP_ORDER = ['active', 'on hold']
 function groupByStatus(matters: Matter[]): Array<{ label: string; items: Matter[] }> {
   const map = new Map<string, Matter[]>()
   for (const m of matters) {
-    const key = (m.status ?? 'other').toLowerCase()
+    const key = statusKey(m)
     if (!map.has(key)) map.set(key, [])
     map.get(key)!.push(m)
   }
@@ -71,7 +89,7 @@ function groupByStatus(matters: Matter[]): Array<{ label: string; items: Matter[
       return a.localeCompare(b)
     })
     .map(([key, items]) => ({
-      label: key.charAt(0).toUpperCase() + key.slice(1),
+      label: key === 'on hold' ? 'On Hold' : key.charAt(0).toUpperCase() + key.slice(1),
       items,
     }))
 }
