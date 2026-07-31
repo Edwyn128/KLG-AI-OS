@@ -28,6 +28,8 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
+from notion_bridge.project_pages import _PROP_DEADLINE, _PROP_COURT_DEADLINE
+
 
 def slugify(name: str) -> str:
     """Convert a matter name to a Slack-safe channel slug."""
@@ -121,9 +123,7 @@ async def run_case_checkin(
 
         matter_name = matter.get("Project name", "this matter")
         status = matter.get("Status", "")
-        deadline_raw = (
-            matter.get("date:Target Date:start") or matter.get("Target Date") or ""
-        )
+        deadline_raw = matter.get(_PROP_DEADLINE) or matter.get(_PROP_COURT_DEADLINE) or ""
         deadline = deadline_raw[:10] if deadline_raw else None
         priority = matter.get("Priority", "")
 

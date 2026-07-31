@@ -69,6 +69,7 @@ import asyncio
 import logging
 
 from mcp.server.fastmcp import FastMCP
+from notion_bridge.project_pages import _PROP_DEADLINE, _PROP_COURT_DEADLINE
 
 # ── Initialize shared resources ───────────────────────────────────────────────
 # These are created once at module load and reused across all tool calls.
@@ -144,7 +145,7 @@ async def find_matter(matter_name: str) -> str:
         f"Matter: {matter.get('Project name', 'Unknown')}\n"
         f"Status: {matter.get('Status', 'N/A')}\n"
         f"Priority: {matter.get('Priority', 'N/A')}\n"
-        f"Target Date: {matter.get('Target Date', 'N/A')}\n"
+        f"Deadline: {matter.get(_PROP_DEADLINE) or matter.get(_PROP_COURT_DEADLINE) or 'N/A'}\n"
         f"ID: {matter.get('id', '')}\n"
         f"URL: {matter.get('url', '')}"
     )
@@ -188,7 +189,7 @@ async def get_upcoming_deadlines(days_ahead: int = 7) -> str:
     lines = [f"Matters due in {days_ahead} days ({len(matters)}):\n"]
     for m in matters:
         name = m.get("Project name", "Unknown")
-        deadline = m.get("Target Date", "No date")
+        deadline = m.get(_PROP_DEADLINE) or m.get(_PROP_COURT_DEADLINE) or "No date"
         status = m.get("Status", "?")
         url = m.get("url", "")
         lines.append(f"  • {name} — {deadline} | {status}\n    {url}")
@@ -215,7 +216,7 @@ async def get_all_active_matters() -> str:
         name = m.get("Project name", "Unknown")
         status = m.get("Status", "?")
         priority = m.get("Priority", "")
-        deadline = m.get("Target Date", "None set")
+        deadline = m.get(_PROP_DEADLINE) or m.get(_PROP_COURT_DEADLINE) or "None set"
         url = m.get("url", "")
         lines.append(
             f"  • {name}\n"

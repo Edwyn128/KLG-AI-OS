@@ -39,6 +39,8 @@ from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
 
+from notion_bridge.project_pages import _PROP_DEADLINE, _PROP_COURT_DEADLINE
+
 # APIRouter groups all Alfred routes under the /alfred prefix.
 # The router is registered in main.py with app.include_router().
 router = APIRouter(prefix="/alfred", tags=["Alfred"])
@@ -714,8 +716,8 @@ def _normalize_matter(d: dict) -> dict:
         except (ValueError, TypeError):
             return None
 
-    ncd = d.get("Next Court Deadline")
-    td = d.get("Target Date")
+    ncd = d.get(_PROP_COURT_DEADLINE)
+    td = d.get(_PROP_DEADLINE)
 
     return {
         "id": d.get("id"),
@@ -923,11 +925,11 @@ async def update_matter_fields(
     if req.priority is not None:
         properties["Priority"] = {"select": {"name": req.priority}}
     if req.target_date is not None:
-        properties["Target Date"] = (
+        properties[_PROP_DEADLINE] = (
             {"date": {"start": req.target_date}} if req.target_date else {"date": None}
         )
     if req.next_court_deadline is not None:
-        properties["Next Court Deadline"] = (
+        properties[_PROP_COURT_DEADLINE] = (
             {"date": {"start": req.next_court_deadline}}
             if req.next_court_deadline
             else {"date": None}

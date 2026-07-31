@@ -17,6 +17,7 @@ from typing import Any
 
 from alfred.skills.base import Skill, SkillContext, SkillResult
 from config import settings
+from notion_bridge.project_pages import _PROP_DEADLINE
 
 logger = logging.getLogger(__name__)
 
@@ -85,7 +86,7 @@ class KLGMatterIntake(Skill):
         }
 
         if target_date:
-            properties["Target Date"] = {"date": {"start": target_date}}
+            properties[_PROP_DEADLINE] = {"date": {"start": target_date}}
 
         if summary_text:
             properties["Summary"] = {

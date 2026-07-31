@@ -36,6 +36,7 @@ from datetime import date, timedelta
 from typing import Any
 
 from config import settings
+from notion_bridge.project_pages import _PROP_DEADLINE, _PROP_COURT_DEADLINE
 
 logger = logging.getLogger(__name__)
 
@@ -82,15 +83,11 @@ async def run_deadline_watch(
         priority    = matter.get("Priority", "")
         case_stage  = matter.get("Case Stage") or ""
         court_date  = matter.get("Next Court Deadline") or ""
-        court_info  = matter.get("Next Deadline Info") or ""
-        target_date = (
-            matter.get("date:Target Date:start")
-            or matter.get("Target Date")
-            or ""
-        )
+        court_info  = ""  # "Next Deadline Info" property does not exist in Notion schema
+        target_date = matter.get(_PROP_DEADLINE) or ""
 
         # Prefer Next Court Deadline when set — it is the hard legal deadline.
-        # Fall back to Target Date (internal project milestone).
+        # Fall back to Deadline (internal project milestone).
         if court_date:
             deadline_str  = court_date
             deadline_type = "Court"

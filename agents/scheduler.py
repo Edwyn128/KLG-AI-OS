@@ -60,6 +60,8 @@ from apscheduler.triggers.cron import CronTrigger
 
 logger = logging.getLogger(__name__)
 
+from notion_bridge.project_pages import _PROP_DEADLINE, _PROP_COURT_DEADLINE
+
 # Pacific Time — all agent schedules are specified in this timezone
 PACIFIC_TZ = "America/Los_Angeles"
 
@@ -321,9 +323,7 @@ async def _run_weekly_agenda(
         def format_matter_line(m: dict) -> str:
             name = m.get("Project name", "Unknown")
             status = m.get("Status", "?")
-            deadline = (
-                m.get("date:Target Date:start") or m.get("Target Date") or "No date"
-            )
+            deadline = m.get(_PROP_DEADLINE) or m.get(_PROP_COURT_DEADLINE) or "No date"
             return f"  • *{name}* — {status} | Next deadline: {deadline[:10] if deadline else 'N/A'}"
 
         sections: list[str] = [
@@ -393,13 +393,10 @@ async def _run_hygiene_scan(
         url = matter.get("url", "")
         anomalies: list[str] = []
 
-        # Check: No target date
-        has_date = (
-            matter.get("date:Target Date:start")
-            or matter.get("Target Date")
-        )
+        # Check: No deadline set
+        has_date = matter.get(_PROP_DEADLINE) or matter.get(_PROP_COURT_DEADLINE)
         if not has_date:
-            anomalies.append("no target date")
+            anomalies.append("no deadline set")
 
         # Check: Stale (not edited in 14+ days)
         last_edited = matter.get("last_edited_time", "")

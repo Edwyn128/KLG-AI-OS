@@ -70,7 +70,7 @@ from config import settings
 from notion_bridge.client import NotionBridge
 from notion_bridge.alfred_notes import AlfredNotes
 from notion_bridge.comms_log import CommsLog
-from notion_bridge.project_pages import ProjectPages
+from notion_bridge.project_pages import ProjectPages, _PROP_DEADLINE, _PROP_COURT_DEADLINE
 from notion_bridge.system_state import SystemState
 from notion_bridge.watch_list import WatchList
 from sharepoint_bridge.client import SharePointBridge
@@ -954,7 +954,7 @@ async def get_upcoming_deadlines(
     lines = [f"Matters with deadlines in the next {days_ahead} days ({len(matters)} total):\n"]
     for m in matters:
         name = m.get("Project name", "Unknown matter")
-        deadline = m.get("date:Target Date:start", m.get("Target Date", "No date"))
+        deadline = m.get(_PROP_DEADLINE) or m.get(_PROP_COURT_DEADLINE) or "No date"
         status = m.get("Status", "Unknown")
         priority = m.get("Priority", "")
         url = m.get("url", "")
@@ -1244,7 +1244,7 @@ async def get_team_workload(
         name = m.get("Project name", "Unknown matter")
         status = m.get("Status", "Unknown")
         priority = m.get("Priority", "")
-        deadline = m.get("date:Target Date:start", m.get("Target Date", "None set"))
+        deadline = m.get(_PROP_DEADLINE) or m.get(_PROP_COURT_DEADLINE) or "None set"
         url = m.get("url", "")
         lines.append(
             f"  • {name}\n"

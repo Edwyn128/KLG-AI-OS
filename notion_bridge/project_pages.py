@@ -57,6 +57,13 @@ from config import settings
 
 logger = logging.getLogger(__name__)
 
+# Actual Notion Projects database property names.
+# These are the exact strings returned by the Notion API — update here if
+# a property is renamed in Notion. Verified 2026-07-30 via /alfred/debug/schema.
+_PROP_DEADLINE       = "Deadline"              # internal milestone date (was wrongly "Target Date")
+_PROP_COURT_DEADLINE = "Next Court Deadline"   # hard legal deadline date
+# "Next Deadline Info" does not exist in the Notion schema — omitted
+
 
 class ProjectPages:
     """
@@ -168,9 +175,9 @@ class ProjectPages:
         category    = props_dict.get("Category", "N/A")
         case_stage  = props_dict.get("Case Stage") or "N/A"
         assignees   = props_dict.get("Assignee") or []
-        target_date = props_dict.get("date:Target Date:start") or props_dict.get("Target Date") or "N/A"
-        court_date  = props_dict.get("Next Court Deadline") or None
-        court_info  = props_dict.get("Next Deadline Info") or ""
+        target_date = props_dict.get(_PROP_DEADLINE) or "N/A"
+        court_date  = props_dict.get(_PROP_COURT_DEADLINE) or None
+        court_info  = ""  # "Next Deadline Info" property does not exist in Notion schema
         completion      = props_dict.get("Completion")
         blocking        = props_dict.get("Is Blocking") or []
         blocked_by      = props_dict.get("Blocked By") or []
@@ -199,7 +206,7 @@ class ProjectPages:
             f"Assignee:             {', '.join(assignees) if assignees else 'Unassigned'}",
             *([f"Support Type:         {support_type}"] if support_type else []),
             *([f"Think Tank Type:      {think_tank_type}"] if think_tank_type else []),
-            f"Target Date:          {target_date}",
+            f"Deadline:             {target_date}",
             f"Next Court Deadline:  {_days_label(court_date) if court_date else 'None set'}",
         ]
 
@@ -293,11 +300,11 @@ class ProjectPages:
         results_by_target, results_by_court = await asyncio.gather(
             self._bridge.query_database(
                 database_id=settings.notion_projects_db_id,
-                filter=_build("Target Date"),
+                filter=_build(_PROP_DEADLINE),
             ),
             self._bridge.query_database(
                 database_id=settings.notion_projects_db_id,
-                filter=_build("Next Court Deadline"),
+                filter=_build(_PROP_COURT_DEADLINE),
             ),
         )
 
@@ -311,8 +318,8 @@ class ProjectPages:
 
         # Sort by the earliest of the two deadline fields
         def _earliest(m: dict) -> str:
-            td = m.get("Target Date") or "9999-12-31"
-            cd = m.get("Next Court Deadline") or "9999-12-31"
+            td = m.get(_PROP_DEADLINE) or "9999-12-31"
+            cd = m.get(_PROP_COURT_DEADLINE) or "9999-12-31"
             return min(str(td)[:10], str(cd)[:10])
 
         combined.sort(key=_earliest)
@@ -442,23 +449,18 @@ class ProjectPages:
         properties: dict = {}
 
         if target_date is not None:
-            properties["Target Date"] = (
+            properties[_PROP_DEADLINE] = (
                 {"date": {"start": target_date}} if target_date else {"date": None}
             )
 
         if next_court_deadline is not None:
-            properties["Next Court Deadline"] = (
+            properties[_PROP_COURT_DEADLINE] = (
                 {"date": {"start": next_court_deadline}}
                 if next_court_deadline
                 else {"date": None}
             )
 
-        if next_deadline_info is not None:
-            properties["Next Deadline Info"] = {
-                "rich_text": [{"text": {"content": next_deadline_info}}]
-                if next_deadline_info
-                else []
-            }
+        # next_deadline_info intentionally skipped — property does not exist in Notion schema
 
         if case_stage is not None:
             properties["Case Stage"] = (
