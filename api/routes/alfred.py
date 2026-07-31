@@ -215,14 +215,14 @@ def get_verified_username(request: Request) -> str:
 
 # Users allowed to trigger internal agents (scheduler-equivalent endpoints).
 # Must match the casing used in APP_PASSWORDS keys (case-insensitive compare applied below).
-_AGENT_TRIGGER_ALLOWED = {"tim", "stu", "edwyn"}
+_AGENT_TRIGGER_ALLOWED = {"tim", "edwyn"}
 
-# Super-admin users: access to the Admin workspace + user management endpoints.
-# Only "stu" for now — displayed as "Admin" in the UI.
-_SUPER_ADMIN_USERS = {"stu"}
+# Super-admin users: Admin workspace access, gated on master-password login.
+# Tim and Edwyn qualify — but only when they authenticate with the master password.
+_SUPER_ADMIN_USERS = {"tim", "edwyn"}
 
 # Accounting users: access to the Accounting workspace.
-_ACCOUNTING_USERS = {"stu", "tim", "edwyn"}
+_ACCOUNTING_USERS = {"tim", "edwyn"}
 
 
 def require_agent_trigger_role(request: Request) -> str:
@@ -597,7 +597,7 @@ async def chat_with_alfred_stream(
     )
 
 
-_ACTIVITY_ALLOWED = {"tim", "stu", "edwyn"}
+_ACTIVITY_ALLOWED = {"tim", "edwyn"}
 
 
 @router.get("/activity", summary="Get recent agent chat activity for the Activity Log tab")
@@ -695,7 +695,12 @@ async def auth_me(http_request: Request) -> dict:
         "is_client": client_matters is not None,
         "allowed_matters": client_matters or [],
         "is_admin": un in _AGENT_TRIGGER_ALLOWED,
-        "is_super_admin": un in _SUPER_ADMIN_USERS,
+        # Super-admin is only granted when Tim or Edwyn explicitly log in
+        # with the master override password — not their per-user password.
+        "is_super_admin": (
+            un in _SUPER_ADMIN_USERS
+            and getattr(http_request.state, "used_master", False)
+        ),
         "is_accounting": un in _ACCOUNTING_USERS,
     }
 
@@ -1099,7 +1104,7 @@ async def today_tasks(
 
     username = get_verified_username(http_request) or "Team"
     _LOGIN_TO_DISPLAY = {"tim": "Tim", "edwyn": "Edwyn", "brittney": "Brittney",
-                         "william": "William", "ted": "Ted", "stu": "Stu", "richard": "Richard"}
+                         "william": "William", "ted": "Ted", "richard": "Richard"}
     display_name = _LOGIN_TO_DISPLAY.get(username.lower(), username.title())
 
     try:
@@ -1150,7 +1155,7 @@ async def today_briefing(
 
     username = get_verified_username(http_request) or "Team"
     _LOGIN_TO_DISPLAY = {"tim": "Tim", "edwyn": "Edwyn", "brittney": "Brittney",
-                         "william": "William", "ted": "Ted", "stu": "Stu", "richard": "Richard"}
+                         "william": "William", "ted": "Ted", "richard": "Richard"}
     display_name = _LOGIN_TO_DISPLAY.get(username.lower(), username.title())
 
     try:

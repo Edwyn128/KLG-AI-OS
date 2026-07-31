@@ -6,11 +6,10 @@ export const KLG_USERS: KLGUser[] = [
   { name: 'William',  role: 'Research',          admin: false },
   { name: 'Brittney', role: 'Paralegal',         admin: false },
   { name: 'Ted',      role: 'Associate',         admin: false },
-  { name: 'Stu',      role: 'Admin',             admin: true  },
   { name: 'Richard',  role: 'Of Counsel',        admin: false },
 ]
 
-export const ACTIVITY_ADMINS = new Set(['Tim', 'Stu', 'Edwyn'])
+export const ACTIVITY_ADMINS = new Set(['Tim', 'Edwyn'])
 
 export function isAdmin(name: string): boolean {
   return KLG_USERS.find(u => u.name === name)?.admin ?? false

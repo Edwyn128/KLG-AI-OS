@@ -280,6 +280,14 @@ class _BasicAuthMiddleware(BaseHTTPMiddleware):
                 decoded = base64.b64decode(auth_header[6:]).decode("utf-8")
                 username, password = decoded.split(":", 1)
                 if _verify_credentials(username, password):
+                    # Track whether the master override password was used.
+                    # /auth/me uses this to gate super-admin access for Tim/Edwyn.
+                    request.state.used_master = bool(
+                        settings.app_password
+                        and secrets.compare_digest(
+                            password.encode(), settings.app_password.encode()
+                        )
+                    )
                     return await call_next(request)
             except Exception:
                 pass
