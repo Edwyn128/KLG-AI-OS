@@ -7,7 +7,7 @@ import { useMatterStore } from '@/store/matterStore'
 import type { Matter } from '@/types'
 import styles from './DeadlinesWorkspace.module.css'
 
-type FilterMode = 'all' | 'overdue' | 'week' | 'month' | 'mine'
+type FilterMode = 'active' | 'all' | 'overdue' | 'week' | 'month' | 'mine'
 
 function formatDate(dateStr?: string | null): string {
   if (!dateStr) return '—'
@@ -31,8 +31,16 @@ function urgencyClass(days?: number | null): string {
   return ''
 }
 
+function hasDeadline(m: Matter): boolean {
+  return !!(m.target_date || m.next_court_deadline)
+}
+
 function passesFilter(m: Matter, filter: FilterMode, myName: string): boolean {
   if (filter === 'all') return true
+  // 'active' mirrors Notion's "Matter Deadlines" view: Active status + deadline set
+  if (filter === 'active') {
+    return (m.status ?? '').toLowerCase() === 'active' && hasDeadline(m)
+  }
   if (filter === 'mine') return (m.assignee ?? '').toLowerCase().includes(myName.toLowerCase())
   const days = m.days_until ?? null
   if (filter === 'overdue') return days != null && days < 0
@@ -50,7 +58,7 @@ export function DeadlinesWorkspace() {
   const [matters, setMatters] = useState<Matter[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [filter, setFilter] = useState<FilterMode>('all')
+  const [filter, setFilter] = useState<FilterMode>('active')
   const [search, setSearch] = useState('')
 
   useEffect(() => {
@@ -140,6 +148,7 @@ export function DeadlinesWorkspace() {
             value={filter}
             onChange={e => setFilter(e.target.value as FilterMode)}
           >
+            <option value="active">Active matters</option>
             <option value="all">All matters</option>
             <option value="overdue">Overdue</option>
             <option value="week">Due this week</option>
