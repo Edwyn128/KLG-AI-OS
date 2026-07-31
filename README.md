@@ -308,7 +308,7 @@ Alfred responds in every channel he's been invited to. The rate-limit fallback c
 - Frontend uses a custom password modal — no browser native dialog
 - `APP_PASSWORD` is a master override that works for any username
 - `APP_PASSWORDS` is a per-user JSON map: `{"tim": "password1", "brittney": "password2"}`
-- Admin users (Tim, Edwyn, Stu) can switch identity via a clickable chip in the header
+- Admin users (Tim, Edwyn) can switch identity via a clickable chip in the header
 - Non-admin users (William, Brittney, Ted, Richard) have a non-clickable identity chip — they cannot impersonate others
 - If `APP_PASSWORDS` contains escaped quotes or newlines (Railway raw editor bug), delete the variable and re-enter as a single clean JSON line on one line
 
@@ -347,7 +347,6 @@ Defined in `agents/scheduler.py`. All times Pacific.
 |---|---|---|
 | Tim | Managing attorney | Admin |
 | Edwyn | Systems partner, build lead | Admin |
-| Stu | Operations | Admin |
 | Brittney | Paralegal, primary daily user | Standard |
 | Ted / William / Richard | Staff | Standard (identity-locked) |
 | Ozzy | External IT (Azure/SharePoint) | n/a |
