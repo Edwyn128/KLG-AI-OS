@@ -334,17 +334,22 @@ class ProjectPages:
         self,
         category: str | None = "Case Project",
         project_type: str | None = None,
+        active_only: bool = True,
     ) -> list[dict[str, Any]]:
         """
-        Return all matters currently in an active status.
+        Return matters filtered by category (and optionally by active status).
 
         Args:
-            category: Filter by project category. Defaults to "Case Project"
-                      (actual client legal matters). Pass None for all types.
-                      Use the CATEGORY_* class constants for valid values.
+            category:    Filter by project category. Defaults to "Case Project".
+            project_type: Optional project-type filter.
+            active_only: When True (default), only matters with an explicitly
+                         Active or On Hold status are returned — mirrors the
+                         frontend allowlist. Pass False to include all matters
+                         regardless of status (e.g., for channel resolution
+                         that needs to find closed-matter channels).
 
         Returns:
-            List of active matter dicts sorted by Priority descending.
+            List of matter dicts sorted by Priority descending.
         """
         conditions: list[dict] = []
         if category:
@@ -362,11 +367,25 @@ class ProjectPages:
             else None
         )
 
-        return await self._bridge.query_database(
+        raw = await self._bridge.query_database(
             database_id=settings.notion_projects_db_id,
             filter=db_filter,
             sorts=[{"property": "Priority", "direction": "descending"}],
         )
+
+        if not active_only:
+            return raw
+
+        def _is_active_or_hold(m: dict) -> bool:
+            s = (m.get("Status") or "").strip().lower()
+            return "active" in s or "hold" in s
+
+        filtered = [m for m in raw if _is_active_or_hold(m)]
+        logger.info(
+            "get_all_active_matters(category=%s): %d total → %d active/on-hold",
+            category, len(raw), len(filtered),
+        )
+        return filtered
 
     async def update_matter_status(self, page_id: str, new_status: str) -> None:
         """

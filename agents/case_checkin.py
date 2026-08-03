@@ -74,7 +74,7 @@ async def resolve_matter_for_channel(
     if not clean:
         return None
 
-    matters = await project_pages.get_all_active_matters(category="Case Project")
+    matters = await project_pages.get_all_active_matters(category="Case Project", active_only=False)
 
     for matter in matters:
         # Check explicit property first

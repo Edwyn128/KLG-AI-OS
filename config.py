@@ -294,6 +294,20 @@ class Settings(BaseSettings):
     'Alfred,' are routed to the Alfred agent.
     """
 
+    slack_hygiene_enabled: bool = True
+    """
+    Set SLACK_HYGIENE_ENABLED=false in Railway to disable the Monday morning
+    hygiene scan without disabling other Slack agents (deadline watch, weekly
+    agenda, case check-in). Default true. Tim requested this be disabled while
+    the matter data quality was being corrected.
+    """
+
+    slack_checkin_enabled: bool = True
+    """
+    Set SLACK_CHECKIN_ENABLED=false in Railway to disable the Monday/Thursday
+    case check-in posts to individual matter channels. Default true.
+    """
+
     # ── Security ──────────────────────────────────────────────────────────────
 
     app_password: str = ""

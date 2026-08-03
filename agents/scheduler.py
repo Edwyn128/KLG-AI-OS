@@ -178,54 +178,59 @@ def create_scheduler(
     # ── Job 3: Project Hygiene Scan ───────────────────────────────────────────
     # Runs Monday morning at 8:15 AM Pacific (after the agenda and deadline watch).
     # Scans for hygiene issues: stale matters, missing dates, owner gaps.
+    # Gated by SLACK_HYGIENE_ENABLED (default true). Set false in Railway to
+    # disable without touching any other agent.
     #
-    scheduler.add_job(
-        func=_run_hygiene_scan,
-        trigger=CronTrigger(
-            day_of_week="mon", hour=8, minute=15, timezone=PACIFIC_TZ
-        ),
-        args=[project_pages, slack_client],
-        id="hygiene_scan_weekly",
-        name="Weekly Project Hygiene Scan",
-        replace_existing=True,
-        misfire_grace_time=3600,
-    )
-    logger.info("Scheduler: Registered 'hygiene_scan_weekly' at 08:15 Pacific Mondays.")
+    from config import settings as _cfg
+    if _cfg.slack_hygiene_enabled:
+        scheduler.add_job(
+            func=_run_hygiene_scan,
+            trigger=CronTrigger(
+                day_of_week="mon", hour=8, minute=15, timezone=PACIFIC_TZ
+            ),
+            args=[project_pages, slack_client],
+            id="hygiene_scan_weekly",
+            name="Weekly Project Hygiene Scan",
+            replace_existing=True,
+            misfire_grace_time=3600,
+        )
+        logger.info("Scheduler: Registered 'hygiene_scan_weekly' at 08:15 Pacific Mondays.")
+    else:
+        logger.info("Scheduler: Hygiene scan disabled (SLACK_HYGIENE_ENABLED=false).")
 
-    # ── Job 4: Monday Case Check-in ───────────────────────────────────────────
+    # ── Job 4 & 5: Case Check-ins (Monday + Thursday) ─────────────────────────
     # Posts a brief status check-in to each active matter's Slack channel.
     # Team replies mentioning @Alfred are auto-logged to that matter's Notion page.
+    # Gated by SLACK_CHECKIN_ENABLED (default true).
     #
-    # Runs at 9:00 AM Pacific on Mondays (after agenda and hygiene scan).
-    #
-    scheduler.add_job(
-        func=run_case_checkin,
-        trigger=CronTrigger(
-            day_of_week="mon", hour=9, minute=0, timezone=PACIFIC_TZ
-        ),
-        args=[project_pages, slack_client],
-        id="case_checkin_monday",
-        name="Monday Case Check-in",
-        replace_existing=True,
-        misfire_grace_time=3600,
-    )
-    logger.info("Scheduler: Registered 'case_checkin_monday' at 09:00 Pacific Mondays.")
+    if _cfg.slack_checkin_enabled:
+        scheduler.add_job(
+            func=run_case_checkin,
+            trigger=CronTrigger(
+                day_of_week="mon", hour=9, minute=0, timezone=PACIFIC_TZ
+            ),
+            args=[project_pages, slack_client],
+            id="case_checkin_monday",
+            name="Monday Case Check-in",
+            replace_existing=True,
+            misfire_grace_time=3600,
+        )
+        logger.info("Scheduler: Registered 'case_checkin_monday' at 09:00 Pacific Mondays.")
 
-    # ── Job 5: Thursday Case Check-in ────────────────────────────────────────
-    # Same check-in cadence as Monday, mid-week touchpoint.
-    #
-    scheduler.add_job(
-        func=run_case_checkin,
-        trigger=CronTrigger(
-            day_of_week="thu", hour=9, minute=0, timezone=PACIFIC_TZ
-        ),
-        args=[project_pages, slack_client],
-        id="case_checkin_thursday",
-        name="Thursday Case Check-in",
-        replace_existing=True,
-        misfire_grace_time=3600,
-    )
-    logger.info("Scheduler: Registered 'case_checkin_thursday' at 09:00 Pacific Thursdays.")
+        scheduler.add_job(
+            func=run_case_checkin,
+            trigger=CronTrigger(
+                day_of_week="thu", hour=9, minute=0, timezone=PACIFIC_TZ
+            ),
+            args=[project_pages, slack_client],
+            id="case_checkin_thursday",
+            name="Thursday Case Check-in",
+            replace_existing=True,
+            misfire_grace_time=3600,
+        )
+        logger.info("Scheduler: Registered 'case_checkin_thursday' at 09:00 Pacific Thursdays.")
+    else:
+        logger.info("Scheduler: Case check-ins disabled (SLACK_CHECKIN_ENABLED=false).")
 
     # ── Job 6: Weekday Huddle Import ──────────────────────────────────────────
     # Searches Slack for new huddle summary canvases and imports them into the
