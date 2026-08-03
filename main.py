@@ -234,6 +234,16 @@ def _verify_credentials(username: str, password: str) -> bool:
     return False
 
 
+class _SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        response = await call_next(request)
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        response.headers["X-XSS-Protection"] = "1; mode=block"
+        return response
+
+
 class _BasicAuthMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         path = request.url.path
@@ -489,6 +499,9 @@ app = FastAPI(
 # =============================================================================
 # MIDDLEWARE
 # =============================================================================
+
+# Security headers — runs last (outermost wrapper), so headers are set on all responses.
+app.add_middleware(_SecurityHeadersMiddleware)
 
 # Auth — must be added before CORS so unauthenticated requests are rejected
 # before any CORS headers are set.

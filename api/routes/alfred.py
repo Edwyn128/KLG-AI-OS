@@ -195,10 +195,11 @@ def get_alfred_deps(request: Request):
 
 def get_verified_username(request: Request) -> str:
     """
-    Extract and return the username from the verified Basic Auth header.
+    Extract and return the verified username from the Authorization header.
 
+    Supports both Basic Auth (internal/client users) and Bearer JWT (SSO users).
     The middleware already validated the credential before this runs — we just
-    parse the username out of the header so routes can use it for logging and
+    parse the identity out of the header so routes can use it for logging and
     access control without trusting the request body's self-reported user field.
     Returns empty string if the header is absent or malformed (e.g., local dev
     with auth disabled).
@@ -208,6 +209,15 @@ def get_verified_username(request: Request) -> str:
     if auth.startswith("Basic "):
         try:
             return base64.b64decode(auth[6:]).decode().split(":", 1)[0]
+        except Exception:
+            pass
+    if auth.startswith("Bearer "):
+        try:
+            from config import settings as _cfg
+            from main import _jwt_decode
+            if _cfg.alfred_session_secret:
+                payload = _jwt_decode(auth[7:], _cfg.alfred_session_secret)
+                return payload.get("sub", "")
         except Exception:
             pass
     return ""
@@ -590,8 +600,8 @@ async def chat_with_alfred_stream(
             yield f"data: {json.dumps({'done': True, 'tools_used': tools_used, 'history': new_history, 'file_attachments': scoped_deps.file_attachments})}\n\n"
 
         except Exception as e:
-            logger.error("Alfred stream error for '%s': %s", request.user, e, exc_info=True)
-            yield f"data: {json.dumps({'error': str(e)})}\n\n"
+            logger.error("Alfred stream error for '%s': %s", verified_user, e, exc_info=True)
+            yield f"data: {json.dumps({'error': 'An internal error occurred. Please try again.'})}\n\n"
 
     return StreamingResponse(
         generate(),
@@ -805,13 +815,11 @@ async def list_active_matters(
         raise HTTPException(status_code=500, detail="An internal error occurred. Check server logs.")
 
 
-@router.get("/debug/schema", summary="Return property names and types for the Projects database (staff only)")
+@router.get("/debug/schema", summary="Return property names and types for the Projects database (admin only)")
 async def debug_schema(
     alfred_deps=Depends(get_alfred_deps),
-    client_scope: list[str] | None = Depends(get_client_scope),
+    _username: str = Depends(require_agent_trigger_role),
 ) -> dict[str, Any]:
-    if client_scope is not None:
-        raise HTTPException(status_code=403, detail="Not available in client sessions.")
     from config import settings
     props = await alfred_deps.project_pages._bridge.get_database_properties(settings.notion_projects_db_id)
     return {"properties": props}
@@ -1155,8 +1163,12 @@ async def today_tasks(
 async def today_briefing(
     http_request: Request,
     alfred_deps=Depends(get_alfred_deps),
+    client_scope: list[str] | None = Depends(get_client_scope),
 ) -> dict[str, Any]:
     """Generate a personalised 3-bullet focus summary using upcoming deadlines and assigned tasks."""
+    if client_scope is not None:
+        raise HTTPException(status_code=403, detail="Not available in client sessions.")
+
     from datetime import datetime, timezone
     import asyncio
 
@@ -1220,7 +1232,7 @@ async def today_briefing(
         return {"focus": result.output, "user": display_name}
     except Exception as e:
         logger.error("today_briefing error: %s", e, exc_info=True)
-        return {"focus": f"Unable to generate briefing: {e}", "user": display_name}
+        return {"focus": "Unable to generate briefing at this time.", "user": display_name}
 
 
 @router.get("/deadlines/tasks", summary="All tasks from active matter project pages")
@@ -1272,7 +1284,7 @@ async def all_deadlines_tasks(
         return {"tasks": all_tasks, "count": len(all_tasks), "errors": []}
     except Exception as e:
         logger.error("all_deadlines_tasks error: %s", e, exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="An internal error occurred. Check server logs.")
 
 
 
@@ -1593,7 +1605,7 @@ async def upload_file(
         raise
     except Exception as e:
         logger.error("upload_file: write failed for '%s': %s", filename, e)
-        raise HTTPException(status_code=500, detail=f"Upload failed: {e}")
+        raise HTTPException(status_code=500, detail="Upload failed. Check server logs.")
 
     token = register_file(temp_path, filename)
     logger.info("upload_file: '%s' (%d bytes) → token %.8s", filename, total, token)
@@ -1642,7 +1654,7 @@ async def upload_chunk(body: ChunkRequest) -> ChunkResponse:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         logger.error("upload_chunk: failed on chunk %d of '%s': %s", body.chunk_index, body.filename, e)
-        raise HTTPException(status_code=500, detail=f"Chunk upload failed: {e}")
+        raise HTTPException(status_code=500, detail="Chunk upload failed. Check server logs.")
 
     return ChunkResponse(
         upload_id=body.upload_id,

@@ -39,7 +39,7 @@ def _get_notion_bridge():
         return None
     try:
         from notion_bridge.client import NotionBridge
-        return NotionBridge(settings.notion_token)
+        return NotionBridge()
     except Exception:
         return None
 
