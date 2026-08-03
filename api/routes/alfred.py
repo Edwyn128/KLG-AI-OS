@@ -799,7 +799,7 @@ async def list_active_matters(
     """
     try:
         cat = None if category.lower() == "all" else category
-        matters = await alfred_deps.project_pages.get_all_active_matters(category=cat)
+        matters = await alfred_deps.project_pages.get_all_active_matters(category=cat, active_only=not archived)
         normalized = [_normalize_matter(m) for m in matters]
         if client_scope is not None:
             normalized = [m for m in normalized if any(

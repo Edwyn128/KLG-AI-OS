@@ -377,7 +377,7 @@ class ProjectPages:
             return raw
 
         def _is_active_or_hold(m: dict) -> bool:
-            s = (m.get("Status") or "").strip().lower()
+            s = (m.get("Matter Status") or m.get("Status") or "").strip().lower()
             return "active" in s or "hold" in s
 
         filtered = [m for m in raw if _is_active_or_hold(m)]
