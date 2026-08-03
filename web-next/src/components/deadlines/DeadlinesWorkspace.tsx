@@ -43,24 +43,24 @@ function hasDeadline(m: Matter): boolean {
 }
 
 // Normalize Notion status strings to canonical group keys.
-// Handles capitalization variants ("On hold", "On Hold", "ON HOLD") and
-// maps empty/null (untagged matters) to "active" so they don't float off
-// into a mystery group.
+// Handles capitalization variants ("On hold", "On Hold", "ON HOLD").
+// Empty/null status → 'untagged' so unset matters don't silently join Active.
 function statusKey(m: Matter): string {
   const s = (m.status ?? '').trim().toLowerCase()
   if (s.includes('hold')) return 'on hold'
-  if (s === '' || s.includes('active')) return 'active'
+  if (s.includes('active')) return 'active'
+  if (s === '') return 'untagged'
   return s
 }
 
 function passesFilter(m: Matter, filter: FilterMode, myName: string): boolean {
   if (filter === 'all') return true
   if (filter === 'active') {
-    // Show every matter the backend considers non-inactive.
-    // The backend already filters out done/closed/archived matters before
-    // sending — this mirrors that check so the two stay in sync.
-    const s = (m.status ?? '').trim().toLowerCase()
-    return s === '' || !INACTIVE_STATUSES.has(s)
+    // Allowlist: only show matters with an explicit Active or On Hold status.
+    // Matters with no status or non-standard statuses are excluded — they
+    // are not shown in Notion's active views either.
+    const key = statusKey(m)
+    return key === 'active' || key === 'on hold'
   }
   if (filter === 'mine') return (m.assignee ?? '').toLowerCase().includes(myName.toLowerCase())
   const days = m.days_until ?? null
