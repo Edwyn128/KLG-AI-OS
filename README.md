@@ -27,16 +27,21 @@ A four-layer operating system for a boutique appellate firm:
 ## Architecture
 
 ```
-web-next/          React + Vite + TypeScript frontend
+web-next/          React + Vite + TypeScript frontend (Web + Mobile Responsive)
 ├── src/
 │   ├── components/
-│   │   ├── dashboard/   Matter list + per-matter task panel
-│   │   ├── chat/        Alfred chat with SSE streaming
-│   │   ├── skills/      Skills launcher popup
-│   │   └── layout/      App shell, nav, auth modal
+│   │   ├── dashboard/   Dynamic Multi-View Dashboard (Kanban, Grid, List) + Metric Cards
+│   │   ├── chat/        Alfred chat with SSE streaming & model selector
+│   │   ├── cases/       Appellate case file folders & record sync dashboard
+│   │   ├── accounting/  Billing, invoices & retainer trust accounting dashboard
+│   │   ├── skills/      Skills launcher popup & execution navigator
+│   │   └── layout/      App shell, Header, WorkspaceTabs, MobileBottomNav
 │   ├── store/           Zustand stores (chat, matter, UI state)
 │   ├── api/             API client functions
 │   └── types/           Shared TypeScript types
+docs/
+├── handoff/
+│   └── backend-agent-ui-spec.md  Agent & Reactive UI integration specification
 
 api/               FastAPI backend (Python)
 ├── routes/

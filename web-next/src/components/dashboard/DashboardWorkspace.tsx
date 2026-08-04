@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { fetchMatters, fetchMatterDetail, fetchMatterTasks } from '@/api/client'
 import { useMatterStore } from '@/store/matterStore'
 import { useAuthStore } from '@/store/authStore'
@@ -15,11 +15,13 @@ const KLG_STAGES = [
   'Contingency Tasks',
 ]
 
+type ViewMode = 'kanban' | 'grid' | 'list'
+
 function formatDate(dateStr?: string): string {
   if (!dateStr) return '—'
   const d = new Date(dateStr)
   if (isNaN(d.getTime())) return dateStr
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 }
 
 function urgencyDotClass(daysUntil?: number): string {
@@ -42,10 +44,12 @@ export function DashboardWorkspace() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [showArchived, setShowArchived] = useState(false)
+  const [viewMode, setViewMode] = useState<ViewMode>('kanban')
+  const [searchQuery, setSearchQuery] = useState('')
+  const [stageFilter, setStageFilter] = useState<string>('all')
 
   const { isAdmin, isSuperAdmin } = useAuthStore()
-  const { selectedMatter, setSelectedMatter, setTasks, setTasksLoading, tasks, tasksLoading } = useMatterStore()
-  const listRef = useRef<HTMLDivElement>(null)
+  const { selectedMatter, setSelectedMatter, setTasks, setTasksLoading } = useMatterStore()
 
   useEffect(() => {
     let cancelled = false
@@ -85,33 +89,45 @@ export function DashboardWorkspace() {
     }
   }
 
-  // When this workspace opens with a pre-selected matter (navigated from Deadlines),
-  // fetch its tasks if they haven't been loaded yet.
-  useEffect(() => {
-    if (selectedMatter && tasks.length === 0 && !tasksLoading) {
-      handleSelectMatter(selectedMatter)
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedMatter?.id])
+  // Filter matters based on search query and stage
+  const filteredMatters = matters.filter(m => {
+    const matchesSearch = searchQuery === '' || 
+      m.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (m.assignee && m.assignee.toLowerCase().includes(searchQuery.toLowerCase()))
+    
+    const matchesStage = stageFilter === 'all' || (m.case_stage || 'Other') === stageFilter
+    return matchesSearch && matchesStage
+  })
 
-  // Scroll the selected matter row into view once the list is rendered.
-  useEffect(() => {
-    if (!selectedMatter || !listRef.current) return
-    const el = listRef.current.querySelector<HTMLElement>(`[data-matter-id="${selectedMatter.id}"]`)
-    if (el) el.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
-  }, [selectedMatter?.id, loading])
+  // Calculate Metrics
+  const activeCount = matters.filter(m => (m.status ?? '').toLowerCase().includes('active') || (m.status ?? '').toLowerCase().includes('in progress')).length
+  const urgentCount = matters.filter(m => m.days_until != null && m.days_until <= 7).length
+  const pendingCount = matters.filter(m => (m.status ?? '').toLowerCase().includes('pending') || (m.status ?? '').toLowerCase().includes('paused')).length
+
+  // Group matters by stage for Kanban
+  const grouped: Record<string, Matter[]> = {}
+  for (const m of filteredMatters) {
+    const stage = m.case_stage || 'Other'
+    if (!grouped[stage]) grouped[stage] = []
+    grouped[stage].push(m)
+  }
+
+  const orderedStages = [
+    ...KLG_STAGES.filter(s => grouped[s] || stageFilter === 'all'),
+    ...Object.keys(grouped).filter(s => !KLG_STAGES.includes(s)),
+  ]
 
   if (loading) {
     return (
       <div className={styles.container}>
-        <div className={`${styles.listPanel} ${styles.skeletonPanel}`}>
-          {[0, 1, 2, 3, 4].map(i => (
-            <div key={i} className={styles.skeletonCard} />
-          ))}
+        <div className={styles.topHeader}>
+          <div className={styles.metricsGrid}>
+            {[0, 1, 2, 3].map(i => <div key={i} className={styles.metricCard} style={{ height: 50, opacity: 0.5 }} />)}
+          </div>
         </div>
-        <div className={`${styles.detailPanel} ${styles.detailEmpty}`}>
+        <div className={styles.detailEmpty}>
           <span className="material-symbols-outlined">gavel</span>
-          <p>Loading matters…</p>
+          <p>Loading matters & active cases…</p>
         </div>
       </div>
     )
@@ -129,111 +145,202 @@ export function DashboardWorkspace() {
     )
   }
 
-  // Group matters by case_stage, ordering by KLG_STAGES then ungrouped
-  const grouped: Record<string, Matter[]> = {}
-  for (const m of matters) {
-    const stage = m.case_stage || 'Other'
-    if (!grouped[stage]) grouped[stage] = []
-    grouped[stage].push(m)
-  }
-
-  const orderedStages = [
-    ...KLG_STAGES.filter(s => grouped[s]),
-    ...Object.keys(grouped).filter(s => !KLG_STAGES.includes(s)),
-  ]
-
-  // Sort matters within each stage by urgency
-  for (const stage of orderedStages) {
-    grouped[stage].sort((a, b) => (a.days_until ?? 9999) - (b.days_until ?? 9999))
-  }
-
-  const deadlines: Matter[] = matters
-    .filter(m => m.days_until != null && m.days_until <= 30)
-    .sort((a, b) => (a.days_until ?? 9999) - (b.days_until ?? 9999))
-    .slice(0, 5)
-
   return (
     <div className={styles.container}>
-      {/* Left: matter list */}
-      <div className={styles.listPanel}>
-        {/* Admin-only: show archived toggle */}
-        {(isAdmin || isSuperAdmin) && (
-          <div className={styles.archiveToggleRow}>
-            <label className={styles.archiveToggle}>
+      {/* Dynamic Top Header with Metrics & Control Filters */}
+      <div className={styles.topHeader}>
+        <div className={styles.metricsGrid}>
+          <div className={styles.metricCard}>
+            <div className={styles.metricIcon}>
+              <span className="material-symbols-outlined">folder_open</span>
+            </div>
+            <div className={styles.metricInfo}>
+              <span className={styles.metricValue}>{matters.length}</span>
+              <span className={styles.metricLabel}>Total Matters</span>
+            </div>
+          </div>
+
+          <div className={styles.metricCard}>
+            <div className={`${styles.metricIcon} ${styles.active}`}>
+              <span className="material-symbols-outlined">bolt</span>
+            </div>
+            <div className={styles.metricInfo}>
+              <span className={styles.metricValue}>{activeCount}</span>
+              <span className={styles.metricLabel}>Active Briefs</span>
+            </div>
+          </div>
+
+          <div className={styles.metricCard}>
+            <div className={`${styles.metricIcon} ${styles.urgent}`}>
+              <span className="material-symbols-outlined">event_upcoming</span>
+            </div>
+            <div className={styles.metricInfo}>
+              <span className={styles.metricValue}>{urgentCount}</span>
+              <span className={styles.metricLabel}>Critical (&lt;7 Days)</span>
+            </div>
+          </div>
+
+          <div className={styles.metricCard}>
+            <div className={`${styles.metricIcon} ${styles.bh}`}>
+              <span className="material-symbols-outlined">pending_actions</span>
+            </div>
+            <div className={styles.metricInfo}>
+              <span className={styles.metricValue}>{pendingCount}</span>
+              <span className={styles.metricLabel}>Pending Review</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Filter Controls Row */}
+        <div className={styles.controlsRow}>
+          <div className={styles.searchBox}>
+            <span className={`material-symbols-outlined ${styles.searchIcon}`}>search</span>
+            <input
+              type="text"
+              placeholder="Search matters, attorneys, or courts…"
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+            />
+          </div>
+
+          <select
+            className={styles.filterSelect}
+            value={stageFilter}
+            onChange={e => setStageFilter(e.target.value)}
+          >
+            <option value="all">All Stages</option>
+            {KLG_STAGES.map(s => (
+              <option key={s} value={s}>{s}</option>
+            ))}
+          </select>
+
+          {(isAdmin || isSuperAdmin) && (
+            <label style={{ fontSize: 11, color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}>
               <input
                 type="checkbox"
                 checked={showArchived}
                 onChange={e => setShowArchived(e.target.checked)}
               />
-              <span>Show archived matters</span>
+              Show Archived
             </label>
+          )}
+
+          <div className={styles.viewToggleGroup}>
+            <button
+              className={`${styles.viewBtn} ${viewMode === 'kanban' ? styles.active : ''}`}
+              onClick={() => setViewMode('kanban')}
+              title="Kanban Board View"
+            >
+              <span className="material-symbols-outlined">view_column</span>
+            </button>
+            <button
+              className={`${styles.viewBtn} ${viewMode === 'grid' ? styles.active : ''}`}
+              onClick={() => setViewMode('grid')}
+              title="Grid Card View"
+            >
+              <span className="material-symbols-outlined">grid_view</span>
+            </button>
+            <button
+              className={`${styles.viewBtn} ${viewMode === 'list' ? styles.active : ''}`}
+              onClick={() => setViewMode('list')}
+              title="Dense List View"
+            >
+              <span className="material-symbols-outlined">format_list_bulleted</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Main Workspace Body */}
+      <div className={styles.workspaceBody}>
+        {/* Kanban Board View */}
+        {viewMode === 'kanban' && (
+          <div className={styles.kanbanBoard}>
+            {orderedStages.map(stage => {
+              const stageMatters = grouped[stage] || []
+              return (
+                <div key={stage} className={styles.kanbanColumn}>
+                  <div className={styles.columnHeader}>
+                    <span>{stage}</span>
+                    <span className={styles.columnBadge}>{stageMatters.length}</span>
+                  </div>
+                  <div className={styles.columnCards}>
+                    {stageMatters.map(m => (
+                      <div
+                        key={m.id}
+                        className={`${styles.kanbanCard} ${selectedMatter?.id === m.id ? styles.active : ''}`}
+                        onClick={() => handleSelectMatter(m)}
+                      >
+                        <div className={styles.cardHeader}>
+                          <span className={styles.cardTitle}>{m.name}</span>
+                          <span className={`${styles.urgencyDot} ${urgencyDotClass(m.days_until)}`} />
+                        </div>
+                        <div className={styles.cardMeta}>
+                          {m.assignee ? <span className={styles.chip}>{m.assignee}</span> : <span />}
+                          <span>{formatDate(m.next_court_deadline ?? m.target_date)}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )
+            })}
           </div>
         )}
-        {/* Upcoming deadlines strip */}
-        {deadlines.length > 0 && (
-          <div className={styles.deadlineStrip}>
-            <span className={styles.stripLabel}>Next deadlines</span>
-            {deadlines.map(d => (
-              <span
-                key={d.id}
-                className={styles.stripItem}
-                onClick={() => {
-                  const m = matters.find(x => x.id === d.id)
-                  if (m) handleSelectMatter(m)
-                }}
+
+        {/* Grid View */}
+        {viewMode === 'grid' && (
+          <div className={styles.gridView}>
+            {filteredMatters.map(m => (
+              <div
+                key={m.id}
+                className={styles.gridCard}
+                onClick={() => handleSelectMatter(m)}
               >
-                <span className={`${styles.urgencyDot} ${urgencyDotClass(d.days_until)}`} />
-                <span className={styles.stripName}>{d.name}</span>
-                <span className={styles.stripDate}>{formatDate(d.next_court_deadline ?? d.target_date)}</span>
-              </span>
+                <div className={styles.cardHeader}>
+                  <span className={styles.cardTitle}>{m.name}</span>
+                  <span className={`${styles.statusBadge} ${statusClass(m.status)}`}>{m.status ?? 'Active'}</span>
+                </div>
+                <div className={styles.cardMeta}>
+                  <span>Stage: <strong>{m.case_stage ?? 'Setup'}</strong></span>
+                  <span className={`${styles.urgencyDot} ${urgencyDotClass(m.days_until)}`} />
+                </div>
+                <div className={styles.cardMeta}>
+                  <span>{m.assignee ? `Lead: ${m.assignee}` : 'Unassigned'}</span>
+                  <span>{formatDate(m.next_court_deadline ?? m.target_date)}</span>
+                </div>
+              </div>
             ))}
           </div>
         )}
 
-        {/* Grouped matter list */}
-        <div className={styles.matterList} ref={listRef}>
-          {orderedStages.map(stage => (
-            <div key={stage} className={styles.stageGroup}>
-              <div className={styles.stageHeader}>{stage}</div>
-              {grouped[stage].map(m => (
-                <button
-                  key={m.id}
-                  data-matter-id={m.id}
-                  className={`${styles.matterRow} ${selectedMatter?.id === m.id ? styles.matterRowActive : ''}`}
-                  onClick={() => handleSelectMatter(m)}
-                >
-                  <span className={`${styles.urgencyBar} ${urgencyDotClass(m.days_until)}`} />
-                  <div className={styles.matterRowContent}>
-                    <span className={styles.matterName}>{m.name}</span>
-                    <div className={styles.matterRowMeta}>
-                      {m.assignee && <span className={styles.metaChip}>{m.assignee}</span>}
-                      {(m.next_court_deadline || m.target_date) && (
-                        <span className={styles.metaChipDate}>
-                          {formatDate(m.next_court_deadline ?? m.target_date)}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                  {m.status && (
-                    <span className={`${styles.statusBadge} ${statusClass(m.status)}`}>
-                      {m.status}
-                    </span>
-                  )}
-                </button>
-              ))}
-            </div>
-          ))}
-        </div>
-      </div>
+        {/* List View */}
+        {viewMode === 'list' && (
+          <div className={styles.listView}>
+            {filteredMatters.map(m => (
+              <div
+                key={m.id}
+                className={styles.listRow}
+                onClick={() => handleSelectMatter(m)}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <span className={`${styles.urgencyDot} ${urgencyDotClass(m.days_until)}`} />
+                  <span className={styles.cardTitle}>{m.name}</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 16, fontSize: 11, color: 'var(--text-muted)' }}>
+                  <span>{m.case_stage ?? 'In Progress'}</span>
+                  <span>{m.assignee ?? 'Unassigned'}</span>
+                  <span>{formatDate(m.next_court_deadline ?? m.target_date)}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
 
-      {/* Right: detail panel */}
-      <div className={styles.detailPanel}>
-        {selectedMatter ? (
-          <MatterDetailPanel />
-        ) : (
-          <div className={styles.detailEmpty}>
-            <span className="material-symbols-outlined">gavel</span>
-            <p>Select a matter to view details and tasks</p>
+        {/* Selected Matter Detail Panel / Drawer */}
+        {selectedMatter && (
+          <div className={styles.detailDrawer}>
+            <MatterDetailPanel />
           </div>
         )}
       </div>

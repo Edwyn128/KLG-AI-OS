@@ -11,6 +11,7 @@ import { AccountingWorkspace } from '@/components/accounting/AccountingWorkspace
 import { AdminWorkspace }      from '@/components/admin/AdminWorkspace'
 import { SkillsLauncher }      from '@/components/skills/SkillsLauncher'
 import { SkillsWorkspace }     from '@/components/skills/SkillsWorkspace'
+import { MobileBottomNav }  from './MobileBottomNav'
 import styles from './AppLayout.module.css'
 
 export function AppLayout() {
@@ -31,6 +32,7 @@ export function AppLayout() {
         {activeWorkspace === 'admin'      && <AdminWorkspace />}
         {activeWorkspace === 'skills'     && <SkillsWorkspace />}
       </main>
+      <MobileBottomNav />
       {/* Skills execute firm-internal workflows — not available to client sessions. */}
       {!isClient && <SkillsLauncher />}
     </div>

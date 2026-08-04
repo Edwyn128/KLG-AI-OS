@@ -11,3 +11,9 @@
   display: flex;
   overflow: hidden;
 }
+
+@media (max-width: 768px) {
+  .workspace {
+    padding-bottom: calc(var(--bottom-nav-h) + var(--safe-area-bottom));
+  }
+}

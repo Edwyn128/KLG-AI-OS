@@ -367,7 +367,7 @@ function TaskGroup({
 // ── Main component ────────────────────────────────────────────────────────────
 
 export function MatterDetailPanel() {
-  const { selectedMatter, tasks, tasksLoading } = useMatterStore()
+  const { selectedMatter, setSelectedMatter, tasks, tasksLoading } = useMatterStore()
 
   if (!selectedMatter) return null
 
@@ -394,6 +394,14 @@ export function MatterDetailPanel() {
       {/* Header */}
       <div className={styles.panelHeader}>
         <h2 className={styles.panelTitle}>{selectedMatter.name}</h2>
+        <button
+          className={styles.closeBtn}
+          onClick={() => setSelectedMatter(null)}
+          title="Close details"
+          aria-label="Close details panel"
+        >
+          <span className="material-symbols-outlined">close</span>
+        </button>
       </div>
 
       {/* Stage progress */}

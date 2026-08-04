@@ -18,8 +18,8 @@
   /* Text */
   --text-primary:   #e5eaf4;
   --text-secondary: #b8c8de;
-  --text-muted:     #6d8eaa;
-  --text-dim:       #3a5470;
+  --text-muted:     #82a5c4;
+  --text-dim:       #4c6a8a;
 
   /* Brand accent — KLG Red (primary CTA / active states) */
   --accent:         #B22234;
@@ -73,14 +73,31 @@
   --panel-width:     50vw;
 
   /* Layout density — overridden in html[data-compact] below */
-  --header-h:    52px;
-  --tab-pad-y:   8px;
-  --tab-pad-x:   14px;
-  --tab-fs:      12px;
-  --tab-icon-fs: 16px;
+  --header-h:          52px;
+  --bottom-nav-h:      60px;
+  --touch-target:      44px;
+  --safe-area-bottom:  env(safe-area-inset-bottom, 0px);
+  --tab-pad-y:         8px;
+  --tab-pad-x:         14px;
+  --tab-fs:            12px;
+  --tab-icon-fs:       16px;
 }
 
-/* Light mode — toggled by Header button, persisted in localStorage. */
+/* Keyframes */
+@keyframes panelIn {
+  from { transform: translateX(100%); opacity: 0.6; }
+  to   { transform: translateX(0);    opacity: 1;   }
+}
+
+@keyframes slideUpDrawer {
+  from { transform: translateY(100%); opacity: 0.4; }
+  to   { transform: translateY(0);    opacity: 1;   }
+}
+
+@keyframes shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
 html[data-theme="light"] {
   --bg-base:    #f2f4f8;
   --bg-panel:   #ffffff;

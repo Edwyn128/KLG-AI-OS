@@ -1,30 +1,116 @@
+/* Dynamic Accounting Dashboard Styles */
+
 .container {
   flex: 1;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
-  padding: 24px;
+  height: 100%;
+  overflow-y: auto;
+  padding: 16px;
   gap: 16px;
+  background: var(--bg-base);
 }
 
 .header {
   display: flex;
   align-items: center;
-  gap: 10px;
-  color: var(--accent);
+  justify-content: space-between;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
 }
 
-.header .material-symbols-outlined { font-size: 24px !important; }
-.header h1 { font-size: 18px; font-weight: 700; color: var(--text-primary); }
-
-.placeholder {
-  flex: 1;
+.titleGroup {
   display: flex;
-  flex-direction: column;
   align-items: center;
-  justify-content: center;
-  gap: 12px;
-  color: var(--text-muted);
-  font-size: 13px;
+  gap: 10px;
 }
-.placeholder .material-symbols-outlined { font-size: 32px !important; opacity: 0.4; }
+
+.titleGroup h1 {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.titleIcon {
+  font-size: 24px;
+  color: var(--ok);
+}
+
+.metricsGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.metricCard {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 14px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.metricValue {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.metricLabel {
+  font-size: 11px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+}
+
+.sectionTitle {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  margin-top: 8px;
+}
+
+.tableCard {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+  font-size: 12px;
+}
+
+.table th {
+  background: var(--bg-panel);
+  padding: 10px 14px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border);
+}
+
+.table td {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-primary);
+}
+
+.statusChip {
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.statusPaid { background: var(--ok-dim); color: var(--ok); }
+.statusPending { background: var(--warning-dim); color: var(--warning); }
+.statusOverdue { background: var(--urgent-dim); color: var(--urgent); }
