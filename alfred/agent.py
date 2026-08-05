@@ -911,7 +911,7 @@ async def find_and_summarize_matter(
         read aloud or present to the user. Returns a clear "not found"
         message if no matching matter exists.
     """
-    matter = await ctx.deps.project_pages.find_matter(matter_name)
+    matter, runners_up = await ctx.deps.project_pages.find_matter(matter_name)
 
     if not matter:
         return (
@@ -927,6 +927,12 @@ async def find_and_summarize_matter(
             return "You are not authorized to access that matter."
 
     summary = await ctx.deps.project_pages.get_matter_summary(matter["id"])
+    if runners_up:
+        summary += (
+            "\n\n*(Note: this case also has related pages — "
+            + ", ".join(runners_up)
+            + ". Let me know if you meant one of those instead.)*"
+        )
     return summary
 
 
@@ -1182,7 +1188,7 @@ async def log_action_to_matter(
     if ctx.deps.client_matters is not None:
         return "This information is not available in your session."
 
-    matter = await ctx.deps.project_pages.find_matter(matter_name)
+    matter, _ = await ctx.deps.project_pages.find_matter(matter_name)
 
     if not matter:
         return (
@@ -1288,7 +1294,7 @@ async def update_matter_status(
     if ctx.deps.client_matters is not None:
         return "This information is not available in your session."
 
-    matter = await ctx.deps.project_pages.find_matter(matter_name)
+    matter, _ = await ctx.deps.project_pages.find_matter(matter_name)
 
     if not matter:
         return (
@@ -1371,7 +1377,7 @@ async def update_matter(
     if ctx.deps.client_matters is not None:
         return "This information is not available in your session."
 
-    matter = await ctx.deps.project_pages.find_matter(matter_name)
+    matter, _ = await ctx.deps.project_pages.find_matter(matter_name)
 
     if not matter:
         return (
@@ -2124,7 +2130,7 @@ async def run_skill(
 
     if matter_name:
         try:
-            matter = await ctx.deps.project_pages.find_matter(matter_name)
+            matter, _ = await ctx.deps.project_pages.find_matter(matter_name)
             if matter:
                 matter_id = matter.get("id", "")
                 matter_summary = await ctx.deps.project_pages.get_matter_summary(matter_id)
@@ -2198,7 +2204,7 @@ async def get_matter_tasks(
     """
     from notion_bridge.tasks import TaskPages
 
-    matter = await ctx.deps.project_pages.find_matter(matter_name)
+    matter, _ = await ctx.deps.project_pages.find_matter(matter_name)
     if not matter:
         return f"No matter found matching '{matter_name}'. Try a different search term."
 
@@ -2269,7 +2275,7 @@ async def create_matter_task(
 
     from notion_bridge.tasks import TaskPages
 
-    matter = await ctx.deps.project_pages.find_matter(matter_name)
+    matter, _ = await ctx.deps.project_pages.find_matter(matter_name)
     if not matter:
         return f"No matter found matching '{matter_name}'. Check the matter name and try again."
 
@@ -2326,7 +2332,7 @@ async def seed_matter_tasks(
     )
     from agents.case_checkin import resolve_channel_for_matter
 
-    matter = await ctx.deps.project_pages.find_matter(matter_name)
+    matter, _ = await ctx.deps.project_pages.find_matter(matter_name)
     if not matter:
         return f"No matter found matching '{matter_name}'. Check the matter name and try again."
 
@@ -2443,7 +2449,7 @@ async def update_matter_task(
 
     from notion_bridge.tasks import TaskPages
 
-    matter = await ctx.deps.project_pages.find_matter(matter_name)
+    matter, _ = await ctx.deps.project_pages.find_matter(matter_name)
     if not matter:
         return f"No matter found matching '{matter_name}'."
 

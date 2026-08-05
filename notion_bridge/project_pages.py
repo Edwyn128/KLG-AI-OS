@@ -32,7 +32,7 @@ USAGE
     pages = ProjectPages(bridge)
 
     # Alfred answering "What's pending on Petersen?"
-    matter = await pages.find_matter("Petersen")
+    matter, runners_up = await pages.find_matter("Petersen")
     summary = await pages.get_matter_summary(matter["id"])
 
     # Deadline-watch agent getting all matters with deadlines this week
@@ -65,6 +65,21 @@ _PROP_COURT_DEADLINE = "Next Court Deadline"   # hard legal deadline date
 # "Next Deadline Info" does not exist in the Notion schema — omitted
 
 
+def _title_overlap_score(candidate: dict, query: str) -> float:
+    """Fraction of query words (≥3 chars) that appear in the candidate's title."""
+    query_words = {w.lower() for w in re.split(r"\W+", query) if len(w) >= 3}
+    if not query_words:
+        return 0.0
+    title = (candidate.get("Project name") or candidate.get("title") or "").lower()
+    title_words = set(re.split(r"\W+", title))
+    return len(query_words & title_words) / len(query_words)
+
+
+def _rank_by_title_overlap(candidates: list[dict], query: str) -> list[dict]:
+    """Sort candidates by descending title-word overlap with the query."""
+    return sorted(candidates, key=lambda c: _title_overlap_score(c, query), reverse=True)
+
+
 class ProjectPages:
     """
     High-level interface for KLG's matter project pages (Layer 1 database).
@@ -85,59 +100,109 @@ class ProjectPages:
     def __init__(self, bridge: NotionBridge) -> None:
         self._bridge = bridge
 
-    async def find_matter(self, name: str) -> dict[str, Any] | None:
+    async def find_matter(
+        self, name: str
+    ) -> tuple[dict[str, Any], list[str]] | tuple[None, list]:
         """
         Find a matter project page by searching for its name.
 
-        This is the most common entry point for Alfred skills. When Tim says
-        "Alfred, what's pending on Petersen?", Alfred calls this with "Petersen"
-        to locate the project page before reading its state.
+        Returns (best_match, runner_up_titles) where runner_up_titles is a list
+        of close-scoring candidate names (up to 3, empty when the match is unique).
+        Returns (None, []) when nothing is found.
 
         SEARCH STRATEGY:
-            We use Notion's full-text search first (fast, handles partial matches).
-            If that returns multiple results (e.g., searching "Smith" when there
-            are three Smith matters), we return the most recently edited one and
-            log a warning so the caller knows to be more specific.
-
-        Args:
-            name: The matter name or a fragment of it. Case-insensitive.
-
-        Returns:
-            A flat dict of the matter's properties (from page_to_dict), or
-            None if no matching matter is found.
+          1. Direct Projects database query (title contains / case-number equals).
+             Most reliable — hits the structured DB KLG curates, not Notion's
+             full-text index which may lag on recently-edited pages.
+          2. Generic workspace search (fast, handles cross-DB partial matches).
+          3. Keyword fallback — all significant words (≥4 chars) searched and
+             merged, not stopped at first hit.
+          All result sets are ranked by title-word overlap before returning.
         """
-        results = await self._bridge.search(name, filter_type="page")
+        # 1. Direct DB query (primary)
+        candidates = await self._query_projects_by_name(name)
 
-        if not results:
-            # Keyword fallback: decompose the name and try each significant word,
-            # starting from the last (most likely to be a surname or unique identifier).
-            # Handles cases like "Judge Altman" → tries "Altman" alone, or
-            # "FedSoc Altman event" → tries "Altman", "FedSoc" in turn.
-            keywords = [
-                w for w in re.split(r"\W+", name)
-                if len(w) >= 4
-            ]
-            for word in reversed(keywords):
-                fallback = await self._bridge.search(word, filter_type="page")
-                if fallback:
-                    logger.info(
-                        "find_matter('%s'): full-name search empty, found via keyword '%s'",
-                        name, word,
-                    )
-                    results = fallback
-                    break
+        # 2. Generic workspace search (fallback)
+        if not candidates:
+            candidates = await self._bridge.search(name, filter_type="page")
 
-        if not results:
-            logger.info("find_matter('%s'): no results found after keyword fallback", name)
-            return None
+        # 3. Keyword merge fallback
+        if not candidates:
+            candidates = await self._keyword_fallback_search(name)
 
-        if len(results) > 1:
-            logger.warning(
-                "find_matter('%s'): %d results found, returning most recently edited.",
-                name, len(results),
+        if not candidates:
+            logger.info("find_matter('%s'): no results found", name)
+            return None, []
+
+        ranked = _rank_by_title_overlap(candidates, name)
+        best = ranked[0]
+        best_score = _title_overlap_score(best, name)
+
+        runners_up: list[str] = []
+        if best_score > 0:
+            threshold = best_score * 0.5
+            for c in ranked[1:4]:
+                if _title_overlap_score(c, name) >= threshold:
+                    title = (c.get("Project name") or c.get("title") or "").strip()
+                    if title and title != (best.get("Project name") or best.get("title") or "").strip():
+                        runners_up.append(title)
+
+        logger.info(
+            "find_matter('%s'): resolved to '%s'%s",
+            name,
+            best.get("Project name") or best.get("title") or best.get("id"),
+            f" ({len(runners_up)} runner-up(s))" if runners_up else "",
+        )
+        return best, runners_up
+
+    async def _query_projects_by_name(self, name: str) -> list[dict[str, Any]]:
+        """Query the Projects database directly using title contains + optional case-number filter."""
+        if not settings.notion_projects_db_id:
+            return []
+
+        filters: list[dict] = [
+            {"property": "Project name", "title": {"contains": name}}
+        ]
+
+        # If the query contains a trial court case number (e.g. 19STCV01092),
+        # also search the Tr. Ct. No. property and OR the two together.
+        case_num_match = re.search(r"\d{2}[A-Z]{2,5}\d{5,6}", name)
+        if case_num_match:
+            filters.append(
+                {"property": "Tr. Ct. No.", "rich_text": {"contains": case_num_match.group()}}
             )
 
-        return results[0]
+        notion_filter = {"or": filters} if len(filters) > 1 else filters[0]
+
+        try:
+            results = await self._bridge.query_database(
+                database_id=settings.notion_projects_db_id,
+                filter=notion_filter,
+            )
+            logger.info(
+                "_query_projects_by_name('%s'): %d direct DB hit(s)", name, len(results)
+            )
+            return results
+        except Exception as e:
+            logger.warning("_query_projects_by_name('%s'): DB query failed: %s", name, e)
+            return []
+
+    async def _keyword_fallback_search(self, name: str) -> list[dict[str, Any]]:
+        """Search all significant keywords (≥4 chars), merge results, de-dupe by ID."""
+        keywords = [w for w in re.split(r"\W+", name) if len(w) >= 4]
+        seen: set[str] = set()
+        merged: list[dict] = []
+        for word in keywords:
+            hits = await self._bridge.search(word, filter_type="page")
+            for h in hits:
+                if h["id"] not in seen:
+                    seen.add(h["id"])
+                    merged.append(h)
+        logger.info(
+            "_keyword_fallback_search('%s'): %d unique result(s) from %d keyword(s)",
+            name, len(merged), len(keywords),
+        )
+        return merged
 
     async def get_matter_summary(self, page_id: str) -> str:
         """

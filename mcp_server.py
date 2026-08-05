@@ -136,7 +136,7 @@ async def find_matter(matter_name: str) -> str:
         matter_name: Full or partial matter name, e.g. "Petersen", "Smith v. City"
     """
     _, project_pages, _ = _get_notion()
-    matter = await project_pages.find_matter(matter_name)
+    matter, _ = await project_pages.find_matter(matter_name)
 
     if not matter:
         return f"No matter found matching '{matter_name}' in Notion."
@@ -164,7 +164,7 @@ async def get_matter_summary(matter_name: str) -> str:
         matter_name: Full or partial matter name.
     """
     _, project_pages, _ = _get_notion()
-    matter = await project_pages.find_matter(matter_name)
+    matter, _ = await project_pages.find_matter(matter_name)
 
     if not matter:
         return f"No matter found matching '{matter_name}'."
@@ -368,7 +368,7 @@ async def log_action_to_matter(
         action_description: One-sentence description of what was done.
     """
     _, project_pages, _ = _get_notion()
-    matter = await project_pages.find_matter(matter_name)
+    matter, _ = await project_pages.find_matter(matter_name)
 
     if not matter:
         return f"Matter '{matter_name}' not found in Notion."
@@ -397,7 +397,7 @@ async def update_matter_status(matter_name: str, new_status: str) -> str:
         new_status:  The new status value.
     """
     _, project_pages, _ = _get_notion()
-    matter = await project_pages.find_matter(matter_name)
+    matter, _ = await project_pages.find_matter(matter_name)
 
     if not matter:
         return f"Matter '{matter_name}' not found in Notion."

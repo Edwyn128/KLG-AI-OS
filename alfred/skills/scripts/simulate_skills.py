@@ -341,7 +341,7 @@ async def _get_matter_context(matter_name: str) -> tuple:
 
     bridge = NotionBridge(token=settings.notion_token)
     pages = ProjectPages(bridge)
-    matter = await pages.find_matter(matter_name)
+    matter, _ = await pages.find_matter(matter_name)
     if not matter:
         raise ValueError(f"Matter '{matter_name}' not found in Notion")
     matter_id = matter["id"]

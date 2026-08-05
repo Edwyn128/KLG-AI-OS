@@ -370,7 +370,7 @@ async def chat_with_alfred(
         client_matter_page_id = ""
         if client_matters:
             try:
-                _m = await scoped_deps.project_pages.find_matter(client_matters[0])
+                _m, _ = await scoped_deps.project_pages.find_matter(client_matters[0])
                 if _m:
                     client_matter_page_id = _m.get("id", "")
             except Exception:
@@ -530,7 +530,7 @@ async def chat_with_alfred_stream(
             client_matter_page_id = ""
             if client_matters:
                 try:
-                    _m = await scoped_deps.project_pages.find_matter(client_matters[0])
+                    _m, _ = await scoped_deps.project_pages.find_matter(client_matters[0])
                     if _m:
                         client_matter_page_id = _m.get("id", "")
                 except Exception:
