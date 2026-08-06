@@ -155,32 +155,52 @@ async def run_huddle_import(
 
         # Build Notion title — en-dash U+2013 is required; hyphen breaks duplicate check
         base_title = f"Huddle – #{channel_name} – {meeting_date}"
-        notion_title = base_title
 
-        if base_title in seen_titles or await _is_duplicate(bridge, base_title):
-            pm_title = f"{base_title} (PM)"
-            if await _is_duplicate(bridge, pm_title):
-                logger.info("HuddleImport: Already in Notion — skipping '%s' (PM)", base_title)
-                result["skipped"] += 1
-                continue
-            notion_title = pm_title
-
-        # Read canvas content
+        # Read and parse canvas content BEFORE the dedup decision so the transcript ID
+        # is available to distinguish a re-surfaced canvas from a genuine second meeting.
         content = await _read_canvas_content(slack_client, canvas_id)
         if not content:
-            logger.warning("HuddleImport: Could not read canvas %s — skipping '%s'", canvas_id, notion_title)
-            result["errors"].append(f"{notion_title}: canvas unreadable")
+            logger.warning("HuddleImport: Could not read canvas %s — skipping '%s'", canvas_id, base_title)
+            result["errors"].append(f"{base_title}: canvas unreadable")
             continue
 
         # Skip near-empty huddles
         if any(phrase in content.lower() for phrase in _SKIP_PHRASES):
-            logger.info("HuddleImport: Minimal content — skipping '%s'", notion_title)
+            logger.info("HuddleImport: Minimal content — skipping '%s'", base_title)
             result["skipped"] += 1
             continue
 
-        # Parse and create Notion entry
+        parsed = _parse_canvas(content)
+        this_transcript_id = parsed.get("transcript_id", "")
+
+        notion_title = base_title
+
+        if base_title in seen_titles or await _is_duplicate(bridge, base_title):
+            existing_id = await _existing_transcript_id(bridge, base_title)
+            if this_transcript_id and existing_id == this_transcript_id:
+                logger.info("HuddleImport: same canvas already imported — skipping '%s'", base_title)
+                result["skipped"] += 1
+                continue
+
+            pm_title = f"{base_title} (PM)"
+            if await _is_duplicate(bridge, pm_title):
+                existing_pm_id = await _existing_transcript_id(bridge, pm_title)
+                if this_transcript_id and existing_pm_id == this_transcript_id:
+                    logger.info("HuddleImport: same canvas already imported (PM) — skipping '%s'", base_title)
+                    result["skipped"] += 1
+                    continue
+                # A genuine 3rd same-day meeting is rare and out of scope — log and skip
+                # rather than guess at a (PM2) naming scheme.
+                logger.warning(
+                    "HuddleImport: 3rd occurrence of '%s' same day — skipping, needs manual review",
+                    base_title,
+                )
+                result["skipped"] += 1
+                continue
+            notion_title = pm_title
+
+        # Create Notion entry
         try:
-            parsed = _parse_canvas(content)
             await _create_notion_entry(
                 bridge=bridge,
                 title=notion_title,
@@ -658,6 +678,25 @@ async def _is_duplicate(bridge: NotionBridge, title: str) -> bool:
     except Exception as e:
         logger.warning("HuddleImport: Duplicate check failed for '%s': %s", title, e)
         return False
+
+
+async def _existing_transcript_id(bridge: NotionBridge, title: str) -> str | None:
+    """Return the transcript ID embedded in an existing Comms Log entry's
+    Transcript block, if a page with this exact title exists."""
+    try:
+        existing = await bridge.query_database(
+            database_id=settings.notion_comms_log_db_id,
+            filter={"property": "Name", "title": {"equals": title}},
+            page_size=1,
+        )
+        if not existing:
+            return None
+        body = await bridge.get_page_content(existing[0]["id"])
+        m = re.search(r"/(F[A-Z0-9]+)/huddle_transcript", body)
+        return m.group(1) if m else None
+    except Exception as e:
+        logger.warning("HuddleImport: could not read existing transcript ID for '%s': %s", title, e)
+        return None
 
 
 async def _create_notion_entry(
