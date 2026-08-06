@@ -28,6 +28,29 @@
   background: #8b1a27;
 }
 
+/* When the matter detail panel is open, shift the FAB left
+   so it clears the panel and doesn't overlap task rows.
+   The offset matches the panel widths set in
+   DashboardWorkspace.module.css:
+     • >1100px  → var(--panel-width) ≈ 50vw  (use a safe 52vw)
+     • 769–1100px → 360px fixed panel (use 376px)
+     • ≤768px   → panel is full-screen; hide the FAB entirely */
+.fab.fabPanelOpen {
+  right: calc(var(--panel-width) + 12px);
+}
+
+@media (max-width: 1100px) {
+  .fab.fabPanelOpen {
+    right: 376px;
+  }
+}
+
+@media (max-width: 768px) {
+  .fab.fabPanelOpen {
+    display: none;
+  }
+}
+
 .fab .material-symbols-outlined {
   font-size: 22px !important;
   font-variation-settings: 'FILL' 1, 'wght' 400;

@@ -254,7 +254,11 @@ export function SkillsLauncher() {
       {/* Hide FAB on chat — the toolbar has its own bolt button there */}
       {activeWorkspace !== 'chat' && (
         <button
-          className={`${styles.fab} ${skillsOpen ? styles.fabOpen : ''}`}
+          className={[
+            styles.fab,
+            skillsOpen ? styles.fabOpen : '',
+            activeWorkspace === 'matters' && selectedMatter ? styles.fabPanelOpen : '',
+          ].filter(Boolean).join(' ')}
           onClick={() => skillsOpen ? handleClose() : setSkillsOpen(true)}
           aria-label={skillsOpen ? 'Close skills' : 'Open skills'}
           title="Skills"

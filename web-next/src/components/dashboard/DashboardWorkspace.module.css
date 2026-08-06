@@ -377,8 +377,21 @@
 .statusClosed  { background: var(--glass-border); color: var(--text-muted); }
 .statusDefault { background: var(--glass-border); color: var(--text-muted); }
 
-/* ── Mobile Responsive Overrides ─────────────────────── */
+/* ── Responsive ───────────────────────────────────────── */
 
+/* Intermediate: 769px – 1100px
+   Panel stays side-by-side but gets a fixed narrower width
+   so the matter list is still visible and the panel's own
+   1100px breakpoint (MatterDetailPanel.module.css) kicks in
+   to compress its chrome.                                  */
+@media (min-width: 769px) and (max-width: 1100px) {
+  .detailDrawer {
+    width: 360px;
+    min-width: 300px;
+  }
+}
+
+/* Mobile full-screen drawer: ≤768px */
 @media (max-width: 768px) {
   .metricsGrid {
     grid-template-columns: repeat(2, 1fr);

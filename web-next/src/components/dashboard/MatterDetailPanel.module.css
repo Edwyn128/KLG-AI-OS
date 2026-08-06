@@ -100,6 +100,48 @@
   flex-shrink: 0;
 }
 
+/* ── Intermediate breakpoint: 769 – 1100px ────────────── */
+/* Panel is side-by-side with the matter list but narrower  */
+/* than full desktop — compress the fixed chrome so the     */
+/* scrollable task list gets more room.                     */
+@media (max-width: 1100px) {
+  /* Tighter header */
+  .panelHeader {
+    padding: 10px 14px 8px;
+  }
+  .panelTitle {
+    font-size: 13px;
+  }
+
+  /* Stage bar: allow pills to shrink to icon-size labels */
+  .stageBar {
+    padding: 6px 10px;
+    gap: 2px;
+  }
+  .stagePill {
+    min-width: 40px;
+    padding: 3px 4px;
+  }
+  .stagePillLabel {
+    font-size: 8px;
+  }
+
+  /* Metadata grid: 2 columns instead of 3 so cells aren't
+     crushed. 7 fields → 4 rows of 2 (last row spans 2). */
+  .metaGrid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  /* Reset 3-column nth-child border rule */
+  .metaCell:nth-child(3n) { border-right: 1px solid var(--glass-border); }
+  .metaCell:nth-child(2n) { border-right: none; }
+  .metaCell {
+    padding: 6px 10px;
+  }
+  .metaLabel {
+    font-size: 8px;
+  }
+}
+
 .metaCell {
   display: flex;
   flex-direction: column;
