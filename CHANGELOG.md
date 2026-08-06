@@ -10,6 +10,12 @@ Entries without a tag are mixed-agent or pre-multi-agent-setup commits.
 
 ---
 
+## 2026-08-06
+
+- **[Backend]** `e62e80f` — Fix 1 + Fix 2 (matter-status-fallback): `_normalize_matter()` now includes `project_status` in the API payload; `_is_active_or_hold()` falls back to Project Status's "in_progress" group (Planning/In progress/Paused) when Matter Status is blank. Surfaces the 44 previously-invisible active matters.
+- **[Backend]** `dd9a8cd` — Huddle dedup by transcript ID: `_existing_transcript_id()` helper reads the Slack file ID already stored in a Comms Log entry's Transcript block; 7-day lookback re-discoveries now skip instead of creating spurious `(PM)` duplicates. Fixes 9 duplicate entries created 2026-08-03.
+- **[Backend]** Fix 3 (matter-status-fallback): `project_status?: string` added to the `Matter` type; `statusKey()` in DeadlinesWorkspace falls back to Project Status (Paused → On Hold, Planning/In progress → Active) when `status` is blank. Deadlines tab now shows the previously-invisible 44 matters grouped correctly. Tagged [Backend] because this was pure logic — no design judgment — picked up from Antigravity's queue.
+
 ## 2026-08-04
 
 - **[Frontend]** `db6a80f` — Mobile layout, dynamic multi-view dashboard, and backend agent spec
@@ -20,6 +26,9 @@ Entries without a tag are mixed-agent or pre-multi-agent-setup commits.
 - **[Backend]** `4c53b0b` — Slack agents (hygiene scan, weekly agenda, case check-in) now filter to Active/On Hold matters only. Added `SLACK_HYGIENE_ENABLED` and `SLACK_CHECKIN_ENABLED` Railway flags to disable agents without deploys.
 - **[Backend]** `f25d493` — Deadlines tab active filter: switched from denylist to allowlist (only explicit Active/On Hold statuses pass). Empty status no longer silently joins the Active group.
 - **[Backend]** `2ff4a48` — Security audit: fixed 8 of 11 findings (security headers middleware, SSO Bearer JWT auth, SSE error masking, debug schema endpoint gating, 403 for client sessions on briefing, generic 500s on upload/deadlines, `NotionBridge()` init fix in admin routes).
+- **[Manager]** Diagnosed the `get_all_active_matters()` status-key bug (reading nonexistent `"Status"` instead of `"Matter Status"`, confirmed against the live Notion schema) — wrote the hotfix spec that Backend implemented as `3fee643`.
+- **[Manager]** Alfred-vs-Claude-official-Slack strategic fork: drafted a three-option memo (keep Alfred as its own app / build on Claude's official Slack integration / split by surface) for Tim's decision, after he raised it unresolved in the 7/31 huddle.
+- **[Manager]** Synthesized the Alfred roadmap from the 7/31 huddle transcript, #klg-systems-development Slack history, and verified P0 bug status directly against code — surfaced two new gaps (casefile@ email pipeline has no deadline surfacing; Briefs Repository needs re-architecture) and confirmed 2 of 3 original P0 bugs already fixed.
 
 ## 2026-07-31
 

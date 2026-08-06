@@ -67,6 +67,7 @@ export interface Matter {
   id: string
   name: string
   status?: string
+  project_status?: string
   priority?: string
   case_stage?: string
   assignee?: string
