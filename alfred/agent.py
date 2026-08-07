@@ -535,7 +535,10 @@ for amicus" / "worth filing amicus on"
 
 "seed tasks for [matter]" / "set up tasks" / "create task list for" /
 "populate tasks" / "seed the standard tasks" / "set up the task set"
-  → seed_matter_tasks(matter_name=..., matter_type="appellate" or "trial_court")
+  → FIRST run through the Project Intake Questionnaire with the user (project_type,
+    klg_side, drafting_attorney, appearance_type, is_ninth_circuit, etc.), THEN call:
+  → seed_matter_tasks(matter_name=..., project_type=..., klg_side=...,
+      drafting_attorney=..., [appellate_appearance_type=...], ...)
 
 FILE HANDLING: If the user has attached a file (you will see "Attached
 files: filename.pdf [token: ...]" in the message), pass the token in
@@ -1607,22 +1610,20 @@ async def create_new_matter(
         elif any(k in cs for k in ("trial court", "trial", "motion", "msj", "demurrer")):
             resolved_type = "trial_court"
 
-    # Auto-seed tasks when matter type is known
+    # Task seeding requires full intake-questionnaire answers — do not auto-seed.
+    # Guide the conversation to collect them before calling seed_matter_tasks.
     seed_note = ""
     if resolved_type in ("appellate", "trial_court"):
-        try:
-            seed_result = await seed_matter_tasks(ctx, matter_name=matter_name, matter_type=resolved_type)
-            seed_note = f"\n\n{seed_result}"
-        except Exception as e:
-            logger.warning("create_new_matter: task seeding failed: %s", e)
-            seed_note = (
-                f"\n\nTask seeding failed ({e}). Run: "
-                f"'Alfred, seed tasks for {matter_name}, {resolved_type}' to retry."
-            )
+        seed_note = (
+            f"\n\nNext: run through the Project Intake Questionnaire with the user "
+            f"(KLG's side, drafting attorney, appearance type, federal vs. state court, "
+            f"whether KLG is already counsel of record) then call seed_matter_tasks "
+            f"with the collected answers to populate the task set for {matter_name}."
+        )
     else:
         seed_note = (
-            "\n\nTo populate the standard task set, specify the matter type:\n"
-            f"  'Alfred, seed tasks for {matter_name}, appellate' — or — 'trial_court'"
+            f"\n\nTo populate the task set: confirm the project type with the user, "
+            f"then run the Project Intake Questionnaire before calling seed_matter_tasks."
         )
 
     return f"{result.output}\n\nNext: {result.next_action}{seed_note}"
@@ -2307,26 +2308,63 @@ async def create_matter_task(
 async def seed_matter_tasks(
     ctx: RunContext[AlfredDependencies],
     matter_name: str,
-    matter_type: str,
+    project_type: str,
+    klg_side: str,
+    drafting_attorney: str,
+    appellate_appearance_type: str = "",
+    is_ninth_circuit: bool = False,
+    coa_case_opened_and_numbered: bool = False,
+    klg_already_counsel_of_record: bool = False,
+    contract_attorney_assisting: bool = False,
+    confirmed_deadline: str = "",
 ) -> str:
     """
-    Seed the standard KLG task set for a newly opened matter.
+    Seed the standard KLG task set for a newly opened matter using the
+    case-type task rubric (William's decision table, August 5, 2026).
 
-    Reads all tasks from the appropriate KLG template database (Appellate or
-    Trial Court) and creates copies in the same database linked to this matter
-    via the Projects relation. Then posts a grouped task list to the matter's
-    Slack channel. Idempotent — safe to call twice; will not create duplicates.
+    BEFORE CALLING THIS TOOL: run through the Project Intake Questionnaire
+    conversationally. Do not guess or infer parameters from the matter name —
+    each one controls which tasks are created or correctly skipped as N/A.
+
+    Ask for every project:
+      - project_type: "appellate" or "trial_court"
+      - klg_side: which side KLG represents
+      - drafting_attorney: who is writing the brief (first name or full name)
+      - contract_attorney_assisting: yes/no
+
+    For Appellate Briefing also ask:
+      - appellate_appearance_type: "filed_original" | "associating_in" | "substituting_in"
+      - is_ninth_circuit: federal (9th Circuit) or California state Court of Appeal?
+      - coa_case_opened_and_numbered: has the Court of Appeal opened and numbered the case?
+
+    For Trial Court Brief Preparation also ask:
+      - klg_already_counsel_of_record: is KLG already on record in this matter?
+
+    confirmed_deadline: only pass a date the attorney has explicitly confirmed —
+    never compute a statutory or court-rule deadline.
+
+    Idempotent — safe to call twice; will not create duplicate tasks.
 
     Args:
         matter_name: The matter to seed tasks for. Example: "Shen v. Li"
-        matter_type: "appellate" or "trial_court"
+        project_type: "appellate" or "trial_court"
+        klg_side: "appellant" | "petitioner" | "respondent" | "plaintiff" | "defendant"
+        drafting_attorney: First name or full name of the drafting attorney.
+        appellate_appearance_type: "filed_original" | "associating_in" | "substituting_in"
+        is_ninth_circuit: True if this is a federal (9th Circuit) appeal.
+        coa_case_opened_and_numbered: True if the COA has opened and numbered the case.
+        klg_already_counsel_of_record: True if KLG is already counsel of record.
+        contract_attorney_assisting: True if a contract attorney is assisting.
+        confirmed_deadline: ISO date (YYYY-MM-DD) the attorney has confirmed — do not compute.
 
     Returns:
-        Summary of tasks created and Slack notification status.
+        Tasks created, tasks correctly skipped as N/A, and flags needing human attention.
+        Flags are listed separately — do not bury them in the created-task list.
     """
     if ctx.deps.client_matters is not None:
         return "This information is not available in your session."
 
+    from collections import defaultdict
     from notion_bridge.tasks import (
         TaskPages, APPELLATE_TASKS_DB_ID, TRIAL_COURT_TASKS_DB_ID, _NOTION_USER_NAMES
     )
@@ -2339,82 +2377,88 @@ async def seed_matter_tasks(
     display_name = matter.get("Project name", matter_name)
     matter_id = matter["id"]
 
-    # Select template DB
-    mt = matter_type.lower()
-    if any(k in mt for k in ("appellate", "appeal", "aob", "court of appeal", "petition", "reply")):
+    pt = project_type.lower().strip()
+    if pt == "appellate":
         db_id = APPELLATE_TASKS_DB_ID
         template_label = "Appellate Briefing"
     else:
         db_id = TRIAL_COURT_TASKS_DB_ID
         template_label = "Trial Court Brief Preparation"
 
+    answers = {
+        "project_type":               pt,
+        "klg_side":                   klg_side.lower().strip(),
+        "drafting_attorney":          drafting_attorney.strip(),
+        "appearance_type":            appellate_appearance_type.lower().strip(),
+        "is_ninth_circuit":           is_ninth_circuit,
+        "coa_case_opened_and_numbered": coa_case_opened_and_numbered,
+        "klg_already_counsel_of_record": klg_already_counsel_of_record,
+        "contract_attorney_assisting": contract_attorney_assisting,
+        "confirmed_deadline":         confirmed_deadline.strip() or None,
+    }
+
     task_pages = TaskPages(ctx.deps.bridge)
     try:
-        tasks = await task_pages.seed_from_template(db_id, matter_id)
+        tasks, flags = await task_pages.seed_from_rubric(pt, matter_id, answers, db_id)
     except Exception as e:
         return f"Task seeding failed for {display_name}: {e}"
 
-    if not tasks:
-        return f"No tasks were created for {display_name} — template database may be empty."
+    # ── Format output — created / flags clearly separated ─────────────────────
+    lines = [f"*{display_name} — {template_label}*", f"Tasks created: {len(tasks)}"]
 
-    # Group by stage for the Slack notification
-    from collections import defaultdict
-    by_stage: dict[str, list[dict]] = defaultdict(list)
-    for t in tasks:
-        by_stage[t.get("stage") or "Other"].append(t)
+    if tasks:
+        by_stage: dict[str, list[dict]] = defaultdict(list)
+        for t in tasks:
+            by_stage[t.get("stage") or "Other"].append(t)
 
-    slack_lines = [f"*{display_name} — Tasks Ready* ({len(tasks)} tasks from {template_label} template)\n"]
-    for stage, stage_tasks in by_stage.items():
-        assignees = {
-            _NOTION_USER_NAMES.get(t["assignee"].removeprefix("user://").strip(), t["assignee"])
-            for t in stage_tasks if t.get("assignee")
-        }
-        assignee_str = f" — {', '.join(sorted(assignees))}" if assignees else ""
-        slack_lines.append(f"*{stage}* ({len(stage_tasks)} tasks{assignee_str})")
-        for t in stage_tasks[:5]:
-            slack_lines.append(f"  • {t['name']}")
-        if len(stage_tasks) > 5:
-            slack_lines.append(f"  … and {len(stage_tasks) - 5} more")
+        for stage, stage_tasks in by_stage.items():
+            lines.append(f"\n*{stage}* ({len(stage_tasks)})")
+            for t in stage_tasks:
+                owner_raw = (t.get("assignee") or "").removeprefix("user://").strip()
+                owner_display = _NOTION_USER_NAMES.get(owner_raw, owner_raw) if owner_raw else "—"
+                lines.append(f"  • {t['name']} [{owner_display}]")
 
-    # Find the first "Matter Intake" task to call out
-    first_task = next(
-        (t["name"] for t in tasks if "intake" in (t.get("stage") or "").lower()),
-        tasks[0]["name"] if tasks else None,
-    )
-    if first_task:
-        slack_lines.append(f"\n*Next action:* Start with \"{first_task}\"")
+    if flags:
+        lines.append("\n*Flags — action needed:*")
+        for f in flags:
+            lines.append(f"  ⚠ {f}")
 
-    slack_message = "\n".join(slack_lines)
+    if contract_attorney_assisting:
+        lines.append(
+            "\n*Contract attorney note:* PDF the Case Memo to SharePoint, create and "
+            "add the brief template to SharePoint, and link it in Clio."
+        )
 
-    # Post to the matter's Slack channel
+    output = "\n".join(lines)
+
+    # ── Slack notification ────────────────────────────────────────────────────
     channel_name = resolve_channel_for_matter(matter)
     slack_posted = False
     if channel_name and ctx.deps.slack_client:
         try:
             await ctx.deps.slack_client.chat_postMessage(
                 channel=channel_name,
-                text=slack_message,
+                text=output,
             )
             slack_posted = True
         except Exception as e:
             logger.warning("seed_matter_tasks: Slack post to %s failed: %s", channel_name, e)
 
     if not slack_posted and ctx.deps.slack_client:
-        # Fall back to #case-management
         try:
             await ctx.deps.slack_client.chat_postMessage(
                 channel="#case-management",
-                text=slack_message,
+                text=output,
             )
             slack_posted = True
         except Exception as e:
             logger.warning("seed_matter_tasks: Slack fallback post failed: %s", e)
 
-    channel_note = f" Notification posted to #{channel_name or 'case-management'}." if slack_posted else ""
-    return (
-        f"Seeded {len(tasks)} tasks for {display_name} from the {template_label} template.{channel_note}\n\n"
-        + slack_message
+    channel_note = (
+        f"\n\nNotification posted to #{channel_name or 'case-management'}."
+        if slack_posted else ""
     )
+    return output + channel_note
 
 
 @AlfredAgent.tool

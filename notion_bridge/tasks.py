@@ -220,6 +220,62 @@ def _build_seed_properties(row: dict, matter_id: str) -> dict[str, Any]:
     return props
 
 
+# Display name → Notion UUID for rubric owners.
+# William Hernandez is intentionally absent — UUID not yet configured.
+# seed_from_rubric surfaces a flag; the task is created without Assignee.
+_RUBRIC_OWNER_UUID: dict[str, str] = {
+    "Brittney":  "b30c2eb6-779d-4d96-bdb9-2c3e81dced29",
+    "Tim":       "d3dcab1b-be5a-4f73-b205-1b28e895742f",
+    "Tim Kowal": "d3dcab1b-be5a-4f73-b205-1b28e895742f",
+}
+
+
+def _build_rubric_properties(task: dict, matter_id: str, deadline: str | None = None) -> dict[str, Any]:
+    """
+    Build a Notion properties dict from a resolved rubric task entry.
+
+    Status is always "Not started". Projects is set to [matter_id].
+    Deadline is applied only to "Finalize and File the Document with the Court"
+    when an attorney-confirmed deadline is provided.
+    """
+    props: dict[str, Any] = {}
+
+    props["Task"] = {"title": [{"text": {"content": task["task"]}}]}
+
+    if task.get("stage"):
+        props["Stage"] = {"select": {"name": task["stage"]}}
+
+    if task.get("priority"):
+        props["Priority"] = {"select": {"name": task["priority"]}}
+
+    props["Status"] = {"status": {"name": "Not started"}}
+
+    if task.get("duration"):
+        props["Expected Duration"] = {
+            "rich_text": [{"text": {"content": task["duration"]}}]
+        }
+
+    label = (task.get("labels") or "").strip()
+    if label:
+        props["Labels"] = {"multi_select": [{"name": label}]}
+
+    owner = task.get("default_owner")
+    if owner and owner != "__drafting_attorney__":
+        uid = _RUBRIC_OWNER_UUID.get(owner)
+        if uid:
+            props["Assignee"] = {"people": [{"id": uid}]}
+        # Unknown owners (William, external drafting attorneys): leave Assignee blank
+
+    # Rubric rule: leave Deadline blank unless the attorney has confirmed a specific date.
+    # The confirmed deadline is assumed to be the main filing deadline.
+    if deadline and task["task"] == "Finalize and File the Document with the Court":
+        props["Deadline"] = {"date": {"start": deadline}}
+
+    props["Projects"] = {"relation": [{"id": matter_id}]}
+
+    return props
+
+
 class TaskPages:
     """
     High-level interface to tasks stored inside KLG matter project pages.
@@ -420,6 +476,77 @@ class TaskPages:
             len(created), len(template_rows), matter_id[:8],
         )
         return created
+
+    async def seed_from_rubric(
+        self,
+        project_type: str,
+        matter_id: str,
+        answers: dict,
+        db_id: str,
+    ) -> tuple[list[dict], list[str]]:
+        """
+        Seed tasks for a new matter from the hard-coded KLG task rubric.
+
+        Unlike seed_from_template, this does not read the live task database
+        (which is corrupted — rows point to wrong projects). Instead it uses
+        resolve_tasks_for_matter() from alfred.task_rubric to derive the correct
+        task set from the intake-questionnaire answers, then creates each task
+        as a new row in db_id linked to matter_id via the Projects relation.
+
+        Idempotent: if any rows already link to matter_id, returns them without
+        creating duplicates.
+
+        Returns:
+            (created_tasks, flags) — flags are human-attention items surfaced
+            by the rubric (owner gaps, skipped-confirm tasks, etc.)
+        """
+        from alfred.task_rubric import resolve_tasks_for_matter
+
+        # ── Idempotency guard ─────────────────────────────────────────────────
+        # Scoped to this matter's ID — safe even though the DB also contains
+        # other matters' rows.
+        existing = await self._bridge.query_database(
+            database_id=db_id,
+            filter={"property": "Projects", "relation": {"contains": matter_id}},
+        )
+        if existing:
+            logger.info(
+                "seed_from_rubric: %d tasks already exist for matter %s — skipping.",
+                len(existing), matter_id[:8],
+            )
+            return (
+                [_normalize_task(r["id"], r, is_block=False) for r in existing if r.get("id")],
+                ["Tasks already seeded for this matter — idempotency guard fired, no new tasks created."],
+            )
+
+        # ── Resolve rubric tasks ──────────────────────────────────────────────
+        rubric_tasks, flags = resolve_tasks_for_matter(project_type, answers)
+        if not rubric_tasks:
+            return [], flags
+
+        deadline = answers.get("confirmed_deadline") or None
+        created: list[dict] = []
+
+        for task in rubric_tasks:
+            props = _build_rubric_properties(task, matter_id, deadline=deadline)
+            try:
+                raw = await self._bridge.create_page(
+                    database_id=db_id,
+                    properties=props,
+                )
+                if raw.get("id"):
+                    created.append(_normalize_task(raw["id"], raw, is_block=False))
+            except Exception as e:
+                logger.warning(
+                    "seed_from_rubric: failed to create task '%s': %s", task["task"], e,
+                )
+                flags.append(f"Failed to create '{task['task']}': {e}")
+
+        logger.info(
+            "seed_from_rubric: created %d/%d tasks for matter %s.",
+            len(created), len(rubric_tasks), matter_id[:8],
+        )
+        return created, flags
 
     async def create_task(
         self,
