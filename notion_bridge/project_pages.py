@@ -443,13 +443,7 @@ class ProjectPages:
 
         def _is_active_or_hold(m: dict) -> bool:
             s = (m.get("Matter Status") or m.get("Status") or "").strip().lower()
-            if "active" in s or "hold" in s:
-                return True
-            if not s:
-                # No Matter Status — fall back to Project Status's "in_progress" group.
-                ps = (m.get("Project Status") or "").strip().lower()
-                return ps in {"planning", "in progress", "paused"}
-            return False
+            return "active" in s or "hold" in s
 
         filtered = [m for m in raw if _is_active_or_hold(m)]
         logger.info(

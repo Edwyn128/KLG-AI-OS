@@ -49,12 +49,7 @@ function statusKey(m: Matter): string {
   const s = (m.status ?? '').trim().toLowerCase()
   if (s.includes('hold')) return 'on hold'
   if (s.includes('active')) return 'active'
-  if (s === '') {
-    const ps = (m.project_status ?? '').trim().toLowerCase()
-    if (ps === 'paused') return 'on hold'
-    if (ps === 'planning' || ps === 'in progress') return 'active'
-    return 'untagged'
-  }
+  if (s === '') return 'untagged'
   return s
 }
 

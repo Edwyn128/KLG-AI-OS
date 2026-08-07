@@ -12,6 +12,7 @@ Entries without a tag are mixed-agent or pre-multi-agent-setup commits.
 
 ## 2026-08-07
 
+- **[Backend]** Revert Project Status fallback in `_is_active_or_hold()` and `statusKey()` — spot-check found the 44 surfaced matters are mostly stale (e.g. Palmieri oral argument, finished 2 months ago, still shows `Project Status: In progress`). Under-counting beats active misleading. `/alfred/matters` returns to ~48. `project_status` field kept in payload and `Matter` type for triage use.
 - **[Backend]** Case-type task rubric (William's decision table, 8/5): new `alfred/task_rubric.py` transcribes both task tables verbatim (27 Appellate + 19 Trial Court rows), `resolve_tasks_for_matter()` evaluates all condition keys and owner rules, `seed_from_rubric()` replaces `seed_from_template()` in `notion_bridge/tasks.py` (uses rubric output instead of the corrupted live DB), `seed_matter_tasks` tool rewritten with explicit intake-questionnaire parameters. Rules enforced: no Contingent tasks at setup; Brief Drafting owner never guessed; Ninth Circuit Compliance Checklist on Trial Court always flagged not created; Brief: Second Drafter Review skipped (not created) when Tim is the drafter; idempotency guard preserved.
 
 ## 2026-08-06
