@@ -41,7 +41,7 @@ logger = logging.getLogger(__name__)
 
 from notion_bridge.project_pages import _PROP_DEADLINE, _PROP_COURT_DEADLINE
 
-_BRIEFING_PROJECTS_PORTAL_ID = "36e0fc06-a06c-80e3-91b8-fba0a5a6912f"
+_BRIEFING_PROJECTS_PORTAL_ID = "36e0fc06a06c80e391b8fba0a5a6912f"
 
 # APIRouter groups all Alfred routes under the /alfred prefix.
 # The router is registered in main.py with app.include_router().
