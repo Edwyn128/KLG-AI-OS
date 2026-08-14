@@ -82,7 +82,7 @@ async def run_deadline_watch(
         status      = matter.get("Status", "Unknown")
         priority    = matter.get("Priority", "")
         case_stage  = matter.get("Case Stage") or ""
-        court_date  = matter.get("Next Court Deadline") or ""
+        court_date  = matter.get(_PROP_COURT_DEADLINE) or ""
         court_info  = ""  # "Next Deadline Info" property does not exist in Notion schema
         target_date = matter.get(_PROP_DEADLINE) or ""
 

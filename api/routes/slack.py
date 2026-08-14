@@ -30,6 +30,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
 
 from config import settings
+from notion_bridge.project_pages import _PROP_COURT_DEADLINE
 
 logger = logging.getLogger(__name__)
 
@@ -302,7 +303,7 @@ async def _handle_connect_mode(
                 m_status = matter.get("Status") or matter.get("status") or ""
                 m_stage = matter.get("Case Stage") or matter.get("case_stage") or ""
                 m_deadline = (
-                    matter.get("Next Court Deadline") or matter.get("next_court_deadline") or ""
+                    matter.get(_PROP_COURT_DEADLINE) or matter.get("next_court_deadline") or ""
                 )
                 m_summary = matter.get("Summary") or matter.get("summary") or ""
                 matter_context = (

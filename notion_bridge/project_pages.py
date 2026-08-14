@@ -61,7 +61,7 @@ logger = logging.getLogger(__name__)
 # These are the exact strings returned by the Notion API — update here if
 # a property is renamed in Notion. Verified 2026-07-30 via /alfred/debug/schema.
 _PROP_DEADLINE       = "Deadline"              # internal milestone date (was wrongly "Target Date")
-_PROP_COURT_DEADLINE = "Next Court Deadline"   # hard legal deadline date
+_PROP_COURT_DEADLINE = "❌Next Court Deadline"   # hard legal deadline date — Notion property was renamed with this prefix; update here if it's renamed back
 # "Next Deadline Info" does not exist in the Notion schema — omitted
 
 
