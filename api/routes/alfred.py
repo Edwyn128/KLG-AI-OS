@@ -41,6 +41,8 @@ logger = logging.getLogger(__name__)
 
 from notion_bridge.project_pages import _PROP_DEADLINE, _PROP_COURT_DEADLINE
 
+_BRIEFING_PROJECTS_PORTAL_ID = "36e0fc06-a06c-80e3-91b8-fba0a5a6912f"
+
 # APIRouter groups all Alfred routes under the /alfred prefix.
 # The router is registered in main.py with app.include_router().
 router = APIRouter(prefix="/alfred", tags=["Alfred"])
@@ -722,6 +724,11 @@ async def auth_me(http_request: Request) -> dict:
     }
 
 
+def _in_briefing_portal(d: dict) -> bool:
+    portals = d.get("Team Portals") or []
+    return any(_BRIEFING_PROJECTS_PORTAL_ID in (p or "") for p in portals)
+
+
 def _normalize_matter(d: dict) -> dict:
     """Map Notion Title-Case property keys to the snake_case shape the frontend expects."""
     def _assignee(val) -> str:
@@ -755,6 +762,7 @@ def _normalize_matter(d: dict) -> dict:
         "next_court_deadline": ncd,
         "summary": d.get("Summary", ""),
         "days_until": _days_until(ncd or td),
+        "in_briefing_portal": _in_briefing_portal(d),
     }
 
 

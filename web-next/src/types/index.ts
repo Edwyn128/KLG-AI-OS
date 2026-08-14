@@ -78,6 +78,7 @@ export interface Matter {
   url?: string
   summary?: string
   days_until?: number
+  in_briefing_portal?: boolean
   // Extended fields (returned by GET /alfred/matters/{id})
   slack_channel?: string
   clio_url?: string
