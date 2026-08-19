@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useMatterStore } from '@/store/matterStore'
 import { useUIStore } from '@/store/uiStore'
 import { useChatStore } from '@/store/chatStore'
@@ -17,6 +17,7 @@ const KLG_STAGES = [
 
 const STATUS_OPTIONS = ['In progress', 'Backlog', 'Planning', 'Paused', 'Review needed', 'Done', 'Canceled']
 const PRIORITY_OPTIONS = ['Urgent', 'High', 'Medium', 'Low']
+const COMPACT_PANEL_QUERY = '(max-width: 900px), (max-height: 840px)'
 
 function formatDate(dateStr?: string | null): string {
   if (!dateStr) return '—'
@@ -368,6 +369,20 @@ function TaskGroup({
 
 export function MatterDetailPanel() {
   const { selectedMatter, setSelectedMatter, tasks, tasksLoading } = useMatterStore()
+  const [overviewOpen, setOverviewOpen] = useState(() =>
+    typeof window === 'undefined' || !window.matchMedia(COMPACT_PANEL_QUERY).matches
+  )
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia(COMPACT_PANEL_QUERY)
+    const syncOverview = (event: MediaQueryListEvent | MediaQueryList) => {
+      setOverviewOpen(!event.matches)
+    }
+
+    syncOverview(mediaQuery)
+    mediaQuery.addEventListener('change', syncOverview)
+    return () => mediaQuery.removeEventListener('change', syncOverview)
+  }, [])
 
   if (!selectedMatter) return null
 
@@ -394,26 +409,47 @@ export function MatterDetailPanel() {
       {/* Header */}
       <div className={styles.panelHeader}>
         <h2 className={styles.panelTitle}>{selectedMatter.name}</h2>
-        <button
-          className={styles.closeBtn}
-          onClick={() => setSelectedMatter(null)}
-          title="Close details"
-          aria-label="Close details panel"
-        >
-          <span className="material-symbols-outlined">close</span>
-        </button>
+        <div className={styles.panelActions}>
+          <button
+            className={styles.overviewToggle}
+            onClick={() => setOverviewOpen(open => !open)}
+            aria-expanded={overviewOpen}
+            aria-controls="matter-overview"
+            title={overviewOpen ? 'Hide matter details' : 'Show matter details'}
+          >
+            <span className="material-symbols-outlined">
+              {overviewOpen ? 'expand_less' : 'tune'}
+            </span>
+            <span className={styles.overviewToggleLabel}>
+              {overviewOpen ? 'Hide details' : 'Matter details'}
+            </span>
+          </button>
+          <button
+            className={styles.closeBtn}
+            onClick={() => setSelectedMatter(null)}
+            title="Close details"
+            aria-label="Close details panel"
+          >
+            <span className="material-symbols-outlined">close</span>
+          </button>
+        </div>
       </div>
 
-      {/* Stage progress */}
-      <StageProgressBar currentStage={selectedMatter.case_stage} />
+      {overviewOpen && (
+        <div className={styles.overview} id="matter-overview">
+          {/* Stage progress */}
+          <StageProgressBar currentStage={selectedMatter.case_stage} />
 
-      {/* Metadata grid */}
-      <MetaGrid matter={selectedMatter} />
+          {/* Metadata grid */}
+          <MetaGrid matter={selectedMatter} />
+        </div>
+      )}
 
       {/* Task list */}
       <div className={styles.taskSection}>
         <div className={styles.taskSectionHeader}>
           <span className={styles.taskSectionTitle}>Tasks</span>
+          {!tasksLoading && <span className={styles.taskCount}>{tasks.length}</span>}
           {tasksLoading && (
             <span className={styles.loadingDot}>
               <span className="material-symbols-outlined" style={{ fontSize: 14 }}>hourglass_empty</span>

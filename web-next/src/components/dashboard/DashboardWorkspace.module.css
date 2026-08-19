@@ -406,6 +406,8 @@
     position: fixed;
     inset: 0;
     width: 100vw;
+    min-width: 0;
+    height: 100dvh;
     z-index: 105;
     animation: slideUpDrawer 0.25s cubic-bezier(0.16, 1, 0.3, 1);
   }

@@ -10,6 +10,10 @@ Entries without a tag are mixed-agent or pre-multi-agent-setup commits.
 
 ---
 
+## 2026-08-19
+
+- **[Frontend]** Responsive Matters detail workspace: short-height and narrow screens now default to a task-first view with collapsible matter metadata, a guaranteed usable task area, sticky task controls, dynamic viewport handling, and mobile-sized touch targets.
+
 ## 2026-08-07
 
 - **[Backend]** `_normalize_matter()` now includes `in_briefing_portal: bool` — checks whether the matter's Team Portals relation includes the "📁 KLG Briefing Projects" portal (`36e0fc06-a06c-80e3-91b8-fba0a5a6912f`). `_BRIEFING_PROJECTS_PORTAL_ID` constant defined in `api/routes/alfred.py`; `in_briefing_portal?: boolean` added to the `Matter` TypeScript type. Prerequisite for the Deadlines tab portal-scope split (frontend work separate).
