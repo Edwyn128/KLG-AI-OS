@@ -10,6 +10,10 @@ Entries without a tag are mixed-agent or pre-multi-agent-setup commits.
 
 ---
 
+## 2026-08-20
+
+- **[Frontend]** Compact Matters panels now switch exclusively between Tasks and Details, eliminating the cramped split view and competing scroll regions on small screens.
+
 ## 2026-08-19
 
 - **[Frontend]** Responsive Matters detail workspace: short-height and narrow screens now default to a task-first view with collapsible matter metadata, a guaranteed usable task area, sticky task controls, dynamic viewport handling, and mobile-sized touch targets.

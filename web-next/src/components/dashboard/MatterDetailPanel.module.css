@@ -599,10 +599,6 @@
     font-size: 14px;
   }
 
-  .overviewToggleLabel {
-    display: none;
-  }
-
   .overviewToggle,
   .closeBtn {
     min-width: 40px;
@@ -664,4 +660,17 @@
     font-size: 13px;
     line-height: 1.45;
   }
+}
+
+/* In compact mode Tasks and Details are exclusive workspaces. This avoids
+   splitting a small viewport between two independently scrollable regions. */
+.compactDetailsMode .overview {
+  flex: 1 1 auto;
+  max-height: none;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.compactDetailsMode .taskSection {
+  display: none;
 }

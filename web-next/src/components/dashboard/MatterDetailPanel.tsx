@@ -369,13 +369,14 @@ function TaskGroup({
 
 export function MatterDetailPanel() {
   const { selectedMatter, setSelectedMatter, tasks, tasksLoading } = useMatterStore()
-  const [overviewOpen, setOverviewOpen] = useState(() =>
-    typeof window === 'undefined' || !window.matchMedia(COMPACT_PANEL_QUERY).matches
-  )
+  const initiallyCompact = typeof window !== 'undefined' && window.matchMedia(COMPACT_PANEL_QUERY).matches
+  const [compactPanel, setCompactPanel] = useState(initiallyCompact)
+  const [overviewOpen, setOverviewOpen] = useState(!initiallyCompact)
 
   useEffect(() => {
     const mediaQuery = window.matchMedia(COMPACT_PANEL_QUERY)
     const syncOverview = (event: MediaQueryListEvent | MediaQueryList) => {
+      setCompactPanel(event.matches)
       setOverviewOpen(!event.matches)
     }
 
@@ -404,8 +405,10 @@ export function MatterDetailPanel() {
     ? orderedStages
     : KLG_STAGES.slice(0, 5)
 
+  const compactDetailsMode = compactPanel && overviewOpen
+
   return (
-    <div className={styles.panel}>
+    <div className={`${styles.panel} ${compactDetailsMode ? styles.compactDetailsMode : ''}`}>
       {/* Header */}
       <div className={styles.panelHeader}>
         <h2 className={styles.panelTitle}>{selectedMatter.name}</h2>
@@ -414,14 +417,20 @@ export function MatterDetailPanel() {
             className={styles.overviewToggle}
             onClick={() => setOverviewOpen(open => !open)}
             aria-expanded={overviewOpen}
-            aria-controls="matter-overview"
-            title={overviewOpen ? 'Hide matter details' : 'Show matter details'}
+            aria-controls={compactDetailsMode ? 'matter-tasks' : 'matter-overview'}
+            title={compactPanel
+              ? compactDetailsMode ? 'Switch to tasks' : 'Switch to matter details'
+              : overviewOpen ? 'Hide matter details' : 'Show matter details'
+            }
           >
             <span className="material-symbols-outlined">
-              {overviewOpen ? 'expand_less' : 'tune'}
+              {compactDetailsMode ? 'checklist' : overviewOpen ? 'expand_less' : 'tune'}
             </span>
             <span className={styles.overviewToggleLabel}>
-              {overviewOpen ? 'Hide details' : 'Matter details'}
+              {compactPanel
+                ? compactDetailsMode ? 'Tasks' : 'Details'
+                : overviewOpen ? 'Hide details' : 'Matter details'
+              }
             </span>
           </button>
           <button
@@ -446,7 +455,7 @@ export function MatterDetailPanel() {
       )}
 
       {/* Task list */}
-      <div className={styles.taskSection}>
+      <div className={styles.taskSection} id="matter-tasks">
         <div className={styles.taskSectionHeader}>
           <span className={styles.taskSectionTitle}>Tasks</span>
           {!tasksLoading && <span className={styles.taskCount}>{tasks.length}</span>}
