@@ -10,6 +10,10 @@ Entries without a tag are mixed-agent or pre-multi-agent-setup commits.
 
 ---
 
+## 2026-08-21
+
+- **[Backend]** Security: closed the critical chunk-upload path traversal by requiring canonical UUID session IDs, generating backing paths server-side, enforcing temporary-directory containment before every write, using exclusive creation, and rejecting duplicate, malformed, or out-of-order sessions. Added focused regression coverage for malicious and legitimate uploads.
+
 ## 2026-08-20
 
 - **[Frontend]** Compact Matters panels now switch exclusively between Tasks and Details, eliminating the cramped split view and competing scroll regions on small screens.

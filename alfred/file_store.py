@@ -24,6 +24,7 @@ Security properties:
 from __future__ import annotations
 
 import base64
+import binascii
 import logging
 import os
 import tempfile
@@ -139,6 +140,7 @@ def cleanup_expired(max_age_seconds: int = 3600) -> int:
 # A 400-page scanned PDF (80–160MB) needs 2–4 chunks at 40MB each.
 
 _MAX_CHUNK_TOTAL_MB = 200  # hard cap on assembled chunked upload size
+_MAX_CHUNKS = 1000
 
 
 def _sanitize_filename(filename: str) -> str:
@@ -147,16 +149,56 @@ def _sanitize_filename(filename: str) -> str:
     return "".join(c if c.isalnum() or c in "._- " else "_" for c in name) or "upload"
 
 
+def _normalize_upload_id(upload_id: str) -> str:
+    """Return a canonical UUID string or reject the client-supplied session ID."""
+    try:
+        normalized = str(uuid.UUID(upload_id))
+    except (AttributeError, TypeError, ValueError) as exc:
+        raise ValueError("upload_id must be a canonical UUID.") from exc
+    if upload_id != normalized:
+        raise ValueError("upload_id must be a lowercase, hyphenated UUID.")
+    return normalized
+
+
+def _assert_temp_path(path: str | Path) -> Path:
+    """Resolve a chunk path and require it to be a direct child of _TEMP_DIR."""
+    root = _TEMP_DIR.resolve()
+    candidate = Path(path).resolve(strict=False)
+    if candidate.parent != root:
+        raise ValueError("Upload path escaped the temporary directory.")
+    return candidate
+
+
+def _discard_chunk_session(upload_id: str) -> None:
+    """Remove a failed/incomplete session and its partial backing file."""
+    session = _CHUNK_SESSIONS.pop(upload_id, None)
+    if session is None:
+        return
+    try:
+        _assert_temp_path(session["path"]).unlink(missing_ok=True)
+    except (OSError, ValueError) as exc:
+        logger.warning("FileStore: could not discard chunk session %.8s: %s", upload_id, exc)
+
+
 def start_chunk_session(upload_id: str, filename: str, total_chunks: int) -> None:
     """Initialize a chunked upload session."""
+    upload_id = _normalize_upload_id(upload_id)
+    if not 1 <= total_chunks <= _MAX_CHUNKS:
+        raise ValueError(f"total_chunks must be between 1 and {_MAX_CHUNKS}.")
+    if upload_id in _CHUNK_SESSIONS:
+        raise ValueError("Upload session already exists.")
+
     safe_name = _sanitize_filename(filename)
-    temp_path = str(_TEMP_DIR / f"{upload_id}_{safe_name}")
+    # The client ID is only a registry key. The filesystem name is generated
+    # exclusively by the server and then containment-checked before use.
+    temp_path = _assert_temp_path(_TEMP_DIR / f"{uuid.uuid4().hex}.part")
     _CHUNK_SESSIONS[upload_id] = {
         "filename": safe_name,
         "total_chunks": total_chunks,
         "chunks_received": 0,
-        "path": temp_path,
+        "path": str(temp_path),
         "total_bytes": 0,
+        "created_at": time.time(),
     }
     logger.info(
         "FileStore: chunk session %s started for '%s' (%d chunks)",
@@ -173,26 +215,41 @@ def append_chunk(upload_id: str, chunk_index: int, data_b64: str) -> dict:
       {"chunks_received": N, "total_chunks": M, "done": True,
        "file_token": "..."}                                        — complete
     """
+    upload_id = _normalize_upload_id(upload_id)
     session = _CHUNK_SESSIONS.get(upload_id)
     if session is None:
         raise ValueError(f"Unknown upload session: {upload_id[:8]}")
 
-    raw = base64.b64decode(data_b64)
+    expected_index = session["chunks_received"]
+    if chunk_index != expected_index or chunk_index >= session["total_chunks"]:
+        raise ValueError(f"Expected chunk {expected_index}, received {chunk_index}.")
+
+    try:
+        raw = base64.b64decode(data_b64, validate=True)
+    except (binascii.Error, ValueError) as exc:
+        raise ValueError("Chunk data is not valid base64.") from exc
 
     # Enforce cumulative size cap before writing
-    session["total_bytes"] += len(raw)
     max_bytes = _MAX_CHUNK_TOTAL_MB * 1024 * 1024
-    if session["total_bytes"] > max_bytes:
-        _CHUNK_SESSIONS.pop(upload_id, None)
+    new_total = session["total_bytes"] + len(raw)
+    if new_total > max_bytes:
+        _discard_chunk_session(upload_id)
         raise ValueError(
             f"Chunked upload exceeds the {_MAX_CHUNK_TOTAL_MB} MB limit."
         )
 
-    # Chunks must arrive in order (chunk_index 0 truncates, rest append).
-    mode = "wb" if chunk_index == 0 else "ab"
-    with open(session["path"], mode) as f:
-        f.write(raw)
+    path = _assert_temp_path(session["path"])
+    try:
+        # Exclusive creation prevents an existing file or link from being
+        # truncated; later chunks append only to the server-generated path.
+        mode = "xb" if chunk_index == 0 else "ab"
+        with path.open(mode) as file_handle:
+            file_handle.write(raw)
+    except OSError:
+        _discard_chunk_session(upload_id)
+        raise
 
+    session["total_bytes"] = new_total
     session["chunks_received"] += 1
     done = session["chunks_received"] >= session["total_chunks"]
 

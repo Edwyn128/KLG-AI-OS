@@ -151,7 +151,7 @@ class UploadResponse(BaseModel):
 
 class ChunkRequest(BaseModel):
     """Request body for POST /alfred/upload/chunk."""
-    upload_id: str = Field(description="Session ID. Generate a UUID client-side and reuse for all chunks.")
+    upload_id: str = Field(description="Canonical UUID session ID. Generate it client-side and reuse for all chunks.")
     filename: str = Field(description="Original filename. Must be identical across all chunks.")
     chunk_index: int = Field(description="Zero-based chunk index. Chunks must arrive in order.")
     total_chunks: int = Field(description="Total number of chunks for this file.")
@@ -1639,21 +1639,20 @@ async def upload_chunk(body: ChunkRequest) -> ChunkResponse:
     and returns a file_token to include in ChatRequest.file_tokens.
 
     Example flow:
-        POST /alfred/upload/chunk  {upload_id: "abc", chunk_index: 0, total_chunks: 3, ...}
-        POST /alfred/upload/chunk  {upload_id: "abc", chunk_index: 1, total_chunks: 3, ...}
-        POST /alfred/upload/chunk  {upload_id: "abc", chunk_index: 2, total_chunks: 3, ...}
+        POST /alfred/upload/chunk  {upload_id: "550e8400-e29b-41d4-a716-446655440000", chunk_index: 0, total_chunks: 3, ...}
+        POST /alfred/upload/chunk  {upload_id: "550e8400-e29b-41d4-a716-446655440000", chunk_index: 1, total_chunks: 3, ...}
+        POST /alfred/upload/chunk  {upload_id: "550e8400-e29b-41d4-a716-446655440000", chunk_index: 2, total_chunks: 3, ...}
         → Response: {done: true, file_token: "xyz..."}
     """
     from alfred.file_store import start_chunk_session, append_chunk as _append_chunk
 
-    if body.chunk_index == 0:
-        start_chunk_session(
-            upload_id=body.upload_id,
-            filename=body.filename,
-            total_chunks=body.total_chunks,
-        )
-
     try:
+        if body.chunk_index == 0:
+            start_chunk_session(
+                upload_id=body.upload_id,
+                filename=body.filename,
+                total_chunks=body.total_chunks,
+            )
         result = _append_chunk(
             upload_id=body.upload_id,
             chunk_index=body.chunk_index,
