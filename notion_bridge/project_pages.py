@@ -64,6 +64,25 @@ _PROP_DEADLINE       = "Deadline"              # internal milestone date (was wr
 _PROP_COURT_DEADLINE = "❌Next Court Deadline"   # hard legal deadline date — Notion property was renamed with this prefix; update here if it's renamed back
 # "Next Deadline Info" does not exist in the Notion schema — omitted
 
+# Project Status values that qualify a matter as actively worked on.
+# Idea, Backlog, Done, and Canceled are excluded even when Matter Status is Active.
+# Verified 2026-08-24 against Notion Matter Deadlines view (123 rows total).
+_ACTIVE_PROJECT_STATUSES = frozenset({"planning", "in progress", "paused"})
+
+
+def _is_active_matter(m: dict) -> bool:
+    """Return True only when matter has Active/On Hold Matter Status AND a qualifying Project Status.
+
+    Mirrors the filter used by Notion's Matter Deadlines view. Matters with
+    Project Status Backlog/Idea/Done/Canceled are excluded even when Matter
+    Status is explicitly Active.
+    """
+    s = (m.get("Matter Status") or m.get("Status") or "").strip().lower()
+    if "active" not in s and "hold" not in s:
+        return False
+    ps = (m.get("Project Status") or "").strip().lower()
+    return ps in _ACTIVE_PROJECT_STATUSES
+
 
 def _title_overlap_score(candidate: dict, query: str) -> float:
     """Fraction of query words (≥3 chars) that appear in the candidate's title."""
@@ -441,13 +460,9 @@ class ProjectPages:
         if not active_only:
             return raw
 
-        def _is_active_or_hold(m: dict) -> bool:
-            s = (m.get("Matter Status") or m.get("Status") or "").strip().lower()
-            return "active" in s or "hold" in s
-
-        filtered = [m for m in raw if _is_active_or_hold(m)]
+        filtered = [m for m in raw if _is_active_matter(m)]
         logger.info(
-            "get_all_active_matters(category=%s): %d total → %d active/on-hold",
+            "get_all_active_matters(category=%s): %d total → %d active (Matter Status + Project Status)",
             category, len(raw), len(filtered),
         )
         return filtered

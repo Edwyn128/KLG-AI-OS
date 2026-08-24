@@ -72,6 +72,10 @@ function passesFilter(m: Matter, filter: FilterMode, myName: string): boolean {
 
 const GROUP_ORDER = ['active', 'on hold']
 
+// Project Status values that place a matter inside Notion's Matter Deadlines view scope.
+// Idea, Backlog, Done, and Canceled are excluded — mirrors the backend _ACTIVE_PROJECT_STATUSES set.
+const VIEW_PROJECT_STATUSES = new Set(['planning', 'in progress', 'paused'])
+
 function groupByStatus(matters: Matter[]): Array<{ label: string; items: Matter[] }> {
   const map = new Map<string, Matter[]>()
   for (const m of matters) {
@@ -166,14 +170,13 @@ export function DeadlinesWorkspace() {
   const [error, setError] = useState<string | null>(null)
   const [filter, setFilter] = useState<FilterMode>('active')
   const [search, setSearch] = useState('')
-  const [otherTeamsOpen, setOtherTeamsOpen] = useState(false)
 
   useEffect(() => {
     let cancelled = false
     setLoading(true)
     setError(null)
 
-    fetchMatters()
+    fetchMatters(true)
       .then(data => {
         if (cancelled) return
         const list = Array.isArray(data) ? data : (data.matters ?? [])
@@ -196,14 +199,19 @@ export function DeadlinesWorkspace() {
 
   const myName = user ?? ''
 
+  // Scope to the same 123-row Project Status range as Notion's Matter Deadlines view
+  const viewMatters = useMemo(() =>
+    matters.filter(m => VIEW_PROJECT_STATUSES.has((m.project_status ?? '').trim().toLowerCase()))
+  , [matters])
+
   const filtered = useMemo(() => {
-    let list = matters.filter(m => passesFilter(m, filter, myName))
+    let list = viewMatters.filter(m => passesFilter(m, filter, myName))
     if (search.trim()) {
       const q = search.trim().toLowerCase()
       list = list.filter(m => (m.name ?? '').toLowerCase().includes(q))
     }
     return list
-  }, [matters, filter, search, myName])
+  }, [viewMatters, filter, search, myName])
 
   function handleAI(matter: Matter) {
     setDraftInput(`Alfred, give me a status update on the ${matter.name} matter — what are the key deadlines and what should the team focus on?`)
@@ -239,22 +247,6 @@ export function DeadlinesWorkspace() {
     )
   }
 
-  // When on "Active matters" filter, split by portal scope:
-  // - portalMatters: Active/On Hold AND in_briefing_portal → main groups (should match Notion's 44)
-  // - otherTeamMatters: Active/On Hold BUT NOT in_briefing_portal → collapsible "Other Teams" section
-  const portalMatters = filter === 'active'
-    ? filtered.filter(m => m.in_briefing_portal === true)
-    : filtered
-  const otherTeamMatters = filter === 'active'
-    ? filtered.filter(m => {
-        const key = statusKey(m)
-        return (key === 'active' || key === 'on hold') && m.in_briefing_portal !== true
-      })
-    : []
-
-  // Badge count: show portal count for 'active' filter, full count otherwise
-  const badgeCount = filter === 'active' ? portalMatters.length : filtered.length
-
   return (
     <div className={styles.container}>
       {/* ── Toolbar ─────────────────────────────────────── */}
@@ -262,7 +254,7 @@ export function DeadlinesWorkspace() {
         <div className={styles.toolbarTitle}>
           <span className="material-symbols-outlined" style={{ fontSize: 18 }}>event_upcoming</span>
           Deadlines
-          <span className={styles.taskBadge}>{badgeCount}</span>
+          <span className={styles.taskBadge}>{filtered.length}</span>
         </div>
 
         <div className={styles.toolbarControls}>
@@ -311,43 +303,20 @@ export function DeadlinesWorkspace() {
             <p>No matters match the current filters.</p>
           </div>
         ) : filter === 'active' ? (
-          <>
-            {/* Main portal-scoped groups: Active → On Hold */}
-            {groupByStatus(portalMatters).map(({ label, items }) => (
-              <div key={label}>
-                <div className={styles.groupHeader}>
-                  <span className={styles.groupChevron}>▼</span>
-                  <span className={styles.groupLabel}>{label}</span>
-                  <span className={styles.groupCount}>{items.length}</span>
-                </div>
-                {items.map((matter, i) => (
-                  <MatterRow key={matter.id} number={i + 1} matter={matter}
-                    onNavigate={() => { setSelectedMatter(matter); setWorkspace('matters') }}
-                    onAI={() => handleAI(matter)} />
-                ))}
+          groupByStatus(filtered).map(({ label, items }) => (
+            <div key={label}>
+              <div className={styles.groupHeader}>
+                <span className={styles.groupChevron}>▼</span>
+                <span className={styles.groupLabel}>{label}</span>
+                <span className={styles.groupCount}>{items.length}</span>
               </div>
-            ))}
-
-            {/* Other Teams — collapsed by default */}
-            {otherTeamMatters.length > 0 && (
-              <div>
-                <button
-                  className={styles.groupHeader}
-                  onClick={() => setOtherTeamsOpen(v => !v)}
-                  style={{ cursor: 'pointer', width: '100%', border: 'none', textAlign: 'left', fontFamily: 'inherit' }}
-                >
-                  <span className={styles.groupChevron}>{otherTeamsOpen ? '▼' : '▶'}</span>
-                  <span className={styles.groupLabel}>Other Teams</span>
-                  <span className={styles.groupCount}>{otherTeamMatters.length}</span>
-                </button>
-                {otherTeamsOpen && otherTeamMatters.map((matter, i) => (
-                  <MatterRow key={matter.id} number={i + 1} matter={matter}
-                    onNavigate={() => { setSelectedMatter(matter); setWorkspace('matters') }}
-                    onAI={() => handleAI(matter)} />
-                ))}
-              </div>
-            )}
-          </>
+              {items.map((matter, i) => (
+                <MatterRow key={matter.id} number={i + 1} matter={matter}
+                  onNavigate={() => { setSelectedMatter(matter); setWorkspace('matters') }}
+                  onAI={() => handleAI(matter)} />
+              ))}
+            </div>
+          ))
         ) : (
           // Flat numbered list for all other filters
           filtered.map((matter, i) => (
