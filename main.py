@@ -149,7 +149,7 @@ def _load_password_map() -> dict[str, str]:
     """
     Parse APP_PASSWORDS JSON into {username_lower: password}.
 
-    Called once at startup. Returns {} on error.
+    Called once at startup. Returns {} on error, leaving authentication closed.
     """
     import json
     raw = settings.app_passwords.strip()
@@ -168,11 +168,8 @@ def _load_password_map() -> dict[str, str]:
         # Lowercase keys so lookup is case-insensitive (Tim == tim == TIM)
         return {str(k).strip().lower(): str(v).strip() for k, v in data.items()}
     except Exception as e:
-        logger.warning(
-            "APP_PASSWORDS could not be parsed — per-user auth disabled. "
-            "Error: %s. Raw value starts with: %.60r",
-            e, raw,
-        )
+        # Never include the raw value: it contains live passwords.
+        logger.error("APP_PASSWORDS could not be parsed; denying mapped users: %s", e)
         return {}
 
 
@@ -258,13 +255,34 @@ class _BasicAuthMiddleware(BaseHTTPMiddleware):
                     media_type="application/json",
                 )
 
-        # Skip auth if nothing is configured (local dev without .env)
-        if not settings.app_password and not settings.app_passwords:
-            return await call_next(request)
-
         # Exempt paths never require auth
         if path in _AUTH_EXEMPT or any(path.startswith(p) for p in _AUTH_EXEMPT_PREFIXES):
             return await call_next(request)
+
+        basic_configured = bool(settings.app_password or _PASSWORD_MAP)
+        sso_configured = bool(
+            settings.microsoft_client_id
+            and settings.microsoft_client_secret
+            and settings.microsoft_tenant_id
+            and settings.microsoft_user_map
+            and settings.alfred_session_secret
+        )
+        local_bypass = bool(
+            settings.allow_insecure_local_auth
+            and not settings.app_public_url
+            and settings.app_host.strip().lower() in {"127.0.0.1", "localhost", "::1"}
+        )
+        if not basic_configured and not sso_configured:
+            if local_bypass:
+                request.state.principal = {
+                    "sub": "local-dev", "auth_method": "local", "used_master": False
+                }
+                return await call_next(request)
+            return Response(
+                content='{"detail":"Authentication is not configured"}',
+                status_code=503,
+                media_type="application/json",
+            )
 
         # Allow Railway Cron Jobs via shared secret header — no Basic Auth needed.
         # The secret is set in Railway env vars and sent as X-Cron-Secret.
@@ -272,6 +290,9 @@ class _BasicAuthMiddleware(BaseHTTPMiddleware):
         if settings.cron_secret and cron_header and secrets.compare_digest(
             cron_header.encode(), settings.cron_secret.encode()
         ):
+            request.state.principal = {
+                "sub": "cron", "auth_method": "cron", "used_master": False
+            }
             return await call_next(request)
 
         auth_header = request.headers.get("Authorization", "")
@@ -279,7 +300,11 @@ class _BasicAuthMiddleware(BaseHTTPMiddleware):
         # Accept Bearer JWT (issued by /auth/microsoft/callback)
         if auth_header.startswith("Bearer ") and settings.alfred_session_secret:
             try:
-                _jwt_decode(auth_header[7:], settings.alfred_session_secret)
+                payload = _jwt_decode(auth_header[7:], settings.alfred_session_secret)
+                if payload.get("auth_method") != "sso" or not payload.get("sub"):
+                    raise ValueError("invalid session identity")
+                request.state.principal = {**payload, "used_master": False}
+                request.state.used_master = False
                 return await call_next(request)
             except Exception:
                 pass
@@ -298,6 +323,12 @@ class _BasicAuthMiddleware(BaseHTTPMiddleware):
                             password.encode(), settings.app_password.encode()
                         )
                     )
+                    request.state.principal = {
+                        "sub": username.strip().lower(),
+                        "name": username.strip(),
+                        "auth_method": "basic",
+                        "used_master": request.state.used_master,
+                    }
                     return await call_next(request)
             except Exception:
                 pass
@@ -334,11 +365,18 @@ async def lifespan(app: FastAPI):
     # ── STARTUP ───────────────────────────────────────────────────────────────
     logger.info("KLG AI OS starting up...")
 
-    # Warn loudly if auth is unconfigured — anyone can reach the API.
-    if not settings.app_password and not settings.app_passwords:
-        logger.warning(
-            "AUTH DISABLED: neither APP_PASSWORD nor APP_PASSWORDS is set. "
-            "All endpoints are publicly accessible. Set at least one in Railway env vars."
+    # Protected endpoints fail closed when auth is absent. Keep a prominent
+    # startup diagnostic so a bad Railway configuration is easy to identify.
+    if not settings.app_password and not _PASSWORD_MAP and not (
+        settings.microsoft_client_id
+        and settings.microsoft_client_secret
+        and settings.microsoft_tenant_id
+        and settings.microsoft_user_map
+        and settings.alfred_session_secret
+    ):
+        logger.error(
+            "AUTH NOT CONFIGURED: protected endpoints will return 503. "
+            "Configure Basic auth or fully provision Microsoft SSO."
         )
 
     if _CLIENT_MATTER_MAP:

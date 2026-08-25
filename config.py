@@ -330,6 +330,13 @@ class Settings(BaseSettings):
     app_password (master) is always checked as a fallback.
     """
 
+    allow_insecure_local_auth: bool = False
+    """
+    Explicit local-development escape hatch. Authentication may be bypassed
+    only when this is true, APP_PUBLIC_URL is blank, and APP_HOST is loopback.
+    Never enable this in Railway or any shared environment.
+    """
+
     client_matter_map: str = ""
     """
     JSON map from client username (lowercase) to permitted matter name(s).
@@ -354,12 +361,19 @@ class Settings(BaseSettings):
     Leave empty to disable "Sign in with Microsoft" on the login page.
     """
 
-    microsoft_tenant_id: str = "common"
+    microsoft_tenant_id: str = ""
     """
-    Azure AD tenant ID (GUID) or "common" for multi-tenant / personal accounts.
+    Azure AD tenant ID (GUID); shared authorities such as "common" are rejected.
     For a single law firm, set this to your firm's Azure tenant ID so only
     @kowallaw.com accounts can sign in. Find it in Azure Portal → Overview.
-    Default "common" accepts any Microsoft account (fine for dev/testing).
+    Alfred requires a concrete firm tenant because it contains privileged data.
+    """
+
+    microsoft_user_map: str = ""
+    """
+    Explicit Entra object-ID allowlist for Microsoft SSO, encoded as JSON.
+    Keys are immutable Entra `oid` GUIDs and values are local Alfred usernames.
+    Unknown object IDs are denied even when they belong to the firm tenant.
     """
 
     microsoft_client_secret: str = ""

@@ -26,7 +26,10 @@ router = APIRouter(prefix="/admin", tags=["Admin"])
 def require_super_admin(request: Request) -> str:
     """Dependency: ensures only super-admin users can reach admin endpoints."""
     username = get_verified_username(request) or ""
-    if username.lower() not in _SUPER_ADMIN_USERS:
+    if (
+        username.lower() not in _SUPER_ADMIN_USERS
+        or not getattr(request.state, "used_master", False)
+    ):
         raise HTTPException(403, "Admin access required")
     return username
 

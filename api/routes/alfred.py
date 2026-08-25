@@ -206,6 +206,10 @@ def get_verified_username(request: Request) -> str:
     Returns empty string if the header is absent or malformed (e.g., local dev
     with auth disabled).
     """
+    principal = getattr(request.state, "principal", None)
+    if isinstance(principal, dict) and principal.get("sub"):
+        return str(principal["sub"])
+
     import base64
     auth = request.headers.get("Authorization", "")
     if auth.startswith("Basic "):
